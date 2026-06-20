@@ -1,5 +1,15 @@
-# ultralytics-mcp
+# Ultralytics Platform MCP
 
-Bootstrap base for TypeScript-only extraction replay.
+MCP server for the Ultralytics Platform REST API.
 
-Execution plan and source PR archaeology live in `NOTES.md` locally.
+Current milestone: protocol scaffold with CLI entrypoint and protocol-level
+tests. Tooling and API features land incrementally from here.
+
+## Development
+
+```bash
+npm install
+npm run check
+npm test
+npm run build
+```

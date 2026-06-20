@@ -1,0 +1,43 @@
+{
+  "name": "ultralytics-mcp",
+  "version": "0.2.0",
+  "description": "TypeScript MCP server for the Ultralytics Platform REST API.",
+  "type": "module",
+  "bin": {
+    "ultralytics-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "biome check .",
+    "format": "biome check --write .",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "mcp",
+    "ultralytics",
+    "yolo",
+    "model-context-protocol"
+  ],
+  "author": "Aman Harsh",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/node": "^24.4.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.9"
+  }
+}
