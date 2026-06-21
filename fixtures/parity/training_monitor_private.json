@@ -1,0 +1,64 @@
+{
+  "tool": "training_monitor",
+  "args": {
+    "model": "aaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "status": "running",
+            "epochs": 100,
+            "bestEpoch": 9,
+            "bestFitness": 0.75,
+            "trainResults": [
+              {
+                "epoch": 0,
+                "metrics": {
+                  "metrics/mAP50(B)": 0.5
+                }
+              },
+              {
+                "epoch": 1,
+                "metrics": {
+                  "metrics/mAP50(B)": 0.6
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa/training",
+      "response": {
+        "status": 404,
+        "json": {
+          "error": "Project not found"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Training status=running; epoch 2/100; ~2.0%",
+    "data": {
+      "modelId": "aaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "running",
+      "epochsDone": 2,
+      "totalEpochs": 100,
+      "progressPercentage": 2.0,
+      "etaMs": null,
+      "bestEpoch": 9,
+      "bestFitness": 0.75,
+      "latestMetrics": {
+        "metrics/mAP50(B)": 0.6
+      },
+      "progressSource": "model.trainResults"
+    }
+  }
+}

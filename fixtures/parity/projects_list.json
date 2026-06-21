@@ -1,0 +1,39 @@
+{
+  "tool": "projects_list",
+  "args": {},
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "response": {
+        "status": 200,
+        "json": {
+          "projects": [
+            {
+              "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+              "name": "Road Safety",
+              "slug": "road",
+              "username": "user",
+              "visibility": "private",
+              "modelCount": 2,
+              "extra": "omitted"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "1 project(s).",
+    "data": [
+      {
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+        "name": "Road Safety",
+        "slug": "road",
+        "username": "user",
+        "visibility": "private",
+        "modelCount": 2
+      }
+    ]
+  }
+}

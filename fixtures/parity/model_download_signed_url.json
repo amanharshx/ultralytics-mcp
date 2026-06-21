@@ -1,0 +1,42 @@
+{
+  "tool": "model_download",
+  "args": {
+    "model": "aaaaaaaaaaaaaaaaaaaaaaaa",
+    "output_path": "__TMP__/best.pt",
+    "filename": "best.pt"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa/files",
+      "response": {
+        "status": 200,
+        "json": {
+          "files": [
+            {
+              "name": "last.pt",
+              "url": "https://signed.example/last.pt"
+            },
+            {
+              "name": "best.pt",
+              "url": "https://signed.example/best.pt"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "download": {
+    "url": "https://signed.example/best.pt",
+    "body_text": "weights"
+  },
+  "expected": {
+    "summary": "Downloaded best.pt to __TMP__/best.pt (7 bytes).",
+    "data": {
+      "modelId": "aaaaaaaaaaaaaaaaaaaaaaaa",
+      "filename": "best.pt",
+      "path": "__TMP__/best.pt",
+      "bytes": 7
+    }
+  }
+}

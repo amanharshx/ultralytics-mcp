@@ -1,0 +1,78 @@
+{
+  "tool": "models_get",
+  "args": {
+    "model": "yolo",
+    "project": "user/road"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "query": {
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "projects": [
+            {
+              "_id": "bbbbbbbbbbbbbbbbbbbbbbbb",
+              "slug": "road",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models",
+      "query": {
+        "projectId": "bbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "models": [
+            {
+              "_id": "cccccccccccccccccccccccc",
+              "slug": "yolo"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models/cccccccccccccccccccccccc",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "_id": "cccccccccccccccccccccccc",
+            "name": "YOLO",
+            "task": "detect",
+            "status": "completed",
+            "epochs": 100,
+            "modelInfo": {
+              "parameters": 123
+            }
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Model 'YOLO' [detect] status=completed, epochs=100, params=123.",
+    "data": {
+      "_id": "cccccccccccccccccccccccc",
+      "name": "YOLO",
+      "task": "detect",
+      "status": "completed",
+      "epochs": 100,
+      "modelInfo": {
+        "parameters": 123
+      }
+    }
+  }
+}
