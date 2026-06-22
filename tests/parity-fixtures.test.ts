@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
@@ -34,18 +35,23 @@ const fixtureSchema = z.object({
 });
 
 describe("parity fixtures", () => {
-  const fixtureDir = join(process.cwd(), "fixtures", "parity");
-  const fixtureFiles = readdirSync(fixtureDir).filter((name) =>
-    name.endsWith(".json"),
-  );
+  // Resolve relative to this test file, not the process cwd, so the suite is
+  // robust to where the runner is invoked from.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const fixtureDir = join(here, "..", "fixtures", "parity");
+  const fixtureFiles = readdirSync(fixtureDir)
+    .filter((name) => name.endsWith(".json"))
+    .sort();
 
   test("fixture set is present", () => {
-    expect(fixtureFiles).toEqual([
-      "model_download_signed_url.json",
-      "models_get.json",
-      "projects_list.json",
-      "training_monitor_private.json",
-    ]);
+    expect([...fixtureFiles].sort()).toEqual(
+      [
+        "model_download_signed_url.json",
+        "models_get.json",
+        "projects_list.json",
+        "training_monitor_private.json",
+      ].sort(),
+    );
   });
 
   for (const fixtureFile of fixtureFiles) {
