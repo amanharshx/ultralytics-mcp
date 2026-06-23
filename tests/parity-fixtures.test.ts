@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 
+import { UltralyticsClient } from "../src/client.js";
+import type { NormalizedToolResult } from "../src/tool-result.js";
+import { modelsGet, projectsList } from "../src/tools/index.js";
+
 const responseSchema = z.object({
   status: z.number().int(),
   json: z.unknown().optional(),
@@ -34,6 +38,73 @@ const fixtureSchema = z.object({
   }),
 });
 
+type Fixture = z.infer<typeof fixtureSchema>;
+
+const BASE = "https://platform.ultralytics.com/api";
+const KEY = `ul_${"0".repeat(40)}`;
+
+/** Build a fetch that replays a fixture's recorded API steps.
+ *
+ * Steps are matched on method, path, and an EXACT query map, and are consumed in
+ * order so repeated calls to the same endpoint map to successive responses.
+ */
+function replayFetch(steps: Fixture["api"]): typeof fetch {
+  const remaining = steps.map((step) => ({ step, used: false }));
+  return (async (url: string | URL, init: RequestInit = {}) => {
+    const parsed = new URL(String(url));
+    const method = (init.method ?? "GET").toUpperCase();
+    const requestQuery = Object.fromEntries(parsed.searchParams.entries());
+
+    for (const entry of remaining) {
+      if (entry.used) continue;
+      const { step } = entry;
+      if (step.method.toUpperCase() !== method) continue;
+      if (step.path !== parsed.pathname) continue;
+
+      const stepQuery = step.query ?? {};
+      const keys = new Set([
+        ...Object.keys(stepQuery),
+        ...Object.keys(requestQuery),
+      ]);
+      let queryMatches = true;
+      for (const key of keys) {
+        if (stepQuery[key] !== requestQuery[key]) {
+          queryMatches = false;
+          break;
+        }
+      }
+      if (!queryMatches) continue;
+
+      entry.used = true;
+      const body =
+        step.response.json !== undefined
+          ? JSON.stringify(step.response.json)
+          : (step.response.content ?? "");
+      return new Response(body, { status: step.response.status });
+    }
+    return new Response(
+      JSON.stringify({ error: `unexpected ${method} ${parsed.pathname}` }),
+      {
+        status: 404,
+      },
+    );
+  }) as unknown as typeof fetch;
+}
+
+/** Tools that can run against fixtures in this PR. Grows as tools are ported. */
+const TOOL_RUNNERS: Record<
+  string,
+  (
+    client: UltralyticsClient,
+    args: Record<string, unknown>,
+  ) => Promise<NormalizedToolResult>
+> = {
+  projects_list: (client, args) =>
+    projectsList(client, args.username as string | undefined),
+  models_get: (client, args) =>
+    modelsGet(client, args.model as string, args.project as string | undefined),
+};
+
 describe("parity fixtures", () => {
   // Resolve relative to this test file, not the process cwd, so the suite is
   // robust to where the runner is invoked from.
@@ -60,6 +131,23 @@ describe("parity fixtures", () => {
       const fixture = fixtureSchema.parse(JSON.parse(raw));
       expect(fixture.expected.summary.length).toBeGreaterThan(0);
       expect(fixture.api.length).toBeGreaterThan(0);
+    });
+  }
+
+  for (const fixtureFile of fixtureFiles) {
+    const raw = readFileSync(join(fixtureDir, fixtureFile), "utf8");
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const runner = TOOL_RUNNERS[fixture.tool];
+    if (!runner) continue; // tool not ported yet; schema-validated above
+
+    test(`parity output: ${fixtureFile}`, async () => {
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: replayFetch(fixture.api),
+      });
+      const result = await runner(client, fixture.args);
+      expect(result).toEqual(fixture.expected);
     });
   }
 });

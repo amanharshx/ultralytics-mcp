@@ -3,6 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, expect, test } from "vitest";
 
 import { createServer } from "../src/server.js";
+import { READ_TOOL_NAMES } from "../src/tools/index.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -15,22 +16,12 @@ afterEach(async () => {
   }
 });
 
-test("server can list registered tools over the protocol", async () => {
-  const server = createServer();
-  server.registerTool(
-    "probe_tool",
-    {
-      description: "Protocol listing probe.",
-      inputSchema: {},
-    },
-    async () => ({
-      content: [{ type: "text", text: "ok" }],
-    }),
-  );
-  const client = new Client({
-    name: "test-client",
-    version: "0.0.0",
+test("server registers the read-only tools over the protocol", async () => {
+  // A throwing client factory proves listing never constructs a client.
+  const server = createServer(() => {
+    throw new Error("client must not be created during tool listing");
   });
+  const client = new Client({ name: "test-client", version: "0.0.0" });
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
 
@@ -42,9 +33,11 @@ test("server can list registered tools over the protocol", async () => {
   await server.connect(serverTransport);
   await client.connect(clientTransport);
 
-  const tools = await client.listTools();
-  expect(tools.tools).toHaveLength(1);
-  expect(tools.tools[0]?.name).toBe("probe_tool");
-  expect(tools.tools[0]?.inputSchema?.type).toBe("object");
-  expect(tools.tools[0]?.inputSchema?.properties).toEqual({});
+  const { tools } = await client.listTools();
+  const names = tools.map((tool) => tool.name).sort();
+  expect(names).toEqual([...READ_TOOL_NAMES].sort());
+
+  const projectsGet = tools.find((tool) => tool.name === "projects_get");
+  expect(projectsGet?.inputSchema?.type).toBe("object");
+  expect(projectsGet?.inputSchema?.required).toEqual(["project"]);
 });
