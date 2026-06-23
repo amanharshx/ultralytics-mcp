@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { UltralyticsClient } from "./client.js";
-import { registerReadTools } from "./tools/index.js";
+import { registerTools } from "./tools/index.js";
 
 /** Create the MCP server with all tools registered.
  *
@@ -22,6 +22,6 @@ export function createServer(
     return client;
   };
 
-  registerReadTools(server, getClient);
+  registerTools(server, getClient);
   return server;
 }

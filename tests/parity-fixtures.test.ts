@@ -1,4 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,7 +9,12 @@ import { z } from "zod";
 
 import { UltralyticsClient } from "../src/client.js";
 import type { NormalizedToolResult } from "../src/tool-result.js";
-import { modelsGet, projectsList } from "../src/tools/index.js";
+import {
+  modelDownload,
+  modelsGet,
+  projectsList,
+  trainingMonitor,
+} from "../src/tools/index.js";
 
 const responseSchema = z.object({
   status: z.number().int(),
@@ -103,7 +110,29 @@ const TOOL_RUNNERS: Record<
     projectsList(client, args.username as string | undefined),
   models_get: (client, args) =>
     modelsGet(client, args.model as string, args.project as string | undefined),
+  training_monitor: (client, args) =>
+    trainingMonitor(
+      client,
+      args.model as string,
+      args.project as string | undefined,
+    ),
 };
+
+/** Recursively replace the `__TMP__` placeholder with a real temp dir path. */
+function replaceTmp<T>(value: T, tmp: string): T {
+  if (typeof value === "string") {
+    return value.replaceAll("__TMP__", tmp) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => replaceTmp(item, tmp)) as T;
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, replaceTmp(item, tmp)]),
+    ) as T;
+  }
+  return value;
+}
 
 describe("parity fixtures", () => {
   // Resolve relative to this test file, not the process cwd, so the suite is
@@ -150,4 +179,50 @@ describe("parity fixtures", () => {
       expect(result).toEqual(fixture.expected);
     });
   }
+
+  test("parity output: model_download_signed_url.json", async () => {
+    const raw = readFileSync(
+      join(fixtureDir, "model_download_signed_url.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-"));
+    try {
+      const args = replaceTmp(fixture.args, tmp) as Record<string, unknown>;
+      const expected = replaceTmp(fixture.expected, tmp);
+
+      let downloadAuth: string | null | undefined = "unset";
+      const downloadFetch = (async (
+        url: string | URL,
+        init: RequestInit = {},
+      ) => {
+        const headers = (init.headers ?? {}) as Record<string, string>;
+        downloadAuth = headers.Authorization;
+        expect(String(url)).toBe(fixture.download?.url);
+        return new Response(fixture.download?.body_text ?? "", { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: replayFetch(fixture.api),
+        downloadFetchImpl: downloadFetch,
+      });
+
+      const result = await modelDownload(client, args.model as string, {
+        outputPath: args.output_path as string,
+        project: args.project as string | undefined,
+        filename: args.filename as string | undefined,
+        overwrite: args.overwrite as boolean | undefined,
+      });
+
+      expect(result).toEqual(expected);
+      // The signed-URL download must NOT forward the API key.
+      expect(downloadAuth).toBeUndefined();
+      const written = await readFile(join(tmp, "best.pt"), "utf8");
+      expect(written).toBe(fixture.download?.body_text);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
 });

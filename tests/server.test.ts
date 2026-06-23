@@ -3,7 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, expect, test } from "vitest";
 
 import { createServer } from "../src/server.js";
-import { READ_TOOL_NAMES } from "../src/tools/index.js";
+import { TOOL_NAMES } from "../src/tools/index.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -16,7 +16,7 @@ afterEach(async () => {
   }
 });
 
-test("server registers the read-only tools over the protocol", async () => {
+test("server registers all available tools over the protocol", async () => {
   // A throwing client factory proves listing never constructs a client.
   const server = createServer(() => {
     throw new Error("client must not be created during tool listing");
@@ -35,7 +35,7 @@ test("server registers the read-only tools over the protocol", async () => {
 
   const { tools } = await client.listTools();
   const names = tools.map((tool) => tool.name).sort();
-  expect(names).toEqual([...READ_TOOL_NAMES].sort());
+  expect(names).toEqual([...TOOL_NAMES].sort());
 
   const projectsGet = tools.find((tool) => tool.name === "projects_get");
   expect(projectsGet?.inputSchema?.type).toBe("object");
