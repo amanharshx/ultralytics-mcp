@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
 
+import { UltralyticsClient } from "../../src/client.js";
 import { UltralyticsApiError } from "../../src/errors.js";
-import { trainingMonitor } from "../../src/tools/training.js";
-import { jsonResponse, routeClient } from "../helpers.js";
+import { trainingMonitor, trainingStart } from "../../src/tools/training.js";
+import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
 
 const ID = "a".repeat(24);
 
@@ -109,5 +110,101 @@ describe("trainingMonitor", () => {
     );
     expect(error).toBeInstanceOf(UltralyticsApiError);
     expect(error.statusCode).toBe(500);
+  });
+});
+
+describe("trainingStart", () => {
+  const MODEL = "a".repeat(24);
+  const PROJECT = "b".repeat(24);
+  const DATASET = "c".repeat(24);
+
+  function throwingClient() {
+    return new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network must not be called");
+      }) as unknown as typeof fetch,
+    });
+  }
+
+  test("rejects when confirm_cost is false before any network call", async () => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL,
+        project: PROJECT,
+        dataset: DATASET,
+        gpuType: "rtx-4090",
+      }),
+    ).rejects.toThrow(/Set confirm_cost=true/);
+  });
+
+  test("requires gpu_type", async () => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL,
+        project: PROJECT,
+        dataset: DATASET,
+        gpuType: "  ",
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/`gpu_type` is required/);
+  });
+
+  test("validates positive epochs (ids resolve without network)", async () => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL,
+        project: PROJECT,
+        dataset: DATASET,
+        gpuType: "rtx-4090",
+        epochs: 0,
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/`epochs` must be greater than 0/);
+  });
+
+  test("posts the training payload and summarizes the job", async () => {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    const result = await trainingStart(client, {
+      model: MODEL,
+      project: PROJECT,
+      dataset: DATASET,
+      gpuType: "rtx-4090",
+      epochs: 100,
+      confirmCost: true,
+    });
+
+    expect(result.summary).toBe(
+      `Started training job ${"j".repeat(24)} status=queued.`,
+    );
+    expect(calls[0]).toMatchObject({
+      url: `${BASE}/training/start`,
+      method: "POST",
+      body: {
+        modelId: MODEL,
+        projectId: PROJECT,
+        gpuType: "rtx-4090",
+        trainArgs: { data: DATASET, epochs: 100 },
+      },
+    });
   });
 });

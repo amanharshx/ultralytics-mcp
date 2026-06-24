@@ -13,19 +13,21 @@ import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
 import { datasetsGet, datasetsList } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
+import { exportCreate, exportStatus, exportsList } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
 import { modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
 import { projectsGet, projectsList } from "./projects.js";
-import { trainingMonitor } from "./training.js";
+import { trainingMonitor, trainingStart } from "./training.js";
 
 export { datasetsGet, datasetsList } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
+export { exportCreate, exportStatus, exportsList } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
 export { modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
 export { projectsGet, projectsList } from "./projects.js";
-export { trainingMonitor } from "./training.js";
+export { trainingMonitor, trainingStart } from "./training.js";
 
 /** Names of the read-only tools registered by `registerReadTools`. */
 export const READ_TOOL_NAMES = [
@@ -191,8 +193,127 @@ export function registerActionTools(
   );
 }
 
+/** Names of the guarded write tools (exports + training start). */
+export const WRITE_TOOL_NAMES = [
+  "exports_list",
+  "export_status",
+  "export_create",
+  "training_start",
+] as const;
+
+/** Register export and training-start tools. The cost-incurring ones are guarded. */
+export function registerWriteTools(
+  server: McpServer,
+  getClient: () => UltralyticsClient,
+): void {
+  server.registerTool(
+    "exports_list",
+    {
+      description: "List export jobs for a model.",
+      inputSchema: { model: z.string(), project: z.string().optional() },
+    },
+    async ({ model, project }) =>
+      toMcpTextResult(await exportsList(getClient(), model, project)),
+  );
+
+  server.registerTool(
+    "export_status",
+    {
+      description: "Get status for one export job by 24-character export id.",
+      inputSchema: { export_id: z.string() },
+    },
+    async ({ export_id }) =>
+      toMcpTextResult(await exportStatus(getClient(), export_id)),
+  );
+
+  server.registerTool(
+    "export_create",
+    {
+      description:
+        "Create a model export job (state-changing, may cost credits). Requires confirm_cost=true.",
+      inputSchema: {
+        model: z.string(),
+        format: z.string(),
+        project: z.string().optional(),
+        gpu_type: z.string().optional(),
+        imgsz: z.number().optional(),
+        half: z.boolean().optional(),
+        dynamic: z.boolean().optional(),
+        confirm_cost: z.boolean().optional(),
+      },
+    },
+    async ({
+      model,
+      format,
+      project,
+      gpu_type,
+      imgsz,
+      half,
+      dynamic,
+      confirm_cost,
+    }) =>
+      toMcpTextResult(
+        await exportCreate(getClient(), model, format, {
+          project,
+          gpuType: gpu_type,
+          imgsz,
+          half,
+          dynamic,
+          confirmCost: confirm_cost,
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "training_start",
+    {
+      description:
+        "Start a cloud training job (state-changing, may cost credits). Requires confirm_cost=true.",
+      inputSchema: {
+        model: z.string(),
+        project: z.string(),
+        dataset: z.string(),
+        gpu_type: z.string(),
+        epochs: z.number().optional(),
+        imgsz: z.number().optional(),
+        batch: z.number().optional(),
+        name: z.string().optional(),
+        confirm_cost: z.boolean().optional(),
+      },
+    },
+    async ({
+      model,
+      project,
+      dataset,
+      gpu_type,
+      epochs,
+      imgsz,
+      batch,
+      name,
+      confirm_cost,
+    }) =>
+      toMcpTextResult(
+        await trainingStart(getClient(), {
+          model,
+          project,
+          dataset,
+          gpuType: gpu_type,
+          epochs,
+          imgsz,
+          batch,
+          name,
+          confirmCost: confirm_cost,
+        }),
+      ),
+  );
+}
+
 /** All tool names registered so far. */
-export const TOOL_NAMES = [...READ_TOOL_NAMES, ...ACTION_TOOL_NAMES] as const;
+export const TOOL_NAMES = [
+  ...READ_TOOL_NAMES,
+  ...ACTION_TOOL_NAMES,
+  ...WRITE_TOOL_NAMES,
+] as const;
 
 /** Register all available tools onto a server. */
 export function registerTools(
@@ -201,4 +322,5 @@ export function registerTools(
 ): void {
   registerReadTools(server, getClient);
   registerActionTools(server, getClient);
+  registerWriteTools(server, getClient);
 }

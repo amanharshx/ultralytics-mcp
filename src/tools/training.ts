@@ -2,9 +2,9 @@
 
 import type { UltralyticsClient } from "../client.js";
 import { UltralyticsApiError } from "../errors.js";
-import { resolveModel } from "../resolve.js";
+import { resolveDataset, resolveModel, resolveProject } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { asRecord } from "./shared.js";
+import { asRecord, pyField } from "./shared.js";
 
 const KEY_METRICS = [
   "metrics/mAP50(B)",
@@ -95,5 +95,80 @@ export async function trainingMonitor(
       latestMetrics: keyMetrics,
       progressSource: source,
     },
+  };
+}
+
+/** Start cloud training. This is state-changing and may cost credits. */
+export async function trainingStart(
+  client: UltralyticsClient,
+  options: {
+    model: string;
+    project: string;
+    dataset: string;
+    gpuType: string;
+    epochs?: number;
+    imgsz?: number;
+    batch?: number;
+    name?: string;
+    confirmCost?: boolean;
+  },
+): Promise<NormalizedToolResult> {
+  const {
+    model,
+    project,
+    dataset,
+    gpuType,
+    epochs,
+    imgsz,
+    batch,
+    name,
+    confirmCost = false,
+  } = options;
+  if (!confirmCost) {
+    throw new Error("Set confirm_cost=true to start a cloud training job.");
+  }
+  if (!gpuType?.trim()) {
+    throw new Error("`gpu_type` is required.");
+  }
+
+  const modelId = await resolveModel(client, model, project);
+  const projectId = await resolveProject(client, project);
+  const datasetId = await resolveDataset(client, dataset);
+
+  const trainArgs: Record<string, unknown> = { data: datasetId };
+  if (epochs !== undefined) {
+    if (epochs <= 0) {
+      throw new Error("`epochs` must be greater than 0.");
+    }
+    trainArgs.epochs = epochs;
+  }
+  if (imgsz !== undefined) {
+    if (imgsz <= 0) {
+      throw new Error("`imgsz` must be greater than 0.");
+    }
+    trainArgs.imgsz = imgsz;
+  }
+  if (batch !== undefined) {
+    if (batch <= 0) {
+      throw new Error("`batch` must be greater than 0.");
+    }
+    trainArgs.batch = batch;
+  }
+  if (name) {
+    trainArgs.name = name;
+  }
+
+  const data = await client.postJson("/training/start", {
+    modelId,
+    projectId,
+    gpuType,
+    trainArgs,
+  });
+  const record = asRecord(data);
+  const item = "job" in record ? record.job : data;
+  const fields = asRecord(item);
+  return {
+    summary: `Started training job ${pyField(fields._id)} status=${pyField(fields.status)}.`,
+    data: item,
   };
 }
