@@ -17,7 +17,7 @@ import { exportCreate, exportStatus, exportsList } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
 import { modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
-import { projectsGet, projectsList } from "./projects.js";
+import { projectsCreate, projectsGet, projectsList } from "./projects.js";
 import { trainingMonitor, trainingStart } from "./training.js";
 
 export { datasetsGet, datasetsList } from "./datasets.js";
@@ -26,13 +26,14 @@ export { exportCreate, exportStatus, exportsList } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
 export { modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
-export { projectsGet, projectsList } from "./projects.js";
+export { projectsCreate, projectsGet, projectsList } from "./projects.js";
 export { trainingMonitor, trainingStart } from "./training.js";
 
 /** Names of the read-only tools registered by `registerReadTools`. */
 export const READ_TOOL_NAMES = [
   "projects_list",
   "projects_get",
+  "projects_create",
   "datasets_list",
   "datasets_get",
   "models_list",
@@ -65,6 +66,22 @@ export function registerReadTools(
     },
     async ({ project }) =>
       toMcpTextResult(await projectsGet(getClient(), project)),
+  );
+
+  server.registerTool(
+    "projects_create",
+    {
+      description: "Create a project in your Ultralytics workspace.",
+      inputSchema: {
+        name: z.string(),
+        slug: z.string().optional(),
+        description: z.string().optional(),
+      },
+    },
+    async ({ name, slug, description }) =>
+      toMcpTextResult(
+        await projectsCreate(getClient(), { name, slug, description }),
+      ),
   );
 
   server.registerTool(

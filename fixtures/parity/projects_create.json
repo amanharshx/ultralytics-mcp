@@ -1,0 +1,37 @@
+{
+  "tool": "projects_create",
+  "args": {
+    "name": "Road Safety",
+    "slug": "road",
+    "description": "Detection experiments"
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/projects",
+      "json": {
+        "name": "Road Safety",
+        "slug": "road",
+        "description": "Detection experiments"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "project": {
+            "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+            "name": "Road Safety",
+            "slug": "road"
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Created project aaaaaaaaaaaaaaaaaaaaaaaa slug=road.",
+    "data": {
+      "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+      "name": "Road Safety",
+      "slug": "road"
+    }
+  }
+}

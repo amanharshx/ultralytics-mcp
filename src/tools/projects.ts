@@ -5,6 +5,11 @@ import { resolveProject } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
 
+function resourceId(item: Record<string, unknown>, fallback?: string): string {
+  const value = item._id ?? item.id ?? item.projectId ?? item.datasetId;
+  return String(value ?? fallback ?? "None");
+}
+
 /** List projects in the workspace, optionally filtered by username. */
 export async function projectsList(
   client: UltralyticsClient,
@@ -39,6 +44,36 @@ export async function projectsGet(
     summary:
       `Project '${pyField(fields.name)}' (${pyField(fields.visibility)}), ` +
       `${pyCount(fields, "modelCount")} model(s).`,
+    data: item,
+  };
+}
+
+export interface ProjectsCreateOptions {
+  name: string;
+  slug?: string;
+  description?: string;
+}
+
+/** Create a project. */
+export async function projectsCreate(
+  client: UltralyticsClient,
+  options: ProjectsCreateOptions,
+): Promise<NormalizedToolResult> {
+  const payload: Record<string, unknown> = { name: options.name };
+  if (options.slug !== undefined) {
+    payload.slug = options.slug;
+  }
+  if (options.description !== undefined) {
+    payload.description = options.description;
+  }
+
+  const data = await client.postJson("/projects", payload);
+  const record = asRecord(data);
+  const item = asRecord("project" in record ? record.project : data);
+  const id = resourceId(item);
+  const slug = item.slug ?? options.slug ?? "None";
+  return {
+    summary: `Created project ${id} slug=${String(slug)}.`,
     data: item,
   };
 }

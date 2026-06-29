@@ -1,7 +1,36 @@
 import { describe, expect, test } from "vitest";
 
-import { projectsGet, projectsList } from "../../src/tools/projects.js";
-import { jsonResponse, routeClient } from "../helpers.js";
+import { UltralyticsClient } from "../../src/client.js";
+import {
+  projectsCreate,
+  projectsGet,
+  projectsList,
+} from "../../src/tools/projects.js";
+import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
+
+function captureClient(responder: (url: string) => Response) {
+  const calls: { url: string; method: string; body: unknown }[] = [];
+  const impl = (async (url: string | URL, init: RequestInit = {}) => {
+    let body: unknown;
+    if (typeof init.body === "string") {
+      body = JSON.parse(init.body);
+    }
+    calls.push({
+      url: String(url),
+      method: (init.method ?? "GET").toUpperCase(),
+      body,
+    });
+    return responder(String(url));
+  }) as unknown as typeof fetch;
+  return {
+    client: new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    }),
+    calls,
+  };
+}
 
 describe("projectsList", () => {
   test("normalizes items and drops unknown fields", async () => {
@@ -92,5 +121,30 @@ describe("projectsGet", () => {
     );
     const result = await projectsGet(client, id);
     expect(result.summary).toBe("Project 'None' (None), ? model(s).");
+  });
+});
+
+describe("projectsCreate", () => {
+  test("posts the project payload and summarizes created project", async () => {
+    const { client, calls } = captureClient(() =>
+      jsonResponse({
+        project: { _id: "p".repeat(24), slug: "road", name: "Road Safety" },
+      }),
+    );
+    const result = await projectsCreate(client, {
+      name: "Road Safety",
+      slug: "road",
+      description: "Detection experiments",
+    });
+    expect(calls[0]).toEqual({
+      url: `${BASE}/projects`,
+      method: "POST",
+      body: {
+        name: "Road Safety",
+        slug: "road",
+        description: "Detection experiments",
+      },
+    });
+    expect(result.summary).toBe(`Created project ${"p".repeat(24)} slug=road.`);
   });
 });
