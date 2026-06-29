@@ -17,7 +17,12 @@ import { exportCreate, exportStatus, exportsList } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
 import { modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
-import { projectsCreate, projectsGet, projectsList } from "./projects.js";
+import {
+  projectsCreate,
+  projectsDelete,
+  projectsGet,
+  projectsList,
+} from "./projects.js";
 import { trainingMonitor, trainingStart } from "./training.js";
 
 export { datasetsGet, datasetsList } from "./datasets.js";
@@ -26,7 +31,12 @@ export { exportCreate, exportStatus, exportsList } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
 export { modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
-export { projectsCreate, projectsGet, projectsList } from "./projects.js";
+export {
+  projectsCreate,
+  projectsDelete,
+  projectsGet,
+  projectsList,
+} from "./projects.js";
 export { trainingMonitor, trainingStart } from "./training.js";
 
 /** Names of the read-only tools registered by `registerReadTools`. */
@@ -34,6 +44,7 @@ export const READ_TOOL_NAMES = [
   "projects_list",
   "projects_get",
   "projects_create",
+  "projects_delete",
   "datasets_list",
   "datasets_get",
   "models_list",
@@ -82,6 +93,17 @@ export function registerReadTools(
       toMcpTextResult(
         await projectsCreate(getClient(), { name, slug, description }),
       ),
+  );
+
+  server.registerTool(
+    "projects_delete",
+    {
+      description:
+        "Soft-delete a project by id, slug, username/slug, or project ul:// URI.",
+      inputSchema: { project: z.string() },
+    },
+    async ({ project }) =>
+      toMcpTextResult(await projectsDelete(getClient(), project)),
   );
 
   server.registerTool(
