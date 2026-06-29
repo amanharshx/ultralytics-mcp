@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { UltralyticsClient } from "../../src/client.js";
 import {
   projectsCreate,
+  projectsDelete,
   projectsGet,
   projectsList,
 } from "../../src/tools/projects.js";
@@ -146,5 +147,27 @@ describe("projectsCreate", () => {
       },
     });
     expect(result.summary).toBe(`Created project ${"p".repeat(24)} slug=road.`);
+  });
+});
+
+describe("projectsDelete", () => {
+  test("resolves a reference and deletes the project", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/projects") {
+        return jsonResponse({
+          projects: [{ _id: "p".repeat(24), slug: "road", username: "user" }],
+        });
+      }
+      return jsonResponse({ deleted: true });
+    });
+    const result = await projectsDelete(client, "user/road");
+    expect(calls.at(-1)).toMatchObject({
+      url: `${BASE}/projects/${"p".repeat(24)}`,
+      method: "DELETE",
+    });
+    expect(result.summary).toBe(
+      `Deleted project ${"p".repeat(24)} (soft delete).`,
+    );
   });
 });

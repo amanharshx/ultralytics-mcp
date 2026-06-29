@@ -1,0 +1,46 @@
+{
+  "tool": "projects_delete",
+  "args": {
+    "project": "user/road"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "query": {
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "projects": [
+            {
+              "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+              "slug": "road",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/projects/aaaaaaaaaaaaaaaaaaaaaaaa",
+      "response": {
+        "status": 200,
+        "json": {
+          "deleted": true
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deleted project aaaaaaaaaaaaaaaaaaaaaaaa (soft delete).",
+    "data": {
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+      "response": {
+        "deleted": true
+      }
+    }
+  }
+}
