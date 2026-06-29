@@ -11,6 +11,18 @@
     "README.md",
     "package.json"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amanharshx/ultralytics-mcp.git"
+  },
+  "homepage": "https://github.com/amanharshx/ultralytics-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/amanharshx/ultralytics-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=20"
   },
