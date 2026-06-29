@@ -5,6 +5,20 @@ import { resolveDataset } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
 
+const DATASET_TASKS = new Set([
+  "detect",
+  "segment",
+  "semantic",
+  "classify",
+  "pose",
+  "obb",
+]);
+
+function resourceId(item: Record<string, unknown>, fallback?: string): string {
+  const value = item._id ?? item.id ?? item.projectId ?? item.datasetId;
+  return String(value ?? fallback ?? "None");
+}
+
 /** List datasets in the workspace, optionally filtered by username. */
 export async function datasetsList(
   client: UltralyticsClient,
@@ -40,6 +54,57 @@ export async function datasetsGet(
     summary:
       `Dataset '${pyField(fields.name)}' [${pyField(fields.task)}], ` +
       `${pyCount(fields, "imageCount")} images, ${pyCount(fields, "classCount")} classes.`,
+    data: item,
+  };
+}
+
+export interface DatasetsCreateOptions {
+  name: string;
+  task: string;
+  slug: string;
+  description?: string;
+  visibility?: string;
+  classNames?: string[];
+}
+
+/** Create a dataset. */
+export async function datasetsCreate(
+  client: UltralyticsClient,
+  options: DatasetsCreateOptions,
+): Promise<NormalizedToolResult> {
+  if (!DATASET_TASKS.has(options.task)) {
+    const allowed = Array.from(DATASET_TASKS).sort().join(", ");
+    throw new Error(
+      `Unsupported dataset task '${options.task}'. Expected one of: ${allowed}.`,
+    );
+  }
+  if (!options.slug.trim()) {
+    throw new Error("`slug` is required.");
+  }
+
+  const payload: Record<string, unknown> = {
+    name: options.name,
+    task: options.task,
+    slug: options.slug,
+  };
+  if (options.description !== undefined) {
+    payload.description = options.description;
+  }
+  if (options.visibility !== undefined) {
+    payload.visibility = options.visibility;
+  }
+  if (options.classNames !== undefined) {
+    payload.classNames = options.classNames;
+  }
+
+  const data = await client.postJson("/datasets", payload);
+  const record = asRecord(data);
+  const item = asRecord("dataset" in record ? record.dataset : data);
+  const id = resourceId(item);
+  const slug = item.slug ?? options.slug;
+  const task = item.task ?? options.task;
+  return {
+    summary: `Created dataset ${id} slug=${String(slug)} task=${String(task)}.`,
     data: item,
   };
 }

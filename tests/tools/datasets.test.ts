@@ -1,7 +1,36 @@
 import { describe, expect, test } from "vitest";
 
-import { datasetsGet, datasetsList } from "../../src/tools/datasets.js";
-import { jsonResponse, routeClient } from "../helpers.js";
+import { UltralyticsClient } from "../../src/client.js";
+import {
+  datasetsCreate,
+  datasetsGet,
+  datasetsList,
+} from "../../src/tools/datasets.js";
+import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
+
+function captureClient(responder: (url: string) => Response) {
+  const calls: { url: string; method: string; body: unknown }[] = [];
+  const impl = (async (url: string | URL, init: RequestInit = {}) => {
+    let body: unknown;
+    if (typeof init.body === "string") {
+      body = JSON.parse(init.body);
+    }
+    calls.push({
+      url: String(url),
+      method: (init.method ?? "GET").toUpperCase(),
+      body,
+    });
+    return responder(String(url));
+  }) as unknown as typeof fetch;
+  return {
+    client: new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    }),
+    calls,
+  };
+}
 
 describe("datasetsList", () => {
   test("normalizes items and summarizes count", async () => {
@@ -80,5 +109,47 @@ describe("datasetsGet", () => {
     );
     const result = await datasetsGet(client, id);
     expect(result.summary).toBe("Dataset 'None' [None], ? images, ? classes.");
+  });
+});
+
+describe("datasetsCreate", () => {
+  test("posts the dataset payload and validates task before network", async () => {
+    const { client, calls } = captureClient(() =>
+      jsonResponse({
+        dataset: { _id: "d".repeat(24), slug: "data", task: "detect" },
+      }),
+    );
+    const result = await datasetsCreate(client, {
+      name: "Dataset",
+      task: "detect",
+      slug: "data",
+      visibility: "private",
+      classNames: ["car", "person"],
+    });
+    await expect(
+      datasetsCreate(client, {
+        name: "Bad",
+        task: "bad-task",
+        slug: "bad",
+      }),
+    ).rejects.toThrow(/Unsupported dataset task/);
+    await expect(
+      datasetsCreate(client, { name: "Bad", task: "detect", slug: "" }),
+    ).rejects.toThrow(/`slug` is required/);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({
+      url: `${BASE}/datasets`,
+      method: "POST",
+      body: {
+        name: "Dataset",
+        task: "detect",
+        slug: "data",
+        visibility: "private",
+        classNames: ["car", "person"],
+      },
+    });
+    expect(result.summary).toBe(
+      `Created dataset ${"d".repeat(24)} slug=data task=detect.`,
+    );
   });
 });
