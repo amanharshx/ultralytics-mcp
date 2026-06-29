@@ -4,16 +4,16 @@ MCP server for the [Ultralytics Platform](https://platform.ultralytics.com).
 
 > Independent community project. Not affiliated with or endorsed by Ultralytics.
 
-Current milestone: read, monitor, predict, export, and project creation tools
-are available. Additional resource-management tools land incrementally from
-here.
+Current milestone: read, monitor, predict, export, and initial project
+lifecycle tools are available. Additional resource-management tools land
+incrementally from here.
 
-## Tools (15)
+## Tools (16)
 
 | Tool | Description |
 | --- | --- |
 | `projects_list` / `projects_get` | Browse projects |
-| `projects_create` | Create projects |
+| `projects_create` / `projects_delete` | Create / soft-delete projects |
 | `datasets_list` / `datasets_get` | Browse datasets |
 | `models_list` / `models_get` | Browse trained models and metrics |
 | `training_monitor` | Status, progress, and latest metrics |

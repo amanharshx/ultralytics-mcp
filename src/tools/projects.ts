@@ -77,3 +77,16 @@ export async function projectsCreate(
     data: item,
   };
 }
+
+/** Soft-delete a project by id, slug, username/slug, or project ul:// URI. */
+export async function projectsDelete(
+  client: UltralyticsClient,
+  project: string,
+): Promise<NormalizedToolResult> {
+  const projectId = await resolveProject(client, project);
+  const data = await client.delete(`/projects/${projectId}`);
+  return {
+    summary: `Deleted project ${projectId} (soft delete).`,
+    data: { id: projectId, response: data },
+  };
+}

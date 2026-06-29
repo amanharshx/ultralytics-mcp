@@ -106,6 +106,11 @@ export class UltralyticsClient {
     });
   }
 
+  /** DELETE requests are state-changing and do not retry 429 responses. */
+  async delete(path: string): Promise<unknown> {
+    return this.request("DELETE", path, { retryOn429: false });
+  }
+
   /** Download bytes from a signed URL WITHOUT forwarding API credentials. */
   async downloadBytes(url: string): Promise<Uint8Array> {
     let attempt = 0;

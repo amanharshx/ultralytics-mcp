@@ -13,6 +13,7 @@ import {
   modelDownload,
   modelsGet,
   projectsCreate,
+  projectsDelete,
   projectsList,
   trainingMonitor,
 } from "../src/tools/index.js";
@@ -115,6 +116,8 @@ const TOOL_RUNNERS: Record<
       slug: args.slug as string | undefined,
       description: args.description as string | undefined,
     }),
+  projects_delete: (client, args) =>
+    projectsDelete(client, args.project as string),
   models_get: (client, args) =>
     modelsGet(client, args.model as string, args.project as string | undefined),
   training_monitor: (client, args) =>
@@ -156,6 +159,7 @@ describe("parity fixtures", () => {
         "model_download_signed_url.json",
         "models_get.json",
         "projects_create.json",
+        "projects_delete.json",
         "projects_list.json",
         "training_monitor_private.json",
       ].sort(),
