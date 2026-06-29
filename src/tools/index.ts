@@ -11,7 +11,7 @@ import { z } from "zod";
 
 import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
-import { datasetsGet, datasetsList } from "./datasets.js";
+import { datasetsCreate, datasetsGet, datasetsList } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
 import { exportCreate, exportStatus, exportsList } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
@@ -25,7 +25,7 @@ import {
 } from "./projects.js";
 import { trainingMonitor, trainingStart } from "./training.js";
 
-export { datasetsGet, datasetsList } from "./datasets.js";
+export { datasetsCreate, datasetsGet, datasetsList } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
 export { exportCreate, exportStatus, exportsList } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
@@ -47,6 +47,7 @@ export const READ_TOOL_NAMES = [
   "projects_delete",
   "datasets_list",
   "datasets_get",
+  "datasets_create",
   "models_list",
   "models_get",
   "gpu_availability",
@@ -125,6 +126,32 @@ export function registerReadTools(
     },
     async ({ dataset }) =>
       toMcpTextResult(await datasetsGet(getClient(), dataset)),
+  );
+
+  server.registerTool(
+    "datasets_create",
+    {
+      description: "Create a dataset in your Ultralytics workspace.",
+      inputSchema: {
+        name: z.string(),
+        task: z.string(),
+        slug: z.string(),
+        description: z.string().optional(),
+        visibility: z.string().optional(),
+        classNames: z.array(z.string()).optional(),
+      },
+    },
+    async ({ name, task, slug, description, visibility, classNames }) =>
+      toMcpTextResult(
+        await datasetsCreate(getClient(), {
+          name,
+          task,
+          slug,
+          description,
+          visibility,
+          classNames,
+        }),
+      ),
   );
 
   server.registerTool(
