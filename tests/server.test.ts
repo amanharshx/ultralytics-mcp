@@ -46,4 +46,11 @@ test("server registers all available tools over the protocol", async () => {
 
   const projectsDelete = tools.find((tool) => tool.name === "projects_delete");
   expect(projectsDelete?.inputSchema?.required).toEqual(["project"]);
+
+  const datasetsCreate = tools.find((tool) => tool.name === "datasets_create");
+  expect(datasetsCreate?.inputSchema?.required).toEqual([
+    "name",
+    "task",
+    "slug",
+  ]);
 });

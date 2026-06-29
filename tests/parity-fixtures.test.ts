@@ -10,6 +10,7 @@ import { z } from "zod";
 import { UltralyticsClient } from "../src/client.js";
 import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
+  datasetsCreate,
   modelDownload,
   modelsGet,
   projectsCreate,
@@ -28,6 +29,7 @@ const apiStepSchema = z.object({
   method: z.string(),
   path: z.string(),
   query: z.record(z.string(), z.string()).optional(),
+  json: z.unknown().optional(),
   response: responseSchema,
 });
 
@@ -83,6 +85,9 @@ function replayFetch(steps: Fixture["api"]): typeof fetch {
         }
       }
       if (!queryMatches) continue;
+      if (step.json !== undefined) {
+        expect(JSON.parse(String(init.body))).toEqual(step.json);
+      }
 
       entry.used = true;
       const body =
@@ -115,6 +120,15 @@ const TOOL_RUNNERS: Record<
       name: args.name as string,
       slug: args.slug as string | undefined,
       description: args.description as string | undefined,
+    }),
+  datasets_create: (client, args) =>
+    datasetsCreate(client, {
+      name: args.name as string,
+      task: args.task as string,
+      slug: args.slug as string,
+      description: args.description as string | undefined,
+      visibility: args.visibility as string | undefined,
+      classNames: args.classNames as string[] | undefined,
     }),
   projects_delete: (client, args) =>
     projectsDelete(client, args.project as string),
@@ -157,6 +171,7 @@ describe("parity fixtures", () => {
     expect([...fixtureFiles].sort()).toEqual(
       [
         "model_download_signed_url.json",
+        "datasets_create.json",
         "models_get.json",
         "projects_create.json",
         "projects_delete.json",

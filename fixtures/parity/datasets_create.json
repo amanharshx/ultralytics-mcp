@@ -1,0 +1,41 @@
+{
+  "tool": "datasets_create",
+  "args": {
+    "name": "Dataset",
+    "task": "detect",
+    "slug": "data",
+    "visibility": "private",
+    "classNames": ["car", "person"]
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/datasets",
+      "json": {
+        "name": "Dataset",
+        "task": "detect",
+        "slug": "data",
+        "visibility": "private",
+        "classNames": ["car", "person"]
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "dataset": {
+            "_id": "dddddddddddddddddddddddd",
+            "slug": "data",
+            "task": "detect"
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Created dataset dddddddddddddddddddddddd slug=data task=detect.",
+    "data": {
+      "_id": "dddddddddddddddddddddddd",
+      "slug": "data",
+      "task": "detect"
+    }
+  }
+}
