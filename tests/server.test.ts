@@ -40,4 +40,7 @@ test("server registers all available tools over the protocol", async () => {
   const projectsGet = tools.find((tool) => tool.name === "projects_get");
   expect(projectsGet?.inputSchema?.type).toBe("object");
   expect(projectsGet?.inputSchema?.required).toEqual(["project"]);
+
+  const projectsCreate = tools.find((tool) => tool.name === "projects_create");
+  expect(projectsCreate?.inputSchema?.required).toEqual(["name"]);
 });

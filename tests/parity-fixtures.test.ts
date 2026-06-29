@@ -12,6 +12,7 @@ import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
   modelDownload,
   modelsGet,
+  projectsCreate,
   projectsList,
   trainingMonitor,
 } from "../src/tools/index.js";
@@ -108,6 +109,12 @@ const TOOL_RUNNERS: Record<
 > = {
   projects_list: (client, args) =>
     projectsList(client, args.username as string | undefined),
+  projects_create: (client, args) =>
+    projectsCreate(client, {
+      name: args.name as string,
+      slug: args.slug as string | undefined,
+      description: args.description as string | undefined,
+    }),
   models_get: (client, args) =>
     modelsGet(client, args.model as string, args.project as string | undefined),
   training_monitor: (client, args) =>
@@ -148,6 +155,7 @@ describe("parity fixtures", () => {
       [
         "model_download_signed_url.json",
         "models_get.json",
+        "projects_create.json",
         "projects_list.json",
         "training_monitor_private.json",
       ].sort(),

@@ -1,9 +1,28 @@
 # Ultralytics Platform MCP
 
-MCP server for the Ultralytics Platform REST API.
+MCP server for the [Ultralytics Platform](https://platform.ultralytics.com).
 
-Current milestone: protocol scaffold with CLI entrypoint and protocol-level
-tests. Tooling and API features land incrementally from here.
+> Independent community project. Not affiliated with or endorsed by Ultralytics.
+
+Current milestone: read, monitor, predict, export, and project creation tools
+are available. Additional resource-management tools land incrementally from
+here.
+
+## Tools (15)
+
+| Tool | Description |
+| --- | --- |
+| `projects_list` / `projects_get` | Browse projects |
+| `projects_create` | Create projects |
+| `datasets_list` / `datasets_get` | Browse datasets |
+| `models_list` / `models_get` | Browse trained models and metrics |
+| `training_monitor` | Status, progress, and latest metrics |
+| `model_predict` | Run inference on an image URL or base64 source |
+| `model_download` | Download a model weight file to a local path |
+| `gpu_availability` | Cloud GPU stock status |
+| `exports_list` / `export_status` | List / check export jobs |
+| `export_create` | Create an export job — **requires `confirm_cost: true`** |
+| `training_start` | Start cloud training — **requires `confirm_cost: true`** |
 
 ## Development
 
