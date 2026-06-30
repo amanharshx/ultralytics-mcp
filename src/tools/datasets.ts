@@ -108,3 +108,16 @@ export async function datasetsCreate(
     data: item,
   };
 }
+
+/** Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI. */
+export async function datasetsDelete(
+  client: UltralyticsClient,
+  dataset: string,
+): Promise<NormalizedToolResult> {
+  const datasetId = await resolveDataset(client, dataset);
+  const data = await client.delete(`/datasets/${datasetId}`);
+  return {
+    summary: `Deleted dataset ${datasetId} (soft delete).`,
+    data: { id: datasetId, response: data },
+  };
+}
