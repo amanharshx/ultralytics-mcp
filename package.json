@@ -1,7 +1,7 @@
 {
   "name": "ultralytics-mcp",
   "version": "0.1.1",
-  "description": "TypeScript MCP server for the Ultralytics Platform REST API.",
+  "description": "MCP for Ultralytics Platform workflows, datasets, training, prediction, and model operations.",
   "type": "module",
   "bin": {
     "ultralytics-mcp": "./dist/cli.js"
