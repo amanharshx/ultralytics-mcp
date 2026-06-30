@@ -1,0 +1,124 @@
+name: Prepare Release
+
+run-name: >
+  Prepare Release • ${{ github.ref_name || 'manual' }} •
+  ${{ github.actor }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine next patch release
+        id: version
+        shell: bash
+        run: |
+          git fetch --tags
+
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            BASE_VERSION=$(jq -r .version package.json)
+          else
+            BASE_VERSION="${LATEST_TAG#v}"
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          NEXT_VERSION="$MAJOR.$MINOR.$((PATCH+1))"
+          NEXT_TAG="v$NEXT_VERSION"
+          CURRENT_VERSION=$(jq -r .version package.json)
+
+          if [ "$CURRENT_VERSION" = "$NEXT_VERSION" ]; then
+            READY_TO_TAG=true
+          else
+            READY_TO_TAG=false
+          fi
+
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "next_tag=$NEXT_TAG" >> "$GITHUB_OUTPUT"
+          echo "ready_to_tag=$READY_TO_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create release bump PR
+        if: steps.version.outputs.ready_to_tag != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          BRANCH="release/bump-${{ steps.version.outputs.next_tag }}"
+          BODY=$(cat <<'EOF'
+          ## Summary
+          Prepare the next patch release version bump.
+
+          ## Motivation
+          Keep package version and release tag creation in a repeatable manual workflow.
+
+          ## Key Changes
+          - bump `package.json` to ${{ steps.version.outputs.next_version }}
+          - bump `package-lock.json` to ${{ steps.version.outputs.next_version }}
+          - prepare main for tag ${{ steps.version.outputs.next_tag }}
+          EOF
+          )
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+
+          jq --arg v "${{ steps.version.outputs.next_version }}" '.version=$v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          jq --arg v "${{ steps.version.outputs.next_version }}" '.version=$v' package-lock.json > package-lock.json.tmp
+          mv package-lock.json.tmp package-lock.json
+
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.next_tag }}"
+          git push -f -u origin "$BRANCH"
+
+          if gh pr view "$BRANCH" >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" \
+              --title "chore: bump version to ${{ steps.version.outputs.next_tag }}" \
+              --body "$BODY" \
+              --add-label enhancement
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore: bump version to ${{ steps.version.outputs.next_tag }}" \
+              --body "$BODY" \
+              --label enhancement
+          fi
+
+      - name: Check if tag exists
+        if: steps.version.outputs.ready_to_tag == 'true'
+        id: tag
+        shell: bash
+        run: |
+          if git ls-remote --tags origin "${{ steps.version.outputs.next_tag }}" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.version.outputs.ready_to_tag == 'true' && steps.tag.outputs.exists == 'false'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${{ steps.version.outputs.next_tag }}" -m "Release ${{ steps.version.outputs.next_tag }}"
+          git push origin "${{ steps.version.outputs.next_tag }}"
