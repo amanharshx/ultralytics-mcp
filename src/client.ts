@@ -23,6 +23,7 @@ export interface ClientOptions {
   maxRetries?: number;
   fetchImpl?: FetchLike;
   downloadFetchImpl?: FetchLike;
+  uploadFetchImpl?: FetchLike;
 }
 
 export interface MultipartFile {
@@ -47,6 +48,7 @@ export class UltralyticsClient {
   private readonly maxRetries: number;
   private readonly fetchImpl: FetchLike;
   private readonly downloadFetchImpl: FetchLike;
+  private readonly uploadFetchImpl: FetchLike;
 
   constructor(options: ClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? getApiBase()).replace(/\/+$/, "");
@@ -55,6 +57,7 @@ export class UltralyticsClient {
     this.maxRetries = options.maxRetries ?? 3;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.downloadFetchImpl = options.downloadFetchImpl ?? fetch;
+    this.uploadFetchImpl = options.uploadFetchImpl ?? fetch;
   }
 
   // -- public verbs --------------------------------------------------------
@@ -134,6 +137,28 @@ export class UltralyticsClient {
       await this.handle(response, url); // throws UltralyticsApiError
       throw new Error("unreachable");
     }
+  }
+
+  /** Upload bytes to a signed URL WITHOUT forwarding API credentials. */
+  async uploadBytes(
+    url: string,
+    content: Uint8Array,
+    contentType: string,
+  ): Promise<void> {
+    const bytes = new Uint8Array(content.byteLength);
+    bytes.set(content);
+    const response = await this.fetchWithTimeout(this.uploadFetchImpl, url, {
+      method: "PUT",
+      headers: {
+        Accept: "*/*",
+        "Content-Type": contentType,
+      },
+      body: bytes,
+    });
+    if (response.ok) {
+      return;
+    }
+    await this.handle(response, url);
   }
 
   // -- internals -----------------------------------------------------------

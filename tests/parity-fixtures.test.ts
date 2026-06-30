@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,7 @@ import {
   datasetsCreate,
   datasetsDelete,
   datasetsIngest,
+  datasetUploadFile,
   modelDownload,
   modelsGet,
   projectsCreate,
@@ -40,11 +41,18 @@ const downloadSchema = z.object({
   body_text: z.string(),
 });
 
+const uploadSchema = z.object({
+  url: z.string().url(),
+  content_type: z.string(),
+  body_text: z.string(),
+});
+
 const fixtureSchema = z.object({
   tool: z.string(),
   args: z.record(z.string(), z.unknown()),
   api: z.array(apiStepSchema),
   download: downloadSchema.optional(),
+  upload: uploadSchema.optional(),
   expected: z.object({
     summary: z.string(),
     data: z.unknown(),
@@ -140,6 +148,12 @@ const TOOL_RUNNERS: Record<
       sourceUrl: args.sourceUrl as string,
       targetSplit: args.targetSplit as string | undefined,
     }),
+  dataset_upload_file: (client, args) =>
+    datasetUploadFile(client, {
+      dataset: args.dataset as string,
+      filePath: args.file_path as string,
+      targetSplit: args.targetSplit as string | undefined,
+    }),
   projects_delete: (client, args) =>
     projectsDelete(client, args.project as string),
   models_get: (client, args) =>
@@ -184,6 +198,7 @@ describe("parity fixtures", () => {
         "datasets_create.json",
         "datasets_delete.json",
         "dataset_ingest.json",
+        "dataset_upload_file.json",
         "models_get.json",
         "projects_create.json",
         "projects_delete.json",
@@ -205,6 +220,7 @@ describe("parity fixtures", () => {
   for (const fixtureFile of fixtureFiles) {
     const raw = readFileSync(join(fixtureDir, fixtureFile), "utf8");
     const fixture = fixtureSchema.parse(JSON.parse(raw));
+    if (fixture.tool === "dataset_upload_file") continue;
     const runner = TOOL_RUNNERS[fixture.tool];
     if (!runner) continue; // tool not ported yet; schema-validated above
 
@@ -260,6 +276,57 @@ describe("parity fixtures", () => {
       expect(downloadAuth).toBeUndefined();
       const written = await readFile(join(tmp, "best.pt"), "utf8");
       expect(written).toBe(fixture.download?.body_text);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("parity output: dataset_upload_file.json", async () => {
+    const raw = readFileSync(
+      join(fixtureDir, "dataset_upload_file.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-"));
+    try {
+      const args = replaceTmp(fixture.args, tmp) as Record<string, unknown>;
+      const expected = replaceTmp(fixture.expected, tmp);
+      await writeFile(
+        args.file_path as string,
+        fixture.upload?.body_text ?? "",
+      );
+
+      let uploadAuth: string | null | undefined = "unset";
+      const uploadFetch = (async (
+        url: string | URL,
+        init: RequestInit = {},
+      ) => {
+        const headers = new Headers(init.headers);
+        uploadAuth = headers.get("Authorization");
+        expect(String(url)).toBe(fixture.upload?.url);
+        expect((init.method ?? "GET").toUpperCase()).toBe("PUT");
+        expect(headers.get("Content-Type")).toBe(fixture.upload?.content_type);
+        expect(await new Response(init.body).text()).toBe(
+          fixture.upload?.body_text ?? "",
+        );
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: replayFetch(fixture.api),
+        uploadFetchImpl: uploadFetch,
+      });
+
+      const result = await datasetUploadFile(client, {
+        dataset: args.dataset as string,
+        filePath: args.file_path as string,
+        targetSplit: args.targetSplit as string | undefined,
+      });
+
+      expect(result).toEqual(expected);
+      expect(uploadAuth).toBeNull();
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }

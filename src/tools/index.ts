@@ -17,6 +17,7 @@ import {
   datasetsGet,
   datasetsIngest,
   datasetsList,
+  datasetUploadFile,
 } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
 import { exportCreate, exportStatus, exportsList } from "./exports.js";
@@ -37,6 +38,7 @@ export {
   datasetsGet,
   datasetsIngest,
   datasetsList,
+  datasetUploadFile,
 } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
 export { exportCreate, exportStatus, exportsList } from "./exports.js";
@@ -62,6 +64,7 @@ export const READ_TOOL_NAMES = [
   "datasets_create",
   "datasets_delete",
   "dataset_ingest",
+  "dataset_upload_file",
   "models_list",
   "models_get",
   "gpu_availability",
@@ -192,6 +195,27 @@ export function registerReadTools(
     async ({ dataset, sourceUrl, targetSplit }) =>
       toMcpTextResult(
         await datasetsIngest(getClient(), { dataset, sourceUrl, targetSplit }),
+      ),
+  );
+
+  server.registerTool(
+    "dataset_upload_file",
+    {
+      description:
+        "Upload a local dataset archive file and start ingest for an existing dataset.",
+      inputSchema: {
+        dataset: z.string(),
+        file_path: z.string(),
+        targetSplit: z.string().optional(),
+      },
+    },
+    async ({ dataset, file_path, targetSplit }) =>
+      toMcpTextResult(
+        await datasetUploadFile(getClient(), {
+          dataset,
+          filePath: file_path,
+          targetSplit,
+        }),
       ),
   );
 

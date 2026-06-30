@@ -62,4 +62,12 @@ test("server registers all available tools over the protocol", async () => {
     "dataset",
     "sourceUrl",
   ]);
+
+  const datasetUploadFile = tools.find(
+    (tool) => tool.name === "dataset_upload_file",
+  );
+  expect(datasetUploadFile?.inputSchema?.required).toEqual([
+    "dataset",
+    "file_path",
+  ]);
 });
