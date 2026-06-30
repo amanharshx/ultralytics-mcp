@@ -1,0 +1,47 @@
+{
+  "tool": "datasets_delete",
+  "args": {
+    "dataset": "user/data"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/datasets/dddddddddddddddddddddddd",
+      "response": {
+        "status": 200,
+        "json": {
+          "deleted": true
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deleted dataset dddddddddddddddddddddddd (soft delete).",
+    "data": {
+      "id": "dddddddddddddddddddddddd",
+      "response": {
+        "deleted": true
+      }
+    }
+  }
+}

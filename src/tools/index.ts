@@ -11,7 +11,12 @@ import { z } from "zod";
 
 import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
-import { datasetsCreate, datasetsGet, datasetsList } from "./datasets.js";
+import {
+  datasetsCreate,
+  datasetsDelete,
+  datasetsGet,
+  datasetsList,
+} from "./datasets.js";
 import { modelDownload } from "./downloads.js";
 import { exportCreate, exportStatus, exportsList } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
@@ -25,7 +30,12 @@ import {
 } from "./projects.js";
 import { trainingMonitor, trainingStart } from "./training.js";
 
-export { datasetsCreate, datasetsGet, datasetsList } from "./datasets.js";
+export {
+  datasetsCreate,
+  datasetsDelete,
+  datasetsGet,
+  datasetsList,
+} from "./datasets.js";
 export { modelDownload } from "./downloads.js";
 export { exportCreate, exportStatus, exportsList } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
@@ -48,6 +58,7 @@ export const READ_TOOL_NAMES = [
   "datasets_list",
   "datasets_get",
   "datasets_create",
+  "datasets_delete",
   "models_list",
   "models_get",
   "gpu_availability",
@@ -152,6 +163,17 @@ export function registerReadTools(
           classNames,
         }),
       ),
+  );
+
+  server.registerTool(
+    "datasets_delete",
+    {
+      description:
+        "Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI.",
+      inputSchema: { dataset: z.string() },
+    },
+    async ({ dataset }) =>
+      toMcpTextResult(await datasetsDelete(getClient(), dataset)),
   );
 
   server.registerTool(

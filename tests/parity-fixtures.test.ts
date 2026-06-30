@@ -11,6 +11,7 @@ import { UltralyticsClient } from "../src/client.js";
 import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
   datasetsCreate,
+  datasetsDelete,
   modelDownload,
   modelsGet,
   projectsCreate,
@@ -130,6 +131,8 @@ const TOOL_RUNNERS: Record<
       visibility: args.visibility as string | undefined,
       classNames: args.classNames as string[] | undefined,
     }),
+  datasets_delete: (client, args) =>
+    datasetsDelete(client, args.dataset as string),
   projects_delete: (client, args) =>
     projectsDelete(client, args.project as string),
   models_get: (client, args) =>
@@ -172,6 +175,7 @@ describe("parity fixtures", () => {
       [
         "model_download_signed_url.json",
         "datasets_create.json",
+        "datasets_delete.json",
         "models_get.json",
         "projects_create.json",
         "projects_delete.json",
