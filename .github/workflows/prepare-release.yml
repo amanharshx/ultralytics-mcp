@@ -92,14 +92,16 @@ jobs:
             gh pr edit "$BRANCH" \
               --title "chore: bump version to ${{ steps.version.outputs.next_tag }}" \
               --body "$BODY" \
-              --add-label enhancement
+              --add-label release \
+              --add-label ci
           else
             gh pr create \
               --base main \
               --head "$BRANCH" \
               --title "chore: bump version to ${{ steps.version.outputs.next_tag }}" \
               --body "$BODY" \
-              --label enhancement
+              --label release \
+              --label ci
           fi
 
       - name: Check if tag exists
@@ -115,6 +117,8 @@ jobs:
 
       - name: Create and push tag
         if: steps.version.outputs.ready_to_tag == 'true' && steps.tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -122,3 +126,4 @@ jobs:
 
           git tag -a "${{ steps.version.outputs.next_tag }}" -m "Release ${{ steps.version.outputs.next_tag }}"
           git push origin "${{ steps.version.outputs.next_tag }}"
+          gh workflow run "Release" --ref main -f tag="${{ steps.version.outputs.next_tag }}"
