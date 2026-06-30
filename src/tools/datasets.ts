@@ -14,9 +14,20 @@ const DATASET_TASKS = new Set([
   "obb",
 ]);
 
+const TARGET_SPLITS = new Set(["train", "val", "test"]);
+
 function resourceId(item: Record<string, unknown>, fallback?: string): string {
   const value = item._id ?? item.id ?? item.projectId ?? item.datasetId;
   return String(value ?? fallback ?? "None");
+}
+
+function validateTargetSplit(targetSplit?: string): void {
+  if (targetSplit !== undefined && !TARGET_SPLITS.has(targetSplit)) {
+    const allowed = Array.from(TARGET_SPLITS).sort().join(", ");
+    throw new Error(
+      `Unsupported targetSplit '${targetSplit}'. Expected one of: ${allowed}.`,
+    );
+  }
 }
 
 /** List datasets in the workspace, optionally filtered by username. */
@@ -119,5 +130,39 @@ export async function datasetsDelete(
   return {
     summary: `Deleted dataset ${datasetId} (soft delete).`,
     data: { id: datasetId, response: data },
+  };
+}
+
+export interface DatasetsIngestOptions {
+  dataset: string;
+  sourceUrl: string;
+  targetSplit?: string;
+}
+
+/** Start a remote URL ingest job for an existing dataset. */
+export async function datasetsIngest(
+  client: UltralyticsClient,
+  options: DatasetsIngestOptions,
+): Promise<NormalizedToolResult> {
+  if (!options.sourceUrl.trim()) {
+    throw new Error("`sourceUrl` is required.");
+  }
+  validateTargetSplit(options.targetSplit);
+
+  const datasetId = await resolveDataset(client, options.dataset);
+  const payload: Record<string, unknown> = {
+    datasetId,
+    sourceUrl: options.sourceUrl,
+  };
+  if (options.targetSplit !== undefined) {
+    payload.targetSplit = options.targetSplit;
+  }
+
+  const data = await client.postJson("/datasets/ingest", payload);
+  const item = asRecord(data);
+  const jobId = item.jobId ?? item.id ?? "None";
+  return {
+    summary: `Started dataset ingest job ${String(jobId)} for dataset ${datasetId}.`,
+    data: item,
   };
 }
