@@ -1,5 +1,8 @@
 /** Read-only dataset tools. */
 
+import { readFile, stat } from "node:fs/promises";
+import { basename } from "node:path";
+
 import type { UltralyticsClient } from "../client.js";
 import { resolveDataset } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
@@ -15,6 +18,14 @@ const DATASET_TASKS = new Set([
 ]);
 
 const TARGET_SPLITS = new Set(["train", "val", "test"]);
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
+const UPLOAD_TYPES: Array<[suffix: string, contentType: string]> = [
+  [".tar.gz", "application/gzip"],
+  [".zip", "application/zip"],
+  [".tar", "application/x-tar"],
+  [".tgz", "application/gzip"],
+  [".ndjson", "application/x-ndjson"],
+];
 
 function resourceId(item: Record<string, unknown>, fallback?: string): string {
   const value = item._id ?? item.id ?? item.projectId ?? item.datasetId;
@@ -28,6 +39,42 @@ function validateTargetSplit(targetSplit?: string): void {
       `Unsupported targetSplit '${targetSplit}'. Expected one of: ${allowed}.`,
     );
   }
+}
+
+async function datasetUploadFileMeta(filePath: string): Promise<{
+  filename: string;
+  contentType: string;
+  totalBytes: number;
+}> {
+  if (!filePath.trim()) {
+    throw new Error("`filePath` is required.");
+  }
+
+  const info = await stat(filePath).catch(() => null);
+  if (info === null) {
+    throw new Error(`Upload file does not exist: ${filePath}`);
+  }
+  if (!info.isFile()) {
+    throw new Error(`Upload path is not a file: ${filePath}`);
+  }
+  if (info.size >= MAX_UPLOAD_BYTES) {
+    throw new Error("Upload file must be smaller than 10 GB.");
+  }
+
+  const filename = basename(filePath);
+  const lower = filename.toLowerCase();
+  const matched = UPLOAD_TYPES.find(([suffix]) => lower.endsWith(suffix));
+  if (!matched) {
+    throw new Error(
+      "Unsupported dataset upload file type. Expected one of: .zip, .tar, .tar.gz, .tgz, .ndjson.",
+    );
+  }
+
+  return {
+    filename,
+    contentType: matched[1],
+    totalBytes: info.size,
+  };
 }
 
 /** List datasets in the workspace, optionally filtered by username. */
@@ -164,5 +211,57 @@ export async function datasetsIngest(
   return {
     summary: `Started dataset ingest job ${String(jobId)} for dataset ${datasetId}.`,
     data: item,
+  };
+}
+
+export interface DatasetUploadFileOptions {
+  dataset: string;
+  filePath: string;
+  targetSplit?: string;
+}
+
+/** Upload a local dataset archive file, then start ingest for that upload. */
+export async function datasetUploadFile(
+  client: UltralyticsClient,
+  options: DatasetUploadFileOptions,
+): Promise<NormalizedToolResult> {
+  validateTargetSplit(options.targetSplit);
+
+  const meta = await datasetUploadFileMeta(options.filePath);
+  const datasetId = await resolveDataset(client, options.dataset);
+  const content = await readFile(options.filePath);
+
+  const signed = asRecord(
+    await client.postJson("/upload/signed-url", {
+      assetType: "datasets",
+      assetId: datasetId,
+      filename: meta.filename,
+      contentType: meta.contentType,
+      totalBytes: meta.totalBytes,
+    }),
+  );
+  const uploadUrl = String(signed.url ?? "");
+  const sessionId = String(signed.sessionId ?? "");
+  await client.uploadBytes(uploadUrl, content, meta.contentType);
+  await client.postJson("/upload/complete", { sessionId });
+
+  const ingestPayload: Record<string, unknown> = { datasetId, sessionId };
+  if (options.targetSplit !== undefined) {
+    ingestPayload.targetSplit = options.targetSplit;
+  }
+  const ingest = asRecord(
+    await client.postJson("/datasets/ingest", ingestPayload),
+  );
+  const jobId = ingest.jobId ?? ingest.id ?? "None";
+
+  return {
+    summary: `Uploaded ${meta.filename} (${meta.totalBytes} bytes) and started dataset ingest job ${String(jobId)}.`,
+    data: {
+      datasetId,
+      filename: meta.filename,
+      bytes: meta.totalBytes,
+      sessionId,
+      ingest,
+    },
   };
 }

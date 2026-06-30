@@ -1,0 +1,97 @@
+{
+  "tool": "dataset_upload_file",
+  "args": {
+    "dataset": "user/data",
+    "file_path": "__TMP__/dataset.zip",
+    "targetSplit": "train"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/signed-url",
+      "json": {
+        "assetType": "datasets",
+        "assetId": "dddddddddddddddddddddddd",
+        "filename": "dataset.zip",
+        "contentType": "application/zip",
+        "totalBytes": 7
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "url": "https://signed.example/upload",
+          "sessionId": "session_123"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/complete",
+      "json": {
+        "sessionId": "session_123"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/datasets/ingest",
+      "json": {
+        "datasetId": "dddddddddddddddddddddddd",
+        "sessionId": "session_123",
+        "targetSplit": "train"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "jobId": "job_123",
+          "datasetId": "dddddddddddddddddddddddd",
+          "status": "queued"
+        }
+      }
+    }
+  ],
+  "upload": {
+    "url": "https://signed.example/upload",
+    "content_type": "application/zip",
+    "body_text": "archive"
+  },
+  "expected": {
+    "summary": "Uploaded dataset.zip (7 bytes) and started dataset ingest job job_123.",
+    "data": {
+      "datasetId": "dddddddddddddddddddddddd",
+      "filename": "dataset.zip",
+      "bytes": 7,
+      "sessionId": "session_123",
+      "ingest": {
+        "jobId": "job_123",
+        "datasetId": "dddddddddddddddddddddddd",
+        "status": "queued"
+      }
+    }
+  }
+}
