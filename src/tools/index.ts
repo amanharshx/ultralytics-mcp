@@ -15,6 +15,7 @@ import {
   datasetsCreate,
   datasetsDelete,
   datasetsGet,
+  datasetsIngest,
   datasetsList,
 } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
@@ -34,6 +35,7 @@ export {
   datasetsCreate,
   datasetsDelete,
   datasetsGet,
+  datasetsIngest,
   datasetsList,
 } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
@@ -59,6 +61,7 @@ export const READ_TOOL_NAMES = [
   "datasets_get",
   "datasets_create",
   "datasets_delete",
+  "dataset_ingest",
   "models_list",
   "models_get",
   "gpu_availability",
@@ -174,6 +177,22 @@ export function registerReadTools(
     },
     async ({ dataset }) =>
       toMcpTextResult(await datasetsDelete(getClient(), dataset)),
+  );
+
+  server.registerTool(
+    "dataset_ingest",
+    {
+      description: "Start a remote URL ingest job for an existing dataset.",
+      inputSchema: {
+        dataset: z.string(),
+        sourceUrl: z.string(),
+        targetSplit: z.string().optional(),
+      },
+    },
+    async ({ dataset, sourceUrl, targetSplit }) =>
+      toMcpTextResult(
+        await datasetsIngest(getClient(), { dataset, sourceUrl, targetSplit }),
+      ),
   );
 
   server.registerTool(

@@ -1,0 +1,55 @@
+{
+  "tool": "dataset_ingest",
+  "args": {
+    "dataset": "user/data",
+    "sourceUrl": "https://example.com/dataset.zip",
+    "targetSplit": "train"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/datasets/ingest",
+      "json": {
+        "datasetId": "dddddddddddddddddddddddd",
+        "sourceUrl": "https://example.com/dataset.zip",
+        "targetSplit": "train"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "jobId": "job_123",
+          "datasetId": "dddddddddddddddddddddddd",
+          "status": "queued"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Started dataset ingest job job_123 for dataset dddddddddddddddddddddddd.",
+    "data": {
+      "jobId": "job_123",
+      "datasetId": "dddddddddddddddddddddddd",
+      "status": "queued"
+    }
+  }
+}

@@ -12,6 +12,7 @@ import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
   datasetsCreate,
   datasetsDelete,
+  datasetsIngest,
   modelDownload,
   modelsGet,
   projectsCreate,
@@ -133,6 +134,12 @@ const TOOL_RUNNERS: Record<
     }),
   datasets_delete: (client, args) =>
     datasetsDelete(client, args.dataset as string),
+  dataset_ingest: (client, args) =>
+    datasetsIngest(client, {
+      dataset: args.dataset as string,
+      sourceUrl: args.sourceUrl as string,
+      targetSplit: args.targetSplit as string | undefined,
+    }),
   projects_delete: (client, args) =>
     projectsDelete(client, args.project as string),
   models_get: (client, args) =>
@@ -176,6 +183,7 @@ describe("parity fixtures", () => {
         "model_download_signed_url.json",
         "datasets_create.json",
         "datasets_delete.json",
+        "dataset_ingest.json",
         "models_get.json",
         "projects_create.json",
         "projects_delete.json",
