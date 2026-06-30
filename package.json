@@ -1,6 +1,6 @@
 {
   "name": "ultralytics-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript MCP server for the Ultralytics Platform REST API.",
   "type": "module",
   "bin": {
