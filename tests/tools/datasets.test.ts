@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { UltralyticsClient } from "../../src/client.js";
 import {
   datasetsCreate,
+  datasetsDelete,
   datasetsGet,
   datasetsList,
 } from "../../src/tools/datasets.js";
@@ -150,6 +151,28 @@ describe("datasetsCreate", () => {
     });
     expect(result.summary).toBe(
       `Created dataset ${"d".repeat(24)} slug=data task=detect.`,
+    );
+  });
+});
+
+describe("datasetsDelete", () => {
+  test("resolves a reference and deletes the dataset", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      return jsonResponse({ deleted: true });
+    });
+    const result = await datasetsDelete(client, "user/data");
+    expect(calls.at(-1)).toMatchObject({
+      url: `${BASE}/datasets/${"d".repeat(24)}`,
+      method: "DELETE",
+    });
+    expect(result.summary).toBe(
+      `Deleted dataset ${"d".repeat(24)} (soft delete).`,
     );
   });
 });
