@@ -5,6 +5,7 @@ import {
   datasetsCreate,
   datasetsDelete,
   datasetsGet,
+  datasetsIngest,
   datasetsList,
 } from "../../src/tools/datasets.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
@@ -174,5 +175,64 @@ describe("datasetsDelete", () => {
     expect(result.summary).toBe(
       `Deleted dataset ${"d".repeat(24)} (soft delete).`,
     );
+  });
+});
+
+describe("datasetsIngest", () => {
+  test("resolves a dataset and posts the ingest payload", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      return jsonResponse({
+        jobId: "job_123",
+        datasetId: "d".repeat(24),
+        status: "queued",
+      });
+    });
+    const result = await datasetsIngest(client, {
+      dataset: "user/data",
+      sourceUrl: "https://example.com/dataset.zip",
+      targetSplit: "train",
+    });
+    expect(calls.at(-1)).toEqual({
+      url: `${BASE}/datasets/ingest`,
+      method: "POST",
+      body: {
+        datasetId: "d".repeat(24),
+        sourceUrl: "https://example.com/dataset.zip",
+        targetSplit: "train",
+      },
+    });
+    expect(result.summary).toBe(
+      `Started dataset ingest job job_123 for dataset ${"d".repeat(24)}.`,
+    );
+    expect((result.data as Record<string, unknown>).status).toBe("queued");
+  });
+
+  test("validates inputs before network", async () => {
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network should not be called");
+      }) as unknown as typeof fetch,
+    });
+    await expect(
+      datasetsIngest(client, {
+        dataset: "user/data",
+        sourceUrl: "",
+      }),
+    ).rejects.toThrow(/`sourceUrl` is required/);
+    await expect(
+      datasetsIngest(client, {
+        dataset: "user/data",
+        sourceUrl: "https://example.com/dataset.zip",
+        targetSplit: "bad",
+      }),
+    ).rejects.toThrow(/Unsupported targetSplit/);
   });
 });
