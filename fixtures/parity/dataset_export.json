@@ -1,0 +1,50 @@
+{
+  "tool": "dataset_export",
+  "args": {
+    "dataset": "user/data",
+    "version": 3
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/dddddddddddddddddddddddd/export",
+      "query": {
+        "v": "3"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "downloadUrl": "https://cdn.example.com/data-v3.ndjson",
+          "cached": false
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Export link for user/data (version 3, cached=false)",
+    "data": {
+      "downloadUrl": "https://cdn.example.com/data-v3.ndjson",
+      "cached": false
+    }
+  }
+}

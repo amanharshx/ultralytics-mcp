@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import {
+  datasetExport,
   datasetImagesList,
   datasetsCreate,
   datasetsDelete,
@@ -252,6 +253,41 @@ describe("datasetsCreate", () => {
     expect(result.summary).toBe(
       `Created dataset ${"d".repeat(24)} slug=data task=detect.`,
     );
+  });
+});
+
+describe("datasetExport", () => {
+  test("resolves dataset and returns export link", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      return jsonResponse({
+        downloadUrl: "https://cdn.example.com/data-v3.ndjson",
+        cached: false,
+      });
+    });
+
+    const result = await datasetExport(client, {
+      dataset: "user/data",
+      version: 3,
+    });
+
+    expect(calls[1]).toEqual({
+      url: `${BASE}/datasets/${"d".repeat(24)}/export?v=3`,
+      method: "GET",
+      body: undefined,
+    });
+    expect(result.summary).toBe(
+      "Export link for user/data (version 3, cached=false)",
+    );
+    expect(result.data).toEqual({
+      downloadUrl: "https://cdn.example.com/data-v3.ndjson",
+      cached: false,
+    });
   });
 });
 
