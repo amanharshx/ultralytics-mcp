@@ -2,6 +2,7 @@
 
 MCP server for the [Ultralytics Platform](https://platform.ultralytics.com).
 
+> [!IMPORTANT]
 > Independent community project. Not affiliated with or endorsed by Ultralytics.
 
 Current milestone: read, explore, monitor, predict, export, and extended
