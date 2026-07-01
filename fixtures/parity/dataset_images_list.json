@@ -1,0 +1,95 @@
+{
+  "tool": "dataset_images_list",
+  "args": {
+    "dataset": "user/data",
+    "split": "train",
+    "search": "frame",
+    "hasLabel": true,
+    "classIds": ["car", "person"],
+    "limit": 25,
+    "offset": 50,
+    "includeImageUrls": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/dddddddddddddddddddddddd/images",
+      "query": {
+        "split": "train",
+        "search": "frame",
+        "hasLabel": "true",
+        "classIds": "car,person",
+        "limit": "25",
+        "offset": "50",
+        "includeImageUrls": "true"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "images": [
+            {
+              "_id": "iiiiiiiiiiiiiiiiiiiiiiii",
+              "name": "frame-001",
+              "ext": ".jpg",
+              "split": "train",
+              "width": 1280,
+              "height": 720,
+              "labelCount": 3,
+              "bytes": 12345,
+              "imageUrl": "https://cdn.example.com/frame-001.jpg",
+              "thumbnailUrl": "https://cdn.example.com/frame-001-thumb.jpg",
+              "hash": "omitted"
+            }
+          ],
+          "total": 10,
+          "hasMore": true,
+          "classes": [],
+          "errorCount": 0,
+          "nextCursor": "cursor_2"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "1 image(s) (total 10)",
+    "data": {
+      "total": 10,
+      "hasMore": true,
+      "nextCursor": "cursor_2",
+      "images": [
+        {
+          "id": "iiiiiiiiiiiiiiiiiiiiiiii",
+          "name": "frame-001",
+          "ext": ".jpg",
+          "split": "train",
+          "width": 1280,
+          "height": 720,
+          "labelCount": 3,
+          "bytes": 12345,
+          "imageUrl": "https://cdn.example.com/frame-001.jpg",
+          "thumbnailUrl": "https://cdn.example.com/frame-001-thumb.jpg"
+        }
+      ]
+    }
+  }
+}

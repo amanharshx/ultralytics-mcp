@@ -167,6 +167,94 @@ export async function datasetsCreate(
   };
 }
 
+export interface DatasetImagesListOptions {
+  dataset: string;
+  split?: string;
+  search?: string;
+  hasLabel?: boolean;
+  classIds?: string[];
+  limit?: number;
+  offset?: number;
+  includeImageUrls?: boolean;
+}
+
+/** List images in a dataset with optional filtering. */
+export async function datasetImagesList(
+  client: UltralyticsClient,
+  options: DatasetImagesListOptions,
+): Promise<NormalizedToolResult> {
+  if (options.split !== undefined && !TARGET_SPLITS.has(options.split)) {
+    const allowed = Array.from(TARGET_SPLITS).sort().join(", ");
+    throw new Error(
+      `Unsupported split '${options.split}'. Expected one of: ${allowed}.`,
+    );
+  }
+  if (options.limit !== undefined) {
+    if (options.limit <= 0) {
+      throw new Error("`limit` must be greater than 0.");
+    }
+    if (options.limit > 5000) {
+      throw new Error("`limit` must be at most 5000.");
+    }
+  }
+  if (options.offset !== undefined && options.offset < 0) {
+    throw new Error("`offset` must be greater than or equal to 0.");
+  }
+
+  const datasetId = await resolveDataset(client, options.dataset);
+  const params: Record<string, unknown> = {};
+  if (options.split !== undefined) {
+    params.split = options.split;
+  }
+  if (options.search !== undefined) {
+    params.search = options.search;
+  }
+  if (options.hasLabel !== undefined) {
+    params.hasLabel = options.hasLabel;
+  }
+  if (options.classIds && options.classIds.length > 0) {
+    params.classIds = options.classIds.join(",");
+  }
+  if (options.limit !== undefined) {
+    params.limit = options.limit;
+  }
+  if (options.offset !== undefined) {
+    params.offset = options.offset;
+  }
+  if (options.includeImageUrls !== undefined) {
+    params.includeImageUrls = options.includeImageUrls;
+  }
+
+  const data = await client.get(
+    `/datasets/${datasetId}/images`,
+    Object.keys(params).length > 0 ? params : undefined,
+  );
+  const record = asRecord(data);
+  const images = listField(data, "images").map((image) => ({
+    id: image._id ?? image.id ?? null,
+    name: image.name ?? null,
+    ext: image.ext ?? null,
+    split: image.split ?? null,
+    width: image.width ?? null,
+    height: image.height ?? null,
+    labelCount: image.labelCount ?? null,
+    bytes: image.bytes ?? null,
+    ...(image.imageUrl !== undefined ? { imageUrl: image.imageUrl } : {}),
+    ...(image.thumbnailUrl !== undefined
+      ? { thumbnailUrl: image.thumbnailUrl }
+      : {}),
+  }));
+  return {
+    summary: `${images.length} image(s) (total ${String(record.total ?? null)})`,
+    data: {
+      total: record.total ?? null,
+      hasMore: record.hasMore ?? null,
+      nextCursor: record.nextCursor ?? null,
+      images,
+    },
+  };
+}
+
 /** Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI. */
 export async function datasetsDelete(
   client: UltralyticsClient,

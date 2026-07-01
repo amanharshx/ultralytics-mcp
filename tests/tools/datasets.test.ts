@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import {
+  datasetImagesList,
   datasetsCreate,
   datasetsDelete,
   datasetsGet,
@@ -115,6 +116,100 @@ describe("datasetsGet", () => {
     );
     const result = await datasetsGet(client, id);
     expect(result.summary).toBe("Dataset 'None' [None], ? images, ? classes.");
+  });
+});
+
+describe("datasetImagesList", () => {
+  test("resolves dataset, builds query, and normalizes images", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      return jsonResponse({
+        images: [
+          {
+            _id: "i".repeat(24),
+            name: "frame-001",
+            ext: ".jpg",
+            split: "train",
+            width: 1280,
+            height: 720,
+            labelCount: 3,
+            bytes: 12345,
+            imageUrl: "https://cdn.example.com/frame-001.jpg",
+            thumbnailUrl: "https://cdn.example.com/frame-001-thumb.jpg",
+            hash: "omit",
+          },
+        ],
+        total: 10,
+        hasMore: true,
+        classes: [],
+        errorCount: 0,
+        nextCursor: "cursor_2",
+      });
+    });
+
+    const result = await datasetImagesList(client, {
+      dataset: "user/data",
+      split: "train",
+      search: "frame",
+      hasLabel: true,
+      classIds: ["car", "person"],
+      limit: 25,
+      offset: 50,
+      includeImageUrls: true,
+    });
+
+    expect(calls[1]).toEqual({
+      url:
+        `${BASE}/datasets/${"d".repeat(24)}/images` +
+        "?split=train&search=frame&hasLabel=true&classIds=car%2Cperson&limit=25&offset=50&includeImageUrls=true",
+      method: "GET",
+      body: undefined,
+    });
+    expect(result.summary).toBe("1 image(s) (total 10)");
+    expect(result.data).toEqual({
+      total: 10,
+      hasMore: true,
+      nextCursor: "cursor_2",
+      images: [
+        {
+          id: "i".repeat(24),
+          name: "frame-001",
+          ext: ".jpg",
+          split: "train",
+          width: 1280,
+          height: 720,
+          labelCount: 3,
+          bytes: 12345,
+          imageUrl: "https://cdn.example.com/frame-001.jpg",
+          thumbnailUrl: "https://cdn.example.com/frame-001-thumb.jpg",
+        },
+      ],
+    });
+  });
+
+  test("validates split, limit, and offset before network", async () => {
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network should not be called");
+      }) as typeof fetch,
+    });
+
+    await expect(
+      datasetImagesList(client, { dataset: "data", split: "bogus" }),
+    ).rejects.toThrow(/Unsupported split/);
+    await expect(
+      datasetImagesList(client, { dataset: "data", limit: 5001 }),
+    ).rejects.toThrow(/at most 5000/);
+    await expect(
+      datasetImagesList(client, { dataset: "data", offset: -1 }),
+    ).rejects.toThrow(/greater than or equal to 0/);
   });
 });
 
