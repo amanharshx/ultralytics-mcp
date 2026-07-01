@@ -13,6 +13,7 @@ import {
   datasetsIngest,
   datasetsList,
   datasetUploadFile,
+  datasetVersionCreate,
 } from "../../src/tools/datasets.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
 
@@ -287,6 +288,41 @@ describe("datasetExport", () => {
     expect(result.data).toEqual({
       downloadUrl: "https://cdn.example.com/data-v3.ndjson",
       cached: false,
+    });
+  });
+});
+
+describe("datasetVersionCreate", () => {
+  test("resolves dataset and posts version snapshot payload", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      return jsonResponse({
+        version: 4,
+        downloadUrl: "https://cdn.example.com/data-v4.ndjson",
+      });
+    });
+
+    const result = await datasetVersionCreate(client, {
+      dataset: "user/data",
+      description: "Quarterly snapshot",
+    });
+
+    expect(calls[1]).toEqual({
+      url: `${BASE}/datasets/${"d".repeat(24)}/export`,
+      method: "POST",
+      body: {
+        description: "Quarterly snapshot",
+      },
+    });
+    expect(result.summary).toBe("Created dataset version 4");
+    expect(result.data).toEqual({
+      version: 4,
+      downloadUrl: "https://cdn.example.com/data-v4.ndjson",
     });
   });
 });
