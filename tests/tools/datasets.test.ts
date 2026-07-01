@@ -15,6 +15,7 @@ import {
   datasetUploadFile,
   datasetUploadFolder,
   datasetVersionCreate,
+  exploreDatasets,
 } from "../../src/tools/datasets.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
 
@@ -76,6 +77,87 @@ describe("datasetsList", () => {
         visibility: "private",
       },
     ]);
+  });
+});
+
+describe("exploreDatasets", () => {
+  test("builds query, validates task filter, and trims results", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/explore/search") {
+        return jsonResponse({
+          datasets: [
+            {
+              _id: "d".repeat(24),
+              name: "Birds",
+              slug: "birds",
+              username: "user",
+              task: "detect",
+              imageCount: 65,
+              classCount: 3,
+              starCount: 7,
+              extra: "omit",
+            },
+          ],
+          hasMore: true,
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await exploreDatasets(client, {
+      q: "bird",
+      sort: "stars",
+      offset: 20,
+      task: ["detect", "segment"],
+    });
+
+    expect(calls[0]).toEqual({
+      url:
+        `${BASE}/explore/search` +
+        "?type=datasets&q=bird&sort=stars&offset=20&task=detect%2Csegment",
+      method: "GET",
+      body: undefined,
+    });
+    expect(result.summary).toBe("Search 'bird': 1 dataset(s) (more available)");
+    expect(result.data).toEqual({
+      datasets: [
+        {
+          id: "d".repeat(24),
+          name: "Birds",
+          slug: "birds",
+          username: "user",
+          task: "detect",
+          imageCount: 65,
+          classCount: 3,
+          starCount: 7,
+        },
+      ],
+      hasMore: true,
+    });
+  });
+
+  test("validates q, sort, offset, and task before network", async () => {
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network must not be called");
+      }) as typeof fetch,
+    });
+
+    await expect(exploreDatasets(client, { q: "" })).rejects.toThrow(
+      /q is required/,
+    );
+    await expect(
+      exploreDatasets(client, { q: "bird", sort: "popular" }),
+    ).rejects.toThrow(/Unsupported sort/);
+    await expect(
+      exploreDatasets(client, { q: "bird", offset: -1 }),
+    ).rejects.toThrow(/offset/);
+    await expect(
+      exploreDatasets(client, { q: "bird", task: ["detect", "bad"] }),
+    ).rejects.toThrow(/Unsupported dataset task/);
   });
 });
 

@@ -19,6 +19,8 @@ import {
   datasetUploadFile,
   datasetUploadFolder,
   datasetVersionCreate,
+  exploreDatasets,
+  exploreProjects,
   modelDownload,
   modelsGet,
   projectsCreate,
@@ -191,6 +193,19 @@ const TOOL_RUNNERS: Record<
       dataset: args.dataset as string,
       description: args.description as string | undefined,
     }),
+  explore_projects: (client, args) =>
+    exploreProjects(client, {
+      q: args.q as string,
+      sort: args.sort as string | undefined,
+      offset: args.offset as number | undefined,
+    }),
+  explore_datasets: (client, args) =>
+    exploreDatasets(client, {
+      q: args.q as string,
+      sort: args.sort as string | undefined,
+      offset: args.offset as number | undefined,
+      task: args.task as string[] | undefined,
+    }),
   dataset_upload_folder: (client, args) =>
     datasetUploadFolder(client, {
       dataset: args.dataset as string,
@@ -257,6 +272,8 @@ describe("parity fixtures", () => {
         "dataset_export.json",
         "dataset_images_list.json",
         "dataset_ingest.json",
+        "explore_datasets.json",
+        "explore_projects.json",
         "dataset_version_create.json",
         "dataset_upload_file.json",
         "dataset_upload_folder.json",

@@ -1,0 +1,55 @@
+{
+  "tool": "explore_projects",
+  "args": {
+    "q": "road",
+    "sort": "name-asc",
+    "offset": 0
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/explore/search",
+      "query": {
+        "type": "projects",
+        "q": "road",
+        "sort": "name-asc",
+        "offset": "0"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "projects": [
+            {
+              "_id": "pppppppppppppppppppppppp",
+              "name": "Road Safety",
+              "slug": "road-safety",
+              "username": "user",
+              "visibility": "public",
+              "modelCount": 12,
+              "starCount": 99,
+              "ignored": "omit"
+            }
+          ],
+          "hasMore": false
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Search 'road': 1 project(s)",
+    "data": {
+      "projects": [
+        {
+          "id": "pppppppppppppppppppppppp",
+          "name": "Road Safety",
+          "slug": "road-safety",
+          "username": "user",
+          "visibility": "public",
+          "modelCount": 12,
+          "starCount": 99
+        }
+      ],
+      "hasMore": false
+    }
+  }
+}

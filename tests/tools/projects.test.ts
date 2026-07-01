@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import {
+  exploreProjects,
   projectsCreate,
   projectsDelete,
   projectsGet,
@@ -83,6 +84,79 @@ describe("projectsList", () => {
     const result = await projectsList(client, "alice");
     expect(result.summary).toBe("0 project(s).");
     expect(calls[0].params.get("username")).toBe("alice");
+  });
+});
+
+describe("exploreProjects", () => {
+  test("builds query and trims results", async () => {
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/explore/search") {
+        return jsonResponse({
+          projects: [
+            {
+              _id: "p".repeat(24),
+              name: "Road Safety",
+              slug: "road-safety",
+              username: "user",
+              visibility: "public",
+              modelCount: 12,
+              starCount: 99,
+              extra: "omit",
+            },
+          ],
+          hasMore: false,
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await exploreProjects(client, {
+      q: "road",
+      sort: "name-asc",
+      offset: 0,
+    });
+
+    expect(calls[0]).toEqual({
+      url: `${BASE}/explore/search?type=projects&q=road&sort=name-asc&offset=0`,
+      method: "GET",
+      body: undefined,
+    });
+    expect(result.summary).toBe("Search 'road': 1 project(s)");
+    expect(result.data).toEqual({
+      projects: [
+        {
+          id: "p".repeat(24),
+          name: "Road Safety",
+          slug: "road-safety",
+          username: "user",
+          visibility: "public",
+          modelCount: 12,
+          starCount: 99,
+        },
+      ],
+      hasMore: false,
+    });
+  });
+
+  test("validates q, sort, and offset before network", async () => {
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network must not be called");
+      }) as typeof fetch,
+    });
+
+    await expect(exploreProjects(client, { q: "" })).rejects.toThrow(
+      /q is required/,
+    );
+    await expect(
+      exploreProjects(client, { q: "road", sort: "popular" }),
+    ).rejects.toThrow(/Unsupported sort/);
+    await expect(
+      exploreProjects(client, { q: "road", offset: -1 }),
+    ).rejects.toThrow(/offset/);
   });
 });
 
