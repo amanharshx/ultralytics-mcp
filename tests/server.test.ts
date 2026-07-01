@@ -65,6 +65,11 @@ test("server registers all available tools over the protocol", async () => {
   const datasetExport = tools.find((tool) => tool.name === "dataset_export");
   expect(datasetExport?.inputSchema?.required).toEqual(["dataset"]);
 
+  const datasetVersionCreate = tools.find(
+    (tool) => tool.name === "dataset_version_create",
+  );
+  expect(datasetVersionCreate?.inputSchema?.required).toEqual(["dataset"]);
+
   const datasetIngest = tools.find((tool) => tool.name === "dataset_ingest");
   expect(datasetIngest?.inputSchema?.required).toEqual([
     "dataset",

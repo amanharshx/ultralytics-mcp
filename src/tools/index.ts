@@ -20,6 +20,7 @@ import {
   datasetsIngest,
   datasetsList,
   datasetUploadFile,
+  datasetVersionCreate,
 } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
 import { exportCreate, exportStatus, exportsList } from "./exports.js";
@@ -43,6 +44,7 @@ export {
   datasetsIngest,
   datasetsList,
   datasetUploadFile,
+  datasetVersionCreate,
 } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
 export { exportCreate, exportStatus, exportsList } from "./exports.js";
@@ -68,6 +70,7 @@ export const READ_TOOL_NAMES = [
   "datasets_create",
   "dataset_images_list",
   "dataset_export",
+  "dataset_version_create",
   "datasets_delete",
   "dataset_ingest",
   "dataset_upload_file",
@@ -227,6 +230,21 @@ export function registerReadTools(
     },
     async ({ dataset, version }) =>
       toMcpTextResult(await datasetExport(getClient(), { dataset, version })),
+  );
+
+  server.registerTool(
+    "dataset_version_create",
+    {
+      description: "Create a frozen dataset version snapshot.",
+      inputSchema: {
+        dataset: z.string(),
+        description: z.string().optional(),
+      },
+    },
+    async ({ dataset, description }) =>
+      toMcpTextResult(
+        await datasetVersionCreate(getClient(), { dataset, description }),
+      ),
   );
 
   server.registerTool(

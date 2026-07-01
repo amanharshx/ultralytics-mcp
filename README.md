@@ -8,7 +8,7 @@ Current milestone: read, monitor, predict, export, and initial project and
 dataset lifecycle tools are available. Additional resource-management tools
 land incrementally from here.
 
-## Tools (22)
+## Tools (23)
 
 | Tool | Description |
 | --- | --- |
@@ -21,6 +21,7 @@ land incrementally from here.
 | `model_download` | Download a model weight file to a local path |
 | `gpu_availability` | Cloud GPU stock status |
 | `dataset_export` | Get export link for latest or frozen dataset version |
+| `dataset_version_create` | Create a frozen dataset version snapshot |
 | `exports_list` / `export_status` | List / check export jobs |
 | `export_create` | Create an export job — **requires `confirm_cost: true`** |
 | `training_start` | Start cloud training — **requires `confirm_cost: true`** |

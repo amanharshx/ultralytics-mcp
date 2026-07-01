@@ -16,6 +16,7 @@ import {
   datasetsDelete,
   datasetsIngest,
   datasetUploadFile,
+  datasetVersionCreate,
   modelDownload,
   modelsGet,
   projectsCreate,
@@ -158,6 +159,11 @@ const TOOL_RUNNERS: Record<
       dataset: args.dataset as string,
       version: args.version as number | undefined,
     }),
+  dataset_version_create: (client, args) =>
+    datasetVersionCreate(client, {
+      dataset: args.dataset as string,
+      description: args.description as string | undefined,
+    }),
   datasets_delete: (client, args) =>
     datasetsDelete(client, args.dataset as string),
   dataset_ingest: (client, args) =>
@@ -218,6 +224,7 @@ describe("parity fixtures", () => {
         "dataset_export.json",
         "dataset_images_list.json",
         "dataset_ingest.json",
+        "dataset_version_create.json",
         "dataset_upload_file.json",
         "models_get.json",
         "projects_create.json",

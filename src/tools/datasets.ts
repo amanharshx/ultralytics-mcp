@@ -389,3 +389,31 @@ export async function datasetExport(
     },
   };
 }
+
+export interface DatasetVersionCreateOptions {
+  dataset: string;
+  description?: string;
+}
+
+/** Create frozen dataset export version. */
+export async function datasetVersionCreate(
+  client: UltralyticsClient,
+  options: DatasetVersionCreateOptions,
+): Promise<NormalizedToolResult> {
+  const datasetId = await resolveDataset(client, options.dataset);
+  const payload: Record<string, unknown> = {};
+  if (options.description !== undefined) {
+    payload.description = options.description;
+  }
+
+  const data = asRecord(
+    await client.postJson(`/datasets/${datasetId}/export`, payload),
+  );
+  return {
+    summary: `Created dataset version ${String(data.version ?? null)}`,
+    data: {
+      version: data.version ?? null,
+      downloadUrl: data.downloadUrl ?? null,
+    },
+  };
+}

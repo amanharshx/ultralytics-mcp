@@ -1,0 +1,50 @@
+{
+  "tool": "dataset_version_create",
+  "args": {
+    "dataset": "user/data",
+    "description": "Quarterly snapshot"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/datasets/dddddddddddddddddddddddd/export",
+      "json": {
+        "description": "Quarterly snapshot"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "version": 4,
+          "downloadUrl": "https://cdn.example.com/data-v4.ndjson"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Created dataset version 4",
+    "data": {
+      "version": 4,
+      "downloadUrl": "https://cdn.example.com/data-v4.ndjson"
+    }
+  }
+}
