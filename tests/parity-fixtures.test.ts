@@ -10,6 +10,7 @@ import { z } from "zod";
 import { UltralyticsClient } from "../src/client.js";
 import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
+  datasetExport,
   datasetImagesList,
   datasetsCreate,
   datasetsDelete,
@@ -152,6 +153,11 @@ const TOOL_RUNNERS: Record<
       offset: args.offset as number | undefined,
       includeImageUrls: args.includeImageUrls as boolean | undefined,
     }),
+  dataset_export: (client, args) =>
+    datasetExport(client, {
+      dataset: args.dataset as string,
+      version: args.version as number | undefined,
+    }),
   datasets_delete: (client, args) =>
     datasetsDelete(client, args.dataset as string),
   dataset_ingest: (client, args) =>
@@ -209,6 +215,7 @@ describe("parity fixtures", () => {
         "model_download_signed_url.json",
         "datasets_create.json",
         "datasets_delete.json",
+        "dataset_export.json",
         "dataset_images_list.json",
         "dataset_ingest.json",
         "dataset_upload_file.json",

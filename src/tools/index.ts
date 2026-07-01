@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
 import {
+  datasetExport,
   datasetImagesList,
   datasetsCreate,
   datasetsDelete,
@@ -34,6 +35,7 @@ import {
 import { trainingMonitor, trainingStart } from "./training.js";
 
 export {
+  datasetExport,
   datasetImagesList,
   datasetsCreate,
   datasetsDelete,
@@ -65,6 +67,7 @@ export const READ_TOOL_NAMES = [
   "datasets_get",
   "datasets_create",
   "dataset_images_list",
+  "dataset_export",
   "datasets_delete",
   "dataset_ingest",
   "dataset_upload_file",
@@ -211,6 +214,19 @@ export function registerReadTools(
           includeImageUrls,
         }),
       ),
+  );
+
+  server.registerTool(
+    "dataset_export",
+    {
+      description: "Get export link for latest or one frozen dataset version.",
+      inputSchema: {
+        dataset: z.string(),
+        version: z.number().optional(),
+      },
+    },
+    async ({ dataset, version }) =>
+      toMcpTextResult(await datasetExport(getClient(), { dataset, version })),
   );
 
   server.registerTool(
