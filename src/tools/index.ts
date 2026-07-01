@@ -20,6 +20,7 @@ import {
   datasetsIngest,
   datasetsList,
   datasetUploadFile,
+  datasetUploadFolder,
   datasetVersionCreate,
 } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
@@ -44,6 +45,7 @@ export {
   datasetsIngest,
   datasetsList,
   datasetUploadFile,
+  datasetUploadFolder,
   datasetVersionCreate,
 } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
@@ -74,6 +76,7 @@ export const READ_TOOL_NAMES = [
   "datasets_delete",
   "dataset_ingest",
   "dataset_upload_file",
+  "dataset_upload_folder",
   "models_list",
   "models_get",
   "gpu_availability",
@@ -290,6 +293,27 @@ export function registerReadTools(
         await datasetUploadFile(getClient(), {
           dataset,
           filePath: file_path,
+          targetSplit,
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "dataset_upload_folder",
+    {
+      description:
+        "Upload a local image folder as a zip and start ingest for an existing dataset.",
+      inputSchema: {
+        dataset: z.string(),
+        folder_path: z.string(),
+        targetSplit: z.string().optional(),
+      },
+    },
+    async ({ dataset, folder_path, targetSplit }) =>
+      toMcpTextResult(
+        await datasetUploadFolder(getClient(), {
+          dataset,
+          folderPath: folder_path,
           targetSplit,
         }),
       ),
