@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -13,6 +13,7 @@ import {
   datasetsIngest,
   datasetsList,
   datasetUploadFile,
+  datasetUploadFolder,
   datasetVersionCreate,
 } from "../../src/tools/datasets.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
@@ -324,6 +325,123 @@ describe("datasetVersionCreate", () => {
       version: 4,
       downloadUrl: "https://cdn.example.com/data-v4.ndjson",
     });
+  });
+});
+
+describe("datasetUploadFolder", () => {
+  test("orchestrates folder zip upload and ingest", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ul-dataset-folder-"));
+    await writeFile(join(dir, "bird.jpg"), "jpg");
+    await writeFile(join(dir, "bird.png"), "png");
+    await writeFile(join(dir, ".DS_Store"), "junk");
+    await writeFile(join(dir, "notes.txt"), "ignore");
+    const nested = join(dir, "nested");
+    await mkdir(nested);
+    await writeFile(join(nested, "bird.webp"), "webp");
+
+    const uploadCalls: { url: string; init: RequestInit }[] = [];
+    const uploadImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      uploadCalls.push({ url: String(url), init });
+      return new Response("", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const apiCalls: { url: string; method: string; body: unknown }[] = [];
+    const apiImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      apiCalls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      if (parsed.pathname === "/api/upload/signed-url") {
+        return jsonResponse({
+          sessionId: "session_123",
+          uploadUrl: "https://signed.example/upload",
+        });
+      }
+      if (parsed.pathname === "/api/upload/complete") {
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({
+        jobId: "job_123",
+        datasetId: "d".repeat(24),
+        status: "queued",
+      });
+    }) as unknown as typeof fetch;
+
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: apiImpl,
+      uploadFetchImpl: uploadImpl,
+    });
+
+    const result = await datasetUploadFolder(client, {
+      dataset: "user/data",
+      folderPath: dir,
+      targetSplit: "train",
+    });
+
+    expect(apiCalls[1]).toMatchObject({
+      url: `${BASE}/upload/signed-url`,
+      method: "POST",
+      body: {
+        assetType: "datasets",
+        assetId: "d".repeat(24),
+        contentType: "application/zip",
+      },
+    });
+    expect(uploadCalls[0].url).toBe("https://signed.example/upload");
+    expect(
+      (uploadCalls[0].init.headers as Record<string, string>).Authorization,
+    ).toBeUndefined();
+    expect(apiCalls[2]).toEqual({
+      url: `${BASE}/upload/complete`,
+      method: "POST",
+      body: { sessionId: "session_123" },
+    });
+    expect(apiCalls[3]).toEqual({
+      url: `${BASE}/datasets/ingest`,
+      method: "POST",
+      body: {
+        datasetId: "d".repeat(24),
+        sessionId: "session_123",
+        targetSplit: "train",
+      },
+    });
+    expect(result.summary).toContain("Zipped 3 image(s)");
+  });
+
+  test("rejects targetSplit when folder already has split dirs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ul-dataset-folder-"));
+    const trainDir = join(dir, "train");
+    await mkdir(trainDir);
+    await writeFile(join(trainDir, "bird.jpg"), "jpg");
+
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network must not be called");
+      }) as unknown as typeof fetch,
+    });
+
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "d".repeat(24),
+        folderPath: dir,
+        targetSplit: "train",
+      }),
+    ).rejects.toThrow(/Folder has split directories/);
   });
 });
 

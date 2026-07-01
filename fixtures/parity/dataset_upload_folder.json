@@ -1,0 +1,105 @@
+{
+  "tool": "dataset_upload_folder",
+  "args": {
+    "dataset": "user/data",
+    "folder_path": "__TMP__/birds",
+    "targetSplit": "train"
+  },
+  "folder_files": {
+    "bird.jpg": "jpg",
+    "nested/bird.webp": "webp"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/signed-url",
+      "json": {
+        "assetType": "datasets",
+        "assetId": "dddddddddddddddddddddddd",
+        "filename": "birds.zip",
+        "contentType": "application/zip",
+        "totalBytes": "__ANY_NUMBER__"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "sessionId": "session_123",
+          "uploadUrl": "https://signed.example/upload"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/complete",
+      "json": {
+        "sessionId": "session_123"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/datasets/ingest",
+      "json": {
+        "datasetId": "dddddddddddddddddddddddd",
+        "sessionId": "session_123",
+        "targetSplit": "train"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "jobId": "job_123",
+          "datasetId": "dddddddddddddddddddddddd",
+          "status": "queued"
+        }
+      }
+    }
+  ],
+  "upload": {
+    "url": "https://signed.example/upload",
+    "content_type": "application/zip",
+    "zip_files": {
+      "bird.jpg": "jpg",
+      "nested/bird.webp": "webp"
+    }
+  },
+  "expected": {
+    "summary": "Zipped 2 image(s) from __TMP__/birds and started ingest job job_123 for dataset dddddddddddddddddddddddd.",
+    "data": {
+      "datasetId": "dddddddddddddddddddddddd",
+      "imageCount": 2,
+      "filename": "birds.zip",
+      "bytes": "__ANY_NUMBER__",
+      "sessionId": "session_123",
+      "ingest": {
+        "jobId": "job_123",
+        "datasetId": "dddddddddddddddddddddddd",
+        "status": "queued"
+      }
+    }
+  }
+}

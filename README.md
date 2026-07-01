@@ -8,13 +8,13 @@ Current milestone: read, monitor, predict, export, and initial project and
 dataset lifecycle tools are available. Additional resource-management tools
 land incrementally from here.
 
-## Tools (23)
+## Tools (24)
 
 | Tool | Description |
 | --- | --- |
 | `projects_list` / `projects_get` | Browse projects |
 | `projects_create` / `projects_delete` | Create / soft-delete projects |
-| `datasets_list` / `datasets_get` / `datasets_create` / `datasets_delete` / `dataset_images_list` / `dataset_ingest` / `dataset_upload_file` | Browse / create / soft-delete datasets, inspect images, start remote ingest jobs, and upload archive files |
+| `datasets_list` / `datasets_get` / `datasets_create` / `datasets_delete` / `dataset_images_list` / `dataset_ingest` / `dataset_upload_file` / `dataset_upload_folder` | Browse / create / soft-delete datasets, inspect images, start remote ingest jobs, and upload archive files or folders |
 | `models_list` / `models_get` | Browse trained models and metrics |
 | `training_monitor` | Status, progress, and latest metrics |
 | `model_predict` | Run inference on an image URL or base64 source |

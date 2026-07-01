@@ -1,7 +1,9 @@
 /** Read-only dataset tools. */
 
-import { readFile, stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { basename, relative, resolve } from "node:path";
+
+import { zipSync } from "fflate";
 
 import type { UltralyticsClient } from "../client.js";
 import { resolveDataset } from "../resolve.js";
@@ -19,6 +21,15 @@ const DATASET_TASKS = new Set([
 
 const TARGET_SPLITS = new Set(["train", "val", "test"]);
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
+const IMAGE_SUFFIXES = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".bmp",
+  ".tif",
+  ".tiff",
+]);
 const UPLOAD_TYPES: Array<[suffix: string, contentType: string]> = [
   [".tar.gz", "application/gzip"],
   [".zip", "application/zip"],
@@ -75,6 +86,152 @@ async function datasetUploadFileMeta(filePath: string): Promise<{
     contentType: matched[1],
     totalBytes: info.size,
   };
+}
+
+function skipDatasetFolderPart(part: string): boolean {
+  return part.startsWith(".") || part === "__MACOSX";
+}
+
+function hasSplitLikePath(path: string): boolean {
+  return path.split("/").some((part) => TARGET_SPLITS.has(part.toLowerCase()));
+}
+
+async function datasetFolderImages(folderPath: string): Promise<{
+  folderPath: string;
+  files: Array<{ absolutePath: string; relativePath: string; size: number }>;
+  hasSplitDirs: boolean;
+}> {
+  if (!folderPath.trim()) {
+    throw new Error("`folderPath` is required.");
+  }
+
+  const resolvedFolder = resolve(folderPath);
+  const info = await stat(resolvedFolder).catch(() => null);
+  if (info === null) {
+    throw new Error(`Upload folder does not exist: ${resolvedFolder}`);
+  }
+  if (!info.isDirectory()) {
+    throw new Error(`Upload path is not a directory: ${resolvedFolder}`);
+  }
+
+  const files: Array<{
+    absolutePath: string;
+    relativePath: string;
+    size: number;
+  }> = [];
+  let totalBytes = 0;
+  let hasSplitDirs = false;
+
+  async function walk(currentPath: string): Promise<void> {
+    const entries = await readdir(currentPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (skipDatasetFolderPart(entry.name) || entry.name === ".DS_Store") {
+        continue;
+      }
+      const absolutePath = resolve(currentPath, entry.name);
+      const relativePath = relative(resolvedFolder, absolutePath).replaceAll(
+        "\\",
+        "/",
+      );
+      if (
+        relativePath
+          .split("/")
+          .some((part) => skipDatasetFolderPart(part) || part === ".DS_Store")
+      ) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(absolutePath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const lower = entry.name.toLowerCase();
+      const archiveSuffix = UPLOAD_TYPES.find(([candidate]) =>
+        lower.endsWith(candidate),
+      );
+      if (archiveSuffix) {
+        continue;
+      }
+      const imageSuffix = Array.from(IMAGE_SUFFIXES).find((candidate) =>
+        lower.endsWith(candidate),
+      );
+      if (!imageSuffix) {
+        continue;
+      }
+      const fileInfo = await stat(absolutePath);
+      totalBytes += fileInfo.size;
+      if (totalBytes >= MAX_UPLOAD_BYTES) {
+        throw new Error(
+          "Upload folder images must be smaller than 10 GB total.",
+        );
+      }
+      if (hasSplitLikePath(relativePath)) {
+        hasSplitDirs = true;
+      }
+      files.push({ absolutePath, relativePath, size: fileInfo.size });
+    }
+  }
+
+  await walk(resolvedFolder);
+  if (files.length === 0) {
+    throw new Error("No images found in folder.");
+  }
+
+  return { folderPath: resolvedFolder, files, hasSplitDirs };
+}
+
+async function buildDatasetFolderZip(
+  files: Array<{ absolutePath: string; relativePath: string }>,
+): Promise<Uint8Array> {
+  const entries: Record<string, Uint8Array> = {};
+  for (const file of files) {
+    entries[file.relativePath] = await readFile(file.absolutePath);
+  }
+  const zipBytes = zipSync(entries, { level: 6 });
+  if (zipBytes.byteLength >= MAX_UPLOAD_BYTES) {
+    throw new Error("Upload zip must be smaller than 10 GB.");
+  }
+  return zipBytes;
+}
+
+async function uploadDatasetContent(
+  client: UltralyticsClient,
+  options: {
+    datasetId: string;
+    filename: string;
+    contentType: string;
+    totalBytes: number;
+    content: Uint8Array;
+    targetSplit?: string;
+  },
+): Promise<{ sessionId: string; ingest: Record<string, unknown> }> {
+  const signed = asRecord(
+    await client.postJson("/upload/signed-url", {
+      assetType: "datasets",
+      assetId: options.datasetId,
+      filename: options.filename,
+      contentType: options.contentType,
+      totalBytes: options.totalBytes,
+    }),
+  );
+  const sessionId = String(signed.sessionId);
+  const uploadUrl = String(signed.uploadUrl ?? signed.url);
+  await client.uploadBytes(uploadUrl, options.content, options.contentType);
+  await client.postJson("/upload/complete", { sessionId });
+
+  const ingestPayload: Record<string, unknown> = {
+    datasetId: options.datasetId,
+    sessionId,
+  };
+  if (options.targetSplit !== undefined) {
+    ingestPayload.targetSplit = options.targetSplit;
+  }
+  const ingest = asRecord(
+    await client.postJson("/datasets/ingest", ingestPayload),
+  );
+  return { sessionId, ingest };
 }
 
 /** List datasets in the workspace, optionally filtered by username. */
@@ -319,27 +476,15 @@ export async function datasetUploadFile(
   const datasetId = await resolveDataset(client, options.dataset);
   const content = await readFile(options.filePath);
 
-  const signed = asRecord(
-    await client.postJson("/upload/signed-url", {
-      assetType: "datasets",
-      assetId: datasetId,
-      filename: meta.filename,
-      contentType: meta.contentType,
-      totalBytes: meta.totalBytes,
-    }),
-  );
-  const uploadUrl = String(signed.url ?? "");
-  const sessionId = String(signed.sessionId ?? "");
-  await client.uploadBytes(uploadUrl, content, meta.contentType);
-  await client.postJson("/upload/complete", { sessionId });
-
-  const ingestPayload: Record<string, unknown> = { datasetId, sessionId };
-  if (options.targetSplit !== undefined) {
-    ingestPayload.targetSplit = options.targetSplit;
-  }
-  const ingest = asRecord(
-    await client.postJson("/datasets/ingest", ingestPayload),
-  );
+  const upload = await uploadDatasetContent(client, {
+    datasetId,
+    filename: meta.filename,
+    contentType: meta.contentType,
+    totalBytes: meta.totalBytes,
+    content,
+    targetSplit: options.targetSplit,
+  });
+  const ingest = upload.ingest;
   const jobId = ingest.jobId ?? ingest.id ?? "None";
 
   return {
@@ -348,8 +493,53 @@ export async function datasetUploadFile(
       datasetId,
       filename: meta.filename,
       bytes: meta.totalBytes,
-      sessionId,
+      sessionId: upload.sessionId,
       ingest,
+    },
+  };
+}
+
+export interface DatasetUploadFolderOptions {
+  dataset: string;
+  folderPath: string;
+  targetSplit?: string;
+}
+
+/** Upload a local image folder as zip, then start dataset ingest for the session. */
+export async function datasetUploadFolder(
+  client: UltralyticsClient,
+  options: DatasetUploadFolderOptions,
+): Promise<NormalizedToolResult> {
+  validateTargetSplit(options.targetSplit);
+
+  const folder = await datasetFolderImages(options.folderPath);
+  if (options.targetSplit !== undefined && folder.hasSplitDirs) {
+    throw new Error(
+      "Folder has split directories (train/val/test); don't also pass targetSplit - it's ambiguous. Use one or the other.",
+    );
+  }
+
+  const datasetId = await resolveDataset(client, options.dataset);
+  const content = await buildDatasetFolderZip(folder.files);
+  const filename = `${basename(folder.folderPath)}.zip`;
+  const upload = await uploadDatasetContent(client, {
+    datasetId,
+    filename,
+    contentType: "application/zip",
+    totalBytes: content.byteLength,
+    content,
+    targetSplit: options.targetSplit,
+  });
+  const jobId = upload.ingest.jobId ?? upload.ingest.id ?? "None";
+  return {
+    summary: `Zipped ${folder.files.length} image(s) from ${folder.folderPath} and started ingest job ${String(jobId)} for dataset ${datasetId}.`,
+    data: {
+      datasetId,
+      imageCount: folder.files.length,
+      filename,
+      bytes: content.byteLength,
+      sessionId: upload.sessionId,
+      ingest: upload.ingest,
     },
   };
 }
