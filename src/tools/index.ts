@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
 import {
+  datasetImagesList,
   datasetsCreate,
   datasetsDelete,
   datasetsGet,
@@ -33,6 +34,7 @@ import {
 import { trainingMonitor, trainingStart } from "./training.js";
 
 export {
+  datasetImagesList,
   datasetsCreate,
   datasetsDelete,
   datasetsGet,
@@ -62,6 +64,7 @@ export const READ_TOOL_NAMES = [
   "datasets_list",
   "datasets_get",
   "datasets_create",
+  "dataset_images_list",
   "datasets_delete",
   "dataset_ingest",
   "dataset_upload_file",
@@ -167,6 +170,45 @@ export function registerReadTools(
           description,
           visibility,
           classNames,
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "dataset_images_list",
+    {
+      description: "List images in a dataset with optional filtering.",
+      inputSchema: {
+        dataset: z.string(),
+        split: z.string().optional(),
+        search: z.string().optional(),
+        hasLabel: z.boolean().optional(),
+        classIds: z.array(z.string()).optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+        includeImageUrls: z.boolean().optional(),
+      },
+    },
+    async ({
+      dataset,
+      split,
+      search,
+      hasLabel,
+      classIds,
+      limit,
+      offset,
+      includeImageUrls,
+    }) =>
+      toMcpTextResult(
+        await datasetImagesList(getClient(), {
+          dataset,
+          split,
+          search,
+          hasLabel,
+          classIds,
+          limit,
+          offset,
+          includeImageUrls,
         }),
       ),
   );
