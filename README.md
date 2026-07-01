@@ -18,7 +18,7 @@ resource-management tools land incrementally from here.
 | `explore_projects` / `explore_datasets` | Search public projects and datasets on Ultralytics Explore |
 | `datasets_list` / `datasets_get` / `datasets_create` / `datasets_delete` / `dataset_images_list` / `dataset_ingest` / `dataset_upload_file` / `dataset_upload_folder` / `dataset_upload_video` | Browse / create / soft-delete datasets, inspect images, start remote ingest jobs, and upload archive files, folders, or videos |
 | `models_list` / `models_get` | Browse trained models and metrics |
-| `training_monitor` | Status, progress, and latest metrics |
+| `training_monitor` | Status, progress, latest metrics, and optional recent metric history |
 | `model_predict` | Run inference on an image URL or base64 source |
 | `model_download` | Download a model weight file to a local path |
 | `gpu_availability` | Cloud GPU stock status |

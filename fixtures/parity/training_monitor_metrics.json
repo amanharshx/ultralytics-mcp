@@ -1,0 +1,87 @@
+{
+  "tool": "training_monitor",
+  "args": {
+    "model": "aaaaaaaaaaaaaaaaaaaaaaaa",
+    "include_metrics": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "status": "running",
+            "epochs": 100,
+            "bestEpoch": 68,
+            "bestFitness": 0.77,
+            "trainResults": [
+              {
+                "epoch": 69,
+                "metrics": {
+                  "train/box_loss": 0.72179,
+                  "metrics/mAP50(B)": 0.58282,
+                  "metrics/mAP50-95(M)": 0.48394,
+                  "lr": 0.000114
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa/training",
+      "response": {
+        "status": 200,
+        "json": {
+          "job": {
+            "progress": {
+              "percentage": 70
+            },
+            "timing": {
+              "elapsedMs": 1008800,
+              "timePerEpochMs": 14411.4,
+              "etaMs": 432343
+            }
+          },
+          "instanceStatus": {
+            "status": "running",
+            "uptimeSeconds": 1012
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Training status=running; epoch 1/100; ~70%; ETA 7min",
+    "data": {
+      "modelId": "aaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "running",
+      "epochsDone": 1,
+      "totalEpochs": 100,
+      "progressPercentage": 70,
+      "etaMs": 432343,
+      "bestEpoch": 68,
+      "bestFitness": 0.77,
+      "latestMetrics": {
+        "train/box_loss": 0.72179,
+        "metrics/mAP50(B)": 0.58282,
+        "metrics/mAP50-95(M)": 0.48394,
+        "lr": 0.000114
+      },
+      "progressSource": "models/{id}/training",
+      "timing": {
+        "etaMs": 432343,
+        "timePerEpochMs": 14411.4,
+        "elapsedMs": 1008800
+      },
+      "instanceStatus": {
+        "status": "running",
+        "uptimeSeconds": 1012
+      }
+    }
+  }
+}
