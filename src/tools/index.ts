@@ -22,6 +22,7 @@ import {
   datasetUploadFile,
   datasetUploadFolder,
   datasetVersionCreate,
+  exploreDatasets,
 } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
 import { exportCreate, exportStatus, exportsList } from "./exports.js";
@@ -29,6 +30,7 @@ import { gpuAvailability } from "./gpu.js";
 import { modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
 import {
+  exploreProjects,
   projectsCreate,
   projectsDelete,
   projectsGet,
@@ -47,6 +49,7 @@ export {
   datasetUploadFile,
   datasetUploadFolder,
   datasetVersionCreate,
+  exploreDatasets,
 } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
 export { exportCreate, exportStatus, exportsList } from "./exports.js";
@@ -54,6 +57,7 @@ export { gpuAvailability } from "./gpu.js";
 export { modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
 export {
+  exploreProjects,
   projectsCreate,
   projectsDelete,
   projectsGet,
@@ -65,14 +69,16 @@ export { trainingMonitor, trainingStart } from "./training.js";
 export const READ_TOOL_NAMES = [
   "projects_list",
   "projects_get",
+  "explore_projects",
   "projects_create",
   "projects_delete",
   "datasets_list",
   "datasets_get",
-  "datasets_create",
+  "explore_datasets",
   "dataset_images_list",
   "dataset_export",
   "dataset_version_create",
+  "datasets_create",
   "datasets_delete",
   "dataset_ingest",
   "dataset_upload_file",
@@ -107,6 +113,20 @@ export function registerReadTools(
     },
     async ({ project }) =>
       toMcpTextResult(await projectsGet(getClient(), project)),
+  );
+
+  server.registerTool(
+    "explore_projects",
+    {
+      description: "Search public projects on Ultralytics Explore.",
+      inputSchema: {
+        q: z.string(),
+        sort: z.string().optional(),
+        offset: z.number().int().optional(),
+      },
+    },
+    async ({ q, sort, offset }) =>
+      toMcpTextResult(await exploreProjects(getClient(), { q, sort, offset })),
   );
 
   server.registerTool(
@@ -155,6 +175,23 @@ export function registerReadTools(
     },
     async ({ dataset }) =>
       toMcpTextResult(await datasetsGet(getClient(), dataset)),
+  );
+
+  server.registerTool(
+    "explore_datasets",
+    {
+      description: "Search public datasets on Ultralytics Explore.",
+      inputSchema: {
+        q: z.string(),
+        sort: z.string().optional(),
+        offset: z.number().int().optional(),
+        task: z.array(z.string()).optional(),
+      },
+    },
+    async ({ q, sort, offset, task }) =>
+      toMcpTextResult(
+        await exploreDatasets(getClient(), { q, sort, offset, task }),
+      ),
   );
 
   server.registerTool(

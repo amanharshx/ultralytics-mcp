@@ -3,6 +3,7 @@
 import type { UltralyticsClient } from "../client.js";
 import { resolveProject } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
+import { exploreSearch } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
 
 function resourceId(item: Record<string, unknown>, fallback?: string): string {
@@ -28,6 +29,40 @@ export async function projectsList(
     modelCount: project.modelCount ?? null,
   }));
   return { summary: `${items.length} project(s).`, data: items };
+}
+
+export interface ExploreProjectsOptions {
+  q: string;
+  sort?: string;
+  offset?: number;
+}
+
+/** Search public projects on Explore. */
+export async function exploreProjects(
+  client: UltralyticsClient,
+  options: ExploreProjectsOptions,
+): Promise<NormalizedToolResult> {
+  const data = await exploreSearch(client, "projects", options.q, {
+    sort: options.sort,
+    offset: options.offset,
+  });
+  const items = listField(data, "projects").map((project) => ({
+    id: project._id ?? null,
+    name: project.name ?? null,
+    slug: project.slug ?? null,
+    username: project.username ?? null,
+    visibility: project.visibility ?? null,
+    modelCount: project.modelCount ?? null,
+    starCount: project.starCount ?? null,
+  }));
+  const hasMore = Boolean(data.hasMore);
+  return {
+    summary: `Search '${options.q.trim()}': ${items.length} project(s)${hasMore ? " (more available)" : ""}`,
+    data: {
+      projects: items,
+      hasMore,
+    },
+  };
 }
 
 /** Get one project by id, slug, username/slug, or project ul:// URI. */
