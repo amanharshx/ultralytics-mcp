@@ -1,0 +1,106 @@
+{
+  "tool": "dataset_upload_video",
+  "args": {
+    "dataset": "user/data",
+    "video_path": "__TMP__/birds.mp4",
+    "fps": 1,
+    "max_frames": 100,
+    "targetSplit": "train"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets",
+      "query": {
+        "slug": "data",
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "slug": "data",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/signed-url",
+      "json": {
+        "assetType": "datasets",
+        "assetId": "dddddddddddddddddddddddd",
+        "filename": "birds.zip",
+        "contentType": "application/zip",
+        "totalBytes": "__ANY_NUMBER__"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "sessionId": "session_123",
+          "uploadUrl": "https://signed.example/upload"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/complete",
+      "json": {
+        "sessionId": "session_123"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/datasets/ingest",
+      "json": {
+        "datasetId": "dddddddddddddddddddddddd",
+        "sessionId": "session_123",
+        "targetSplit": "train"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "jobId": "job_123",
+          "datasetId": "dddddddddddddddddddddddd",
+          "status": "queued"
+        }
+      }
+    }
+  ],
+  "upload": {
+    "url": "https://signed.example/upload",
+    "content_type": "application/zip",
+    "zip_files": {
+      "frame_000001.jpg": "jpg",
+      "frame_000002.jpg": "jpg",
+      "frame_000003.jpg": "jpg"
+    }
+  },
+  "expected": {
+    "summary": "Extracted 3 frame(s) at ~0.5 fps from __TMP__/birds.mp4; started ingest job job_123 for dataset dddddddddddddddddddddddd.",
+    "data": {
+      "datasetId": "dddddddddddddddddddddddd",
+      "frameCount": 3,
+      "fps": 1,
+      "maxFrames": 100,
+      "filename": "birds.zip",
+      "bytes": "__ANY_NUMBER__",
+      "sessionId": "session_123",
+      "ingest": {
+        "jobId": "job_123",
+        "datasetId": "dddddddddddddddddddddddd",
+        "status": "queued"
+      }
+    }
+  }
+}

@@ -101,4 +101,12 @@ test("server registers all available tools over the protocol", async () => {
     "dataset",
     "folder_path",
   ]);
+
+  const datasetUploadVideo = tools.find(
+    (tool) => tool.name === "dataset_upload_video",
+  );
+  expect(datasetUploadVideo?.inputSchema?.required).toEqual([
+    "dataset",
+    "video_path",
+  ]);
 });

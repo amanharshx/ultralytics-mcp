@@ -14,6 +14,7 @@ import {
   datasetsList,
   datasetUploadFile,
   datasetUploadFolder,
+  datasetUploadVideo,
   datasetVersionCreate,
   exploreDatasets,
 } from "../../src/tools/datasets.js";
@@ -524,6 +525,206 @@ describe("datasetUploadFolder", () => {
         targetSplit: "train",
       }),
     ).rejects.toThrow(/Folder has split directories/);
+  });
+});
+
+describe("datasetUploadVideo", () => {
+  test("extracts frames and uploads them", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ul-video-"));
+    const videoPath = join(dir, "birds.mp4");
+    await writeFile(videoPath, "video");
+
+    const uploadCalls: { url: string; init: RequestInit }[] = [];
+    const uploadImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      uploadCalls.push({ url: String(url), init });
+      return new Response("", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const apiCalls: { url: string; method: string; body: unknown }[] = [];
+    const apiImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      apiCalls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      if (parsed.pathname === "/api/upload/signed-url") {
+        return jsonResponse({
+          sessionId: "session_123",
+          uploadUrl: "https://signed.example/upload",
+        });
+      }
+      if (parsed.pathname === "/api/upload/complete") {
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({
+        jobId: "job_123",
+        datasetId: "d".repeat(24),
+        status: "queued",
+      });
+    }) as unknown as typeof fetch;
+
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: apiImpl,
+      uploadFetchImpl: uploadImpl,
+    });
+
+    const result = await datasetUploadVideo(client, {
+      dataset: "user/data",
+      videoPath,
+      targetSplit: "train",
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: async ({ outputDir, ffmpegPath, rate, maxFrames }) => {
+        expect(ffmpegPath).toBe("/usr/bin/ffmpeg");
+        expect(rate).toBe(0.5);
+        expect(maxFrames).toBe(100);
+        await writeFile(join(outputDir, "frame_000001.jpg"), "jpg");
+        await writeFile(join(outputDir, "frame_000002.jpg"), "jpg");
+        await writeFile(join(outputDir, "frame_000003.jpg"), "jpg");
+      },
+    });
+
+    expect(apiCalls[1]).toMatchObject({
+      url: `${BASE}/upload/signed-url`,
+      method: "POST",
+      body: {
+        assetType: "datasets",
+        assetId: "d".repeat(24),
+        filename: "birds.zip",
+        contentType: "application/zip",
+      },
+    });
+    expect(uploadCalls[0].url).toBe("https://signed.example/upload");
+    expect(
+      (uploadCalls[0].init.headers as Record<string, string>).Authorization,
+    ).toBeUndefined();
+    expect(result.summary).toBe(
+      `Extracted 3 frame(s) at ~0.5 fps from ${videoPath}; started ingest job job_123 for dataset ${"d".repeat(24)}.`,
+    );
+    expect(result.data).toMatchObject({
+      datasetId: "d".repeat(24),
+      frameCount: 3,
+      fps: 1,
+      maxFrames: 100,
+      filename: "birds.zip",
+      sessionId: "session_123",
+    });
+  });
+
+  test("falls back when probe fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ul-video-"));
+    const videoPath = join(dir, "birds.mp4");
+    await writeFile(videoPath, "video");
+
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        if (parsed.pathname === "/api/datasets") {
+          return jsonResponse({
+            datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+          });
+        }
+        if (parsed.pathname === "/api/upload/signed-url") {
+          return jsonResponse({
+            sessionId: "session_123",
+            uploadUrl: "https://signed.example/upload",
+          });
+        }
+        if (parsed.pathname === "/api/upload/complete") {
+          return jsonResponse({ ok: true });
+        }
+        return jsonResponse({
+          jobId: "job_123",
+          datasetId: "d".repeat(24),
+          status: "queued",
+        });
+      }) as unknown as typeof fetch,
+      uploadFetchImpl: (async () =>
+        new Response("", { status: 200 })) as unknown as typeof fetch,
+    });
+
+    const result = await datasetUploadVideo(client, {
+      dataset: "user/data",
+      videoPath,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => {
+        throw new Error("boom");
+      },
+      _extractFrames: async ({ outputDir, rate, maxFrames }) => {
+        expect(rate).toBe(1);
+        expect(maxFrames).toBe(100);
+        await writeFile(join(outputDir, "frame_000001.jpg"), "jpg");
+      },
+    });
+
+    expect(result.summary).toContain("probe fallback");
+  });
+
+  test("validates inputs and missing ffmpeg before network", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ul-video-"));
+    const videoPath = join(dir, "birds.mp4");
+    await writeFile(videoPath, "video");
+    const badPath = join(dir, "birds.txt");
+    await writeFile(badPath, "bad");
+
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network must not be called");
+      }) as unknown as typeof fetch,
+    });
+
+    await expect(
+      datasetUploadVideo(client, { dataset: "d".repeat(24), videoPath: "" }),
+    ).rejects.toThrow(/videoPath/);
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "d".repeat(24),
+        videoPath: join(dir, "missing.mp4"),
+      }),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "d".repeat(24),
+        videoPath: badPath,
+      }),
+    ).rejects.toThrow(/Unsupported video file type/);
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "d".repeat(24),
+        videoPath,
+        fps: 0,
+      }),
+    ).rejects.toThrow(/fps/);
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "d".repeat(24),
+        videoPath,
+        maxFrames: 0,
+      }),
+    ).rejects.toThrow(/maxFrames/);
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "d".repeat(24),
+        videoPath,
+        _findTool: () => null,
+      }),
+    ).rejects.toThrow(/ffmpeg\/ffprobe not found on PATH/);
   });
 });
 

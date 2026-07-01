@@ -21,6 +21,7 @@ import {
   datasetsList,
   datasetUploadFile,
   datasetUploadFolder,
+  datasetUploadVideo,
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
@@ -48,6 +49,7 @@ export {
   datasetsList,
   datasetUploadFile,
   datasetUploadFolder,
+  datasetUploadVideo,
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
@@ -83,6 +85,7 @@ export const READ_TOOL_NAMES = [
   "dataset_ingest",
   "dataset_upload_file",
   "dataset_upload_folder",
+  "dataset_upload_video",
   "models_list",
   "models_get",
   "gpu_availability",
@@ -351,6 +354,31 @@ export function registerReadTools(
         await datasetUploadFolder(getClient(), {
           dataset,
           folderPath: folder_path,
+          targetSplit,
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "dataset_upload_video",
+    {
+      description:
+        "Upload a local video by extracting JPEG frames with ffmpeg, then start dataset ingest for an existing dataset.",
+      inputSchema: {
+        dataset: z.string(),
+        video_path: z.string(),
+        fps: z.number().optional(),
+        max_frames: z.number().int().optional(),
+        targetSplit: z.string().optional(),
+      },
+    },
+    async ({ dataset, video_path, fps, max_frames, targetSplit }) =>
+      toMcpTextResult(
+        await datasetUploadVideo(getClient(), {
+          dataset,
+          videoPath: video_path,
+          fps,
+          maxFrames: max_frames,
           targetSplit,
         }),
       ),

@@ -2,20 +2,21 @@
 
 MCP server for the [Ultralytics Platform](https://platform.ultralytics.com).
 
+> [!IMPORTANT]
 > Independent community project. Not affiliated with or endorsed by Ultralytics.
 
-Current milestone: read, explore, monitor, predict, export, and initial
+Current milestone: read, explore, monitor, predict, export, and extended
 project and dataset lifecycle tools are available. Additional
 resource-management tools land incrementally from here.
 
-## Tools (26)
+## Tools (27)
 
 | Tool | Description |
 | --- | --- |
 | `projects_list` / `projects_get` | Browse projects |
 | `projects_create` / `projects_delete` | Create / soft-delete projects |
 | `explore_projects` / `explore_datasets` | Search public projects and datasets on Ultralytics Explore |
-| `datasets_list` / `datasets_get` / `datasets_create` / `datasets_delete` / `dataset_images_list` / `dataset_ingest` / `dataset_upload_file` / `dataset_upload_folder` | Browse / create / soft-delete datasets, inspect images, start remote ingest jobs, and upload archive files or folders |
+| `datasets_list` / `datasets_get` / `datasets_create` / `datasets_delete` / `dataset_images_list` / `dataset_ingest` / `dataset_upload_file` / `dataset_upload_folder` / `dataset_upload_video` | Browse / create / soft-delete datasets, inspect images, start remote ingest jobs, and upload archive files, folders, or videos |
 | `models_list` / `models_get` | Browse trained models and metrics |
 | `training_monitor` | Status, progress, and latest metrics |
 | `model_predict` | Run inference on an image URL or base64 source |
