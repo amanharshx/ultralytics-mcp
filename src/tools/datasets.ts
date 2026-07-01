@@ -1,7 +1,10 @@
 /** Read-only dataset tools. */
 
-import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, relative, resolve } from "node:path";
+import { execFile as execFileCb } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { basename, join, relative, resolve } from "node:path";
+import { promisify } from "node:util";
 
 import { zipSync } from "fflate";
 
@@ -31,6 +34,14 @@ const IMAGE_SUFFIXES = new Set([
   ".tif",
   ".tiff",
 ]);
+const VIDEO_SUFFIXES = new Set([
+  ".mp4",
+  ".webm",
+  ".mov",
+  ".mkv",
+  ".m4v",
+  ".avi",
+]);
 const UPLOAD_TYPES: Array<[suffix: string, contentType: string]> = [
   [".tar.gz", "application/gzip"],
   [".zip", "application/zip"],
@@ -38,6 +49,7 @@ const UPLOAD_TYPES: Array<[suffix: string, contentType: string]> = [
   [".tgz", "application/gzip"],
   [".ndjson", "application/x-ndjson"],
 ];
+const execFile = promisify(execFileCb);
 
 function resourceId(item: Record<string, unknown>, fallback?: string): string {
   const value = item._id ?? item.id ?? item.projectId ?? item.datasetId;
@@ -51,6 +63,53 @@ function validateTargetSplit(targetSplit?: string): void {
       `Unsupported targetSplit '${targetSplit}'. Expected one of: ${allowed}.`,
     );
   }
+}
+
+function findToolOnPath(name: string): string | null {
+  const paths = process.env.PATH?.split(":") ?? [];
+  for (const base of paths) {
+    const candidate = resolve(base, name);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+async function probeVideoDuration(
+  videoPath: string,
+  ffprobePath: string,
+): Promise<number> {
+  const { stdout } = await execFile(ffprobePath, [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=nokey=1:noprint_wrappers=1",
+    videoPath,
+  ]);
+  return Number.parseFloat(stdout.trim());
+}
+
+async function extractVideoFrames(options: {
+  videoPath: string;
+  outputDir: string;
+  ffmpegPath: string;
+  rate: number;
+  maxFrames: number;
+}): Promise<void> {
+  await execFile(options.ffmpegPath, [
+    "-i",
+    options.videoPath,
+    "-vf",
+    `fps=${options.rate}`,
+    "-frames:v",
+    String(options.maxFrames),
+    "-q:v",
+    "2",
+    join(options.outputDir, "frame_%06d.jpg"),
+  ]);
 }
 
 async function datasetUploadFileMeta(filePath: string): Promise<{
@@ -580,6 +639,119 @@ export async function datasetUploadFolder(
       ingest: upload.ingest,
     },
   };
+}
+
+export interface DatasetUploadVideoOptions {
+  dataset: string;
+  videoPath: string;
+  fps?: number;
+  maxFrames?: number;
+  targetSplit?: string;
+  _findTool?: (name: string) => string | null;
+  _probeDuration?: (videoPath: string, ffprobePath: string) => Promise<number>;
+  _extractFrames?: (options: {
+    videoPath: string;
+    outputDir: string;
+    ffmpegPath: string;
+    rate: number;
+    maxFrames: number;
+  }) => Promise<void>;
+}
+
+/** Upload local video by extracting JPEG frames, then start dataset ingest. */
+export async function datasetUploadVideo(
+  client: UltralyticsClient,
+  options: DatasetUploadVideoOptions,
+): Promise<NormalizedToolResult> {
+  validateTargetSplit(options.targetSplit);
+  if (!options.videoPath.trim()) {
+    throw new Error("`videoPath` is required.");
+  }
+  const fps = options.fps ?? 1;
+  const maxFrames = options.maxFrames ?? 100;
+  if (fps <= 0) {
+    throw new Error("`fps` must be greater than 0.");
+  }
+  if (maxFrames <= 0) {
+    throw new Error("`maxFrames` must be greater than 0.");
+  }
+
+  const resolvedVideo = resolve(options.videoPath);
+  const info = await stat(resolvedVideo).catch(() => null);
+  if (info === null) {
+    throw new Error(`Upload video does not exist: ${resolvedVideo}`);
+  }
+  if (!info.isFile()) {
+    throw new Error(`Upload path is not a file: ${resolvedVideo}`);
+  }
+  const lower = basename(resolvedVideo).toLowerCase();
+  if (!Array.from(VIDEO_SUFFIXES).some((suffix) => lower.endsWith(suffix))) {
+    throw new Error(
+      `Unsupported video file type. Expected one of: ${Array.from(VIDEO_SUFFIXES).sort().join(", ")}.`,
+    );
+  }
+
+  const findTool = options._findTool ?? findToolOnPath;
+  const ffmpegPath = findTool("ffmpeg");
+  const ffprobePath = findTool("ffprobe");
+  if (!ffmpegPath || !ffprobePath) {
+    throw new Error(
+      "ffmpeg/ffprobe not found on PATH. Install ffmpeg, or extract frames yourself (ffmpeg -i video.mp4 -vf fps=1 frames/%06d.jpg) and use dataset_upload_folder.",
+    );
+  }
+
+  let rate = fps;
+  let usedProbeFallback = false;
+  const probe = options._probeDuration ?? probeVideoDuration;
+  try {
+    const duration = await probe(resolvedVideo, ffprobePath);
+    if (duration > 0) {
+      rate = Math.min(fps, maxFrames / duration);
+    }
+  } catch {
+    usedProbeFallback = true;
+    rate = fps;
+  }
+
+  const extract = options._extractFrames ?? extractVideoFrames;
+  const outputDir = await mkdtemp(join(process.cwd(), ".ultralytics-video-"));
+  try {
+    await extract({
+      videoPath: resolvedVideo,
+      outputDir,
+      ffmpegPath,
+      rate,
+      maxFrames,
+    });
+    const folder = await datasetFolderImages(outputDir);
+    const content = await buildDatasetFolderZip(folder.files);
+    const datasetId = await resolveDataset(client, options.dataset);
+    const filename = `${basename(resolvedVideo).replace(/\.[^.]+$/, "")}.zip`;
+    const upload = await uploadDatasetContent(client, {
+      datasetId,
+      filename,
+      contentType: "application/zip",
+      totalBytes: content.byteLength,
+      content,
+      targetSplit: options.targetSplit,
+    });
+    const jobId = upload.ingest.jobId ?? upload.ingest.id ?? "None";
+    return {
+      summary: `Extracted ${folder.files.length} frame(s) at ~${Number(rate.toFixed(4))} fps from ${resolvedVideo}; started ingest job ${String(jobId)} for dataset ${datasetId}.${usedProbeFallback ? " probe fallback" : ""}`,
+      data: {
+        datasetId,
+        frameCount: folder.files.length,
+        fps,
+        maxFrames,
+        filename,
+        bytes: content.byteLength,
+        sessionId: upload.sessionId,
+        ingest: upload.ingest,
+      },
+    };
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
 }
 
 export interface DatasetExportOptions {
