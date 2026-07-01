@@ -432,10 +432,28 @@ export function registerActionTools(
     {
       description:
         "Report a model's training status and progress (works for private and public projects).",
-      inputSchema: { model: z.string(), project: z.string().optional() },
+      inputSchema: {
+        model: z.string(),
+        project: z.string().optional(),
+        include_metrics: z.boolean().optional(),
+        include_history: z.boolean().optional(),
+        history_last_n: z.number().int().positive().optional(),
+      },
     },
-    async ({ model, project }) =>
-      toMcpTextResult(await trainingMonitor(getClient(), model, project)),
+    async ({
+      model,
+      project,
+      include_metrics,
+      include_history,
+      history_last_n,
+    }) =>
+      toMcpTextResult(
+        await trainingMonitor(getClient(), model, project, {
+          includeMetrics: include_metrics,
+          includeHistory: include_history,
+          historyLastN: history_last_n,
+        }),
+      ),
   );
 
   server.registerTool(

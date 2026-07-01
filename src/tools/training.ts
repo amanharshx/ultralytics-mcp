@@ -18,12 +18,32 @@ function formatPercent(value: number): string {
   return Number.isInteger(value) ? value.toFixed(1) : String(value);
 }
 
+function validateHistoryLastN(historyLastN: number): void {
+  if (!Number.isInteger(historyLastN) || historyLastN <= 0) {
+    throw new Error("`history_last_n` must be a positive integer.");
+  }
+}
+
+interface TrainingMonitorOptions {
+  includeMetrics?: boolean;
+  includeHistory?: boolean;
+  historyLastN?: number;
+}
+
 /** Report model training status using private-safe model trainResults. */
 export async function trainingMonitor(
   client: UltralyticsClient,
   model: string,
   project?: string,
+  options: TrainingMonitorOptions = {},
 ): Promise<NormalizedToolResult> {
+  const {
+    includeMetrics = false,
+    includeHistory = false,
+    historyLastN = 20,
+  } = options;
+  validateHistoryLastN(historyLastN);
+
   const modelId = await resolveModel(client, model, project);
   const data = await client.get(`/models/${modelId}`);
   const record = asRecord(data);
@@ -46,21 +66,40 @@ export async function trainingMonitor(
       keyMetrics[key] = latestMetrics[key];
     }
   }
+  const metricsHistory = trainResults.slice(-historyLastN).map((entry) => {
+    const record = asRecord(entry);
+    return {
+      epoch: record.epoch ?? null,
+      metrics: asRecord(record.metrics),
+    };
+  });
 
   let progressPct: number | null = null;
   let progressText: string | null = null;
   let etaMs: number | null = null;
   let source = "model.trainResults";
+  let timing: Record<string, unknown> | null = null;
+  let instanceStatus: Record<string, unknown> | null = null;
 
   try {
     const trainingData = await client.get(`/models/${modelId}/training`);
-    const job = asRecord(asRecord(trainingData).job);
+    const trainingRecord = asRecord(trainingData);
+    const job = asRecord(trainingRecord.job);
     const progress = asRecord(job.progress);
-    const timing = asRecord(job.timing);
+    const timingRecord = asRecord(job.timing);
     progressPct = (progress.percentage as number | undefined) ?? null;
     progressText = progressPct === null ? null : String(progressPct);
-    etaMs = (timing.etaMs as number | undefined) ?? null;
+    etaMs = (timingRecord.etaMs as number | undefined) ?? null;
     source = "models/{id}/training";
+    timing = {
+      etaMs: timingRecord.etaMs ?? null,
+      timePerEpochMs: timingRecord.timePerEpochMs ?? null,
+      elapsedMs: timingRecord.elapsedMs ?? null,
+    };
+    instanceStatus =
+      "instanceStatus" in trainingRecord
+        ? asRecord(trainingRecord.instanceStatus)
+        : null;
   } catch (error) {
     if (
       !(error instanceof UltralyticsApiError) ||
@@ -92,8 +131,15 @@ export async function trainingMonitor(
       etaMs,
       bestEpoch: item.bestEpoch ?? null,
       bestFitness: item.bestFitness ?? null,
-      latestMetrics: keyMetrics,
+      latestMetrics: includeMetrics ? latestMetrics : keyMetrics,
       progressSource: source,
+      ...(includeMetrics
+        ? {
+            timing,
+            instanceStatus,
+          }
+        : {}),
+      ...(includeHistory ? { metricsHistory } : {}),
     },
   };
 }
