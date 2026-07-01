@@ -1,0 +1,59 @@
+{
+  "tool": "explore_datasets",
+  "args": {
+    "q": "bird",
+    "sort": "stars",
+    "offset": 20,
+    "task": ["detect", "segment"]
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/explore/search",
+      "query": {
+        "type": "datasets",
+        "q": "bird",
+        "sort": "stars",
+        "offset": "20",
+        "task": "detect,segment"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "datasets": [
+            {
+              "_id": "dddddddddddddddddddddddd",
+              "name": "Birds",
+              "slug": "birds",
+              "username": "user",
+              "task": "detect",
+              "imageCount": 65,
+              "classCount": 3,
+              "starCount": 7,
+              "ignored": "omit"
+            }
+          ],
+          "hasMore": true
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Search 'bird': 1 dataset(s) (more available)",
+    "data": {
+      "datasets": [
+        {
+          "id": "dddddddddddddddddddddddd",
+          "name": "Birds",
+          "slug": "birds",
+          "username": "user",
+          "task": "detect",
+          "imageCount": 65,
+          "classCount": 3,
+          "starCount": 7
+        }
+      ],
+      "hasMore": true
+    }
+  }
+}

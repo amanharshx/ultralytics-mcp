@@ -41,6 +41,11 @@ test("server registers all available tools over the protocol", async () => {
   expect(projectsGet?.inputSchema?.type).toBe("object");
   expect(projectsGet?.inputSchema?.required).toEqual(["project"]);
 
+  const exploreProjects = tools.find(
+    (tool) => tool.name === "explore_projects",
+  );
+  expect(exploreProjects?.inputSchema?.required).toEqual(["q"]);
+
   const projectsCreate = tools.find((tool) => tool.name === "projects_create");
   expect(projectsCreate?.inputSchema?.required).toEqual(["name"]);
 
@@ -61,6 +66,11 @@ test("server registers all available tools over the protocol", async () => {
     (tool) => tool.name === "dataset_images_list",
   );
   expect(datasetImagesList?.inputSchema?.required).toEqual(["dataset"]);
+
+  const exploreDatasets = tools.find(
+    (tool) => tool.name === "explore_datasets",
+  );
+  expect(exploreDatasets?.inputSchema?.required).toEqual(["q"]);
 
   const datasetExport = tools.find((tool) => tool.name === "dataset_export");
   expect(datasetExport?.inputSchema?.required).toEqual(["dataset"]);

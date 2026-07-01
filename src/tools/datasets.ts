@@ -8,6 +8,7 @@ import { zipSync } from "fflate";
 import type { UltralyticsClient } from "../client.js";
 import { resolveDataset } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
+import { exploreSearch, validateExploreTasks } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
 
 const DATASET_TASKS = new Set([
@@ -253,6 +254,43 @@ export async function datasetsList(
     visibility: dataset.visibility ?? null,
   }));
   return { summary: `${items.length} dataset(s).`, data: items };
+}
+
+export interface ExploreDatasetsOptions {
+  q: string;
+  sort?: string;
+  offset?: number;
+  task?: string[];
+}
+
+/** Search public datasets on Explore. */
+export async function exploreDatasets(
+  client: UltralyticsClient,
+  options: ExploreDatasetsOptions,
+): Promise<NormalizedToolResult> {
+  const data = await exploreSearch(client, "datasets", options.q, {
+    sort: options.sort,
+    offset: options.offset,
+    task: validateExploreTasks(options.task),
+  });
+  const items = listField(data, "datasets").map((dataset) => ({
+    id: dataset._id ?? null,
+    name: dataset.name ?? null,
+    slug: dataset.slug ?? null,
+    username: dataset.username ?? null,
+    task: dataset.task ?? null,
+    imageCount: dataset.imageCount ?? null,
+    classCount: dataset.classCount ?? null,
+    starCount: dataset.starCount ?? null,
+  }));
+  const hasMore = Boolean(data.hasMore);
+  return {
+    summary: `Search '${options.q.trim()}': ${items.length} dataset(s)${hasMore ? " (more available)" : ""}`,
+    data: {
+      datasets: items,
+      hasMore,
+    },
+  };
 }
 
 /** Get one dataset by id, slug, username/slug, or dataset ul:// URI. */
