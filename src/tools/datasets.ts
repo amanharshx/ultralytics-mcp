@@ -353,3 +353,39 @@ export async function datasetUploadFile(
     },
   };
 }
+
+export interface DatasetExportOptions {
+  dataset: string;
+  version?: number;
+}
+
+/** Get dataset export link for latest or one frozen version. */
+export async function datasetExport(
+  client: UltralyticsClient,
+  options: DatasetExportOptions,
+): Promise<NormalizedToolResult> {
+  if (options.version !== undefined && options.version <= 0) {
+    throw new Error("`version` must be greater than 0.");
+  }
+
+  const datasetId = await resolveDataset(client, options.dataset);
+  const data = asRecord(
+    await client.get(
+      `/datasets/${datasetId}/export`,
+      options.version !== undefined ? { v: options.version } : undefined,
+    ),
+  );
+  const cached =
+    typeof data.cached === "boolean"
+      ? String(data.cached)
+      : String(data.cached ?? null);
+  return {
+    summary:
+      `Export link for ${options.dataset} ` +
+      `(version ${String(options.version ?? "latest")}, cached=${cached})`,
+    data: {
+      downloadUrl: data.downloadUrl ?? null,
+      cached: data.cached ?? null,
+    },
+  };
+}
