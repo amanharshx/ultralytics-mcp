@@ -1,0 +1,100 @@
+{
+  "tool": "training_monitor",
+  "args": {
+    "model": "aaaaaaaaaaaaaaaaaaaaaaaa",
+    "include_history": true,
+    "history_last_n": 3
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "status": "running",
+            "epochs": 100,
+            "trainResults": [
+              {
+                "epoch": 0,
+                "metrics": {
+                  "lr": 0.01
+                }
+              },
+              {
+                "epoch": 1,
+                "metrics": {
+                  "lr": 0.001
+                }
+              },
+              {
+                "epoch": 2,
+                "metrics": {
+                  "metrics/mAP50(B)": 0.52,
+                  "lr": 0.0001
+                }
+              },
+              {
+                "epoch": 3,
+                "metrics": {
+                  "metrics/mAP50(B)": 0.6,
+                  "lr": 0.00001
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa/training",
+      "response": {
+        "status": 404,
+        "json": {
+          "error": "Project not found"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Training status=running; epoch 4/100; ~4.0%",
+    "data": {
+      "modelId": "aaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "running",
+      "epochsDone": 4,
+      "totalEpochs": 100,
+      "progressPercentage": 4.0,
+      "etaMs": null,
+      "bestEpoch": null,
+      "bestFitness": null,
+      "latestMetrics": {
+        "metrics/mAP50(B)": 0.6
+      },
+      "progressSource": "model.trainResults",
+      "metricsHistory": [
+        {
+          "epoch": 1,
+          "metrics": {
+            "lr": 0.001
+          }
+        },
+        {
+          "epoch": 2,
+          "metrics": {
+            "metrics/mAP50(B)": 0.52,
+            "lr": 0.0001
+          }
+        },
+        {
+          "epoch": 3,
+          "metrics": {
+            "metrics/mAP50(B)": 0.6,
+            "lr": 0.00001
+          }
+        }
+      ]
+    }
+  }
+}

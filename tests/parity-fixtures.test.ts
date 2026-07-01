@@ -264,6 +264,11 @@ const TOOL_RUNNERS: Record<
       client,
       args.model as string,
       args.project as string | undefined,
+      {
+        includeMetrics: args.include_metrics as boolean | undefined,
+        includeHistory: args.include_history as boolean | undefined,
+        historyLastN: args.history_last_n as number | undefined,
+      },
     ),
 };
 
@@ -311,6 +316,8 @@ describe("parity fixtures", () => {
         "projects_create.json",
         "projects_delete.json",
         "projects_list.json",
+        "training_monitor_history.json",
+        "training_monitor_metrics.json",
         "training_monitor_private.json",
       ].sort(),
     );

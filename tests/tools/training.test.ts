@@ -67,6 +67,147 @@ describe("trainingMonitor", () => {
     });
   });
 
+  test("include_metrics returns full latest metrics with live extras", async () => {
+    const { client } = routeClient((path) => {
+      if (path === `/api/models/${ID}`) {
+        return jsonResponse({
+          model: {
+            status: "running",
+            epochs: 100,
+            trainResults: [
+              {
+                epoch: 69,
+                metrics: {
+                  "train/box_loss": 0.72179,
+                  "metrics/mAP50(B)": 0.58282,
+                  "metrics/mAP50-95(M)": 0.48394,
+                  lr: 0.000114,
+                },
+              },
+            ],
+          },
+        });
+      }
+      if (path === `/api/models/${ID}/training`) {
+        return jsonResponse({
+          job: {
+            progress: { percentage: 70 },
+            timing: {
+              etaMs: 432343,
+              timePerEpochMs: 14411.4,
+              elapsedMs: 1008800,
+            },
+          },
+          instanceStatus: { status: "running", uptimeSeconds: 1012 },
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await trainingMonitor(client, ID, undefined, {
+      includeMetrics: true,
+    });
+    expect(result.data).toMatchObject({
+      latestMetrics: {
+        "train/box_loss": 0.72179,
+        "metrics/mAP50(B)": 0.58282,
+        "metrics/mAP50-95(M)": 0.48394,
+        lr: 0.000114,
+      },
+      timing: {
+        etaMs: 432343,
+        timePerEpochMs: 14411.4,
+        elapsedMs: 1008800,
+      },
+      instanceStatus: { status: "running", uptimeSeconds: 1012 },
+    });
+  });
+
+  test.each([
+    401, 403, 404,
+  ])("include_metrics falls back on /training %s", async (statusCode) => {
+    const { client } = routeClient((path) => {
+      if (path === `/api/models/${ID}`) {
+        return jsonResponse({
+          model: {
+            status: "running",
+            epochs: 100,
+            trainResults: [
+              {
+                epoch: 0,
+                metrics: {
+                  "train/box_loss": 1.23,
+                  "metrics/mAP50(B)": 0.5,
+                },
+              },
+            ],
+          },
+        });
+      }
+      if (path === `/api/models/${ID}/training`) {
+        return jsonResponse({ error: "not available" }, statusCode);
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await trainingMonitor(client, ID, undefined, {
+      includeMetrics: true,
+    });
+    expect(result.data).toMatchObject({
+      progressSource: "model.trainResults",
+      latestMetrics: {
+        "train/box_loss": 1.23,
+        "metrics/mAP50(B)": 0.5,
+      },
+      timing: null,
+      instanceStatus: null,
+    });
+  });
+
+  test("include_history returns recent verbatim series", async () => {
+    const { client } = routeClient((path) => {
+      if (path === `/api/models/${ID}`) {
+        return jsonResponse({
+          model: {
+            status: "running",
+            epochs: 100,
+            trainResults: [
+              { epoch: 0, metrics: { lr: 0.01 } },
+              { epoch: 1, metrics: { lr: 0.001 } },
+              { epoch: 2, metrics: { lr: 0.0001 } },
+              { epoch: 3, metrics: { "metrics/mAP50(B)": 0.6, lr: 0.00001 } },
+            ],
+          },
+        });
+      }
+      if (path === `/api/models/${ID}/training`) {
+        return jsonResponse({ error: "Project not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await trainingMonitor(client, ID, undefined, {
+      includeHistory: true,
+      historyLastN: 2,
+    });
+    expect(result.data).toMatchObject({
+      latestMetrics: { "metrics/mAP50(B)": 0.6 },
+      metricsHistory: [
+        { epoch: 2, metrics: { lr: 0.0001 } },
+        { epoch: 3, metrics: { "metrics/mAP50(B)": 0.6, lr: 0.00001 } },
+      ],
+    });
+  });
+
+  test.each([
+    0, -1, 2.5,
+  ])("rejects invalid historyLastN=%s", async (historyLastN) => {
+    const { client } = routeClient(() => jsonResponse({}, 500));
+    await expect(
+      trainingMonitor(client, ID, undefined, { historyLastN }),
+    ).rejects.toThrow(/history_last_n/);
+  });
+
   test("unknown epoch total skips percentage math", async () => {
     const { client } = routeClient((path) => {
       if (path === `/api/models/${ID}`) {
@@ -110,6 +251,32 @@ describe("trainingMonitor", () => {
     );
     expect(error).toBeInstanceOf(UltralyticsApiError);
     expect(error.statusCode).toBe(500);
+  });
+
+  test("re-raises rate limit errors from /training", async () => {
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      maxRetries: 0,
+      fetchImpl: (async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        if (path === `/api/models/${ID}`) {
+          return jsonResponse({
+            model: { status: "running", epochs: 100, trainResults: [] },
+          });
+        }
+        if (path === `/api/models/${ID}/training`) {
+          return jsonResponse({ error: "slow down" }, 429);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch,
+    });
+
+    const error = await trainingMonitor(client, ID).catch(
+      (e) => e as UltralyticsApiError,
+    );
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(429);
   });
 });
 

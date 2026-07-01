@@ -109,4 +109,14 @@ test("server registers all available tools over the protocol", async () => {
     "dataset",
     "video_path",
   ]);
+
+  const trainingMonitor = tools.find(
+    (tool) => tool.name === "training_monitor",
+  );
+  expect(trainingMonitor?.inputSchema?.required).toEqual(["model"]);
+  expect(trainingMonitor?.inputSchema?.properties).toMatchObject({
+    include_metrics: expect.any(Object),
+    include_history: expect.any(Object),
+    history_last_n: expect.any(Object),
+  });
 });
