@@ -18,6 +18,7 @@ import {
   datasetsIngest,
   datasetUploadFile,
   datasetUploadFolder,
+  datasetUploadVideo,
   datasetVersionCreate,
   exploreDatasets,
   exploreProjects,
@@ -72,6 +73,11 @@ type Fixture = z.infer<typeof fixtureSchema>;
 
 const BASE = "https://platform.ultralytics.com/api";
 const KEY = `ul_${"0".repeat(40)}`;
+const fixtureUploadVideoZipFiles = {
+  "frame_000001.jpg": "jpg",
+  "frame_000002.jpg": "jpg",
+  "frame_000003.jpg": "jpg",
+};
 
 function expectMatch(actual: unknown, expected: unknown): void {
   if (expected === "__ANY_NUMBER__") {
@@ -212,6 +218,29 @@ const TOOL_RUNNERS: Record<
       folderPath: args.folder_path as string,
       targetSplit: args.targetSplit as string | undefined,
     }),
+  dataset_upload_video: (client, args) =>
+    datasetUploadVideo(client, {
+      dataset: args.dataset as string,
+      videoPath: args.video_path as string,
+      fps: args.fps as number | undefined,
+      maxFrames: args.max_frames as number | undefined,
+      targetSplit: args.targetSplit as string | undefined,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: async ({ outputDir, ffmpegPath, rate, maxFrames }) => {
+        expect(ffmpegPath).toBe("/usr/bin/ffmpeg");
+        expect(rate).toBe(0.5);
+        expect(maxFrames).toBe(100);
+        await mkdir(outputDir, { recursive: true });
+        for (const [path, content] of Object.entries(
+          fixtureUploadVideoZipFiles,
+        )) {
+          const filePath = join(outputDir, path);
+          await mkdir(dirname(filePath), { recursive: true });
+          await writeFile(filePath, content);
+        }
+      },
+    }),
   datasets_delete: (client, args) =>
     datasetsDelete(client, args.dataset as string),
   dataset_ingest: (client, args) =>
@@ -277,6 +306,7 @@ describe("parity fixtures", () => {
         "dataset_version_create.json",
         "dataset_upload_file.json",
         "dataset_upload_folder.json",
+        "dataset_upload_video.json",
         "models_get.json",
         "projects_create.json",
         "projects_delete.json",
@@ -300,7 +330,8 @@ describe("parity fixtures", () => {
     const fixture = fixtureSchema.parse(JSON.parse(raw));
     if (
       fixture.tool === "dataset_upload_file" ||
-      fixture.tool === "dataset_upload_folder"
+      fixture.tool === "dataset_upload_folder" ||
+      fixture.tool === "dataset_upload_video"
     ) {
       continue;
     }
@@ -469,6 +500,78 @@ describe("parity fixtures", () => {
         dataset: args.dataset as string,
         folderPath: args.folder_path as string,
         targetSplit: args.targetSplit as string | undefined,
+      });
+
+      expectMatch(result, expected);
+      expect(uploadAuth).toBeNull();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("parity output: dataset_upload_video.json", async () => {
+    const raw = readFileSync(
+      join(fixtureDir, "dataset_upload_video.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-"));
+    try {
+      const args = replaceTmp(fixture.args, tmp) as Record<string, unknown>;
+      const expected = replaceTmp(fixture.expected, tmp);
+      await writeFile(args.video_path as string, "video");
+
+      let uploadAuth: string | null | undefined = "unset";
+      const uploadFetch = (async (
+        url: string | URL,
+        init: RequestInit = {},
+      ) => {
+        const headers = new Headers(init.headers);
+        uploadAuth = headers.get("Authorization");
+        expect(String(url)).toBe(fixture.upload?.url);
+        expect((init.method ?? "GET").toUpperCase()).toBe("PUT");
+        expect(headers.get("Content-Type")).toBe(fixture.upload?.content_type);
+        const bytes = new Uint8Array(
+          await new Response(init.body).arrayBuffer(),
+        );
+        const files = Object.fromEntries(
+          Object.entries(unzipSync(bytes)).map(([path, value]) => [
+            path,
+            new TextDecoder().decode(value),
+          ]),
+        );
+        expect(files).toEqual(fixture.upload?.zip_files ?? {});
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: replayFetch(fixture.api),
+        uploadFetchImpl: uploadFetch,
+      });
+
+      const result = await datasetUploadVideo(client, {
+        dataset: args.dataset as string,
+        videoPath: args.video_path as string,
+        fps: args.fps as number | undefined,
+        maxFrames: args.max_frames as number | undefined,
+        targetSplit: args.targetSplit as string | undefined,
+        _findTool: (name) => `/usr/bin/${name}`,
+        _probeDuration: async () => 200,
+        _extractFrames: async ({ outputDir, ffmpegPath, rate, maxFrames }) => {
+          expect(ffmpegPath).toBe("/usr/bin/ffmpeg");
+          expect(rate).toBe(0.5);
+          expect(maxFrames).toBe(100);
+          await mkdir(outputDir, { recursive: true });
+          for (const [path, content] of Object.entries(
+            fixtureUploadVideoZipFiles,
+          )) {
+            const filePath = join(outputDir, path);
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, content);
+          }
+        },
       });
 
       expectMatch(result, expected);
