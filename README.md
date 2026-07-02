@@ -113,7 +113,6 @@ args = ["-y", "ultralytics-mcp"]
 ULTRALYTICS_API_KEY = "ul_your_api_key_here"
 ```
 
-
 ## Verify Setup
 
 ### Claude Code
@@ -145,22 +144,62 @@ You should see `ultralytics` in configured MCP servers.
 
 ## Tools (27)
 
+### Projects (5 tools)
+
 | Tool | Description |
 | --- | --- |
-| `projects_list` / `projects_get` | Browse projects |
-| `projects_create` / `projects_delete` | Create / soft-delete projects |
-| `explore_projects` / `explore_datasets` | Search public projects and datasets on Ultralytics Explore |
-| `datasets_list` / `datasets_get` / `datasets_create` / `datasets_delete` / `dataset_images_list` / `dataset_ingest` / `dataset_upload_file` / `dataset_upload_folder` / `dataset_upload_video` | Browse / create / soft-delete datasets, inspect images, start remote ingest jobs, and upload archive files, folders, or videos |
-| `models_list` / `models_get` | Browse trained models and metrics |
-| `training_monitor` | Status, progress, latest metrics, and optional recent metric history |
-| `model_predict` | Run inference on image URL or base64 source |
-| `model_download` | Download model weight file to local path |
-| `gpu_availability` | Cloud GPU stock status |
-| `dataset_export` | Get export link for latest or frozen dataset version |
-| `dataset_version_create` | Create frozen dataset version snapshot |
-| `exports_list` / `export_status` | List / check export jobs |
-| `export_create` | Create export job. Requires `confirm_cost: true` |
-| `training_start` | Start cloud training. Requires `confirm_cost: true` |
+| `projects_list` | List projects in your Ultralytics workspace |
+| `projects_get` | Get one project by id, slug, `username/slug`, or `ul://` |
+| `projects_create` | Create a new project |
+| `projects_delete` | Soft-delete a project |
+| `explore_projects` | Search public projects on Ultralytics Explore |
+
+### Datasets (12 tools)
+
+| Tool | Description |
+| --- | --- |
+| `datasets_list` | List datasets in your Ultralytics workspace |
+| `datasets_get` | Get one dataset by id, slug, `username/slug`, or `ul://` |
+| `datasets_create` | Create a new dataset |
+| `datasets_delete` | Soft-delete a dataset |
+| `dataset_images_list` | List images in a dataset with optional filters |
+| `dataset_ingest` | Start a remote ingest job from a source URL |
+| `dataset_upload_file` | Upload a local archive file for dataset ingest |
+| `dataset_upload_folder` | Upload a local image folder for dataset ingest |
+| `dataset_upload_video` | Upload a local video by extracting frames for dataset ingest |
+| `dataset_export` | Get an export link for latest or frozen dataset version |
+| `dataset_version_create` | Create a frozen dataset version snapshot |
+| `explore_datasets` | Search public datasets on Ultralytics Explore |
+
+### Models (4 tools)
+
+| Tool | Description |
+| --- | --- |
+| `models_list` | List trained models and summary metrics |
+| `models_get` | Get one model and its details |
+| `model_predict` | Run inference from an image URL or base64 input |
+| `model_download` | Download a model weight file to a local path |
+
+### Training (2 tools)
+
+| Tool | Description |
+| --- | --- |
+| `training_monitor` | Inspect status, progress, latest metrics, and optional history |
+| `training_start` | Start a cloud training job with explicit cost confirmation |
+
+### Exports (3 tools)
+
+| Tool | Description |
+| --- | --- |
+| `exports_list` | List export jobs |
+| `export_status` | Check export job status |
+| `export_create` | Create an export job with explicit cost confirmation |
+
+### Infrastructure (1 tool)
+
+| Tool | Description |
+| --- | --- |
+| `gpu_availability` | Check cloud GPU availability |
 
 ## Safety
 
