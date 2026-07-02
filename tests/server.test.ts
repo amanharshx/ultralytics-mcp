@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, expect, test } from "vitest";
 
-import { createServer } from "../src/server.js";
+import { createServer, SERVER_VERSION } from "../src/server.js";
 import { TOOL_NAMES } from "../src/tools/index.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -14,6 +15,16 @@ afterEach(async () => {
       await cleanup();
     }
   }
+});
+
+test("server version stays in sync with package.json", () => {
+  const packageJson = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as {
+    version: string;
+  };
+
+  expect(SERVER_VERSION).toBe(packageJson.version);
 });
 
 test("server registers all available tools over the protocol", async () => {
