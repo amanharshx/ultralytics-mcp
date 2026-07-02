@@ -1,6 +1,6 @@
 {
   "name": "ultralytics-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP for Ultralytics Platform workflows, datasets, training, prediction, and model operations.",
   "type": "module",
   "bin": {
