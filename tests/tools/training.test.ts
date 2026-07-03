@@ -374,4 +374,61 @@ describe("trainingStart", () => {
       },
     });
   });
+
+  test("merges train_args into trainArgs while preserving MCP fields", async () => {
+    const calls: { body: unknown }[] = [];
+    const impl = (async (_url: string | URL, init: RequestInit = {}) => {
+      calls.push({
+        body: typeof init.body === "string" ? JSON.parse(init.body) : null,
+      });
+      return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    await trainingStart(client, {
+      model: MODEL,
+      project: PROJECT,
+      dataset: DATASET,
+      gpuType: "rtx-4090",
+      epochs: 100,
+      trainArgs: {
+        mosaic: 0,
+        mixup: 0,
+        copy_paste: 0,
+      },
+      confirmCost: true,
+    });
+
+    expect(calls[0]).toMatchObject({
+      body: {
+        trainArgs: {
+          data: DATASET,
+          epochs: 100,
+          mosaic: 0,
+          mixup: 0,
+          copy_paste: 0,
+        },
+      },
+    });
+  });
+
+  test.each([
+    "data",
+    "model",
+  ])("rejects reserved train_args key %s", async (key) => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL,
+        project: PROJECT,
+        dataset: DATASET,
+        gpuType: "rtx-4090",
+        trainArgs: { [key]: "x" },
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/train_args/);
+  });
 });
