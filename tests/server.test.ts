@@ -75,6 +75,10 @@ test("server registers all available tools over the protocol", async () => {
 
   const projectsDelete = tools.find((tool) => tool.name === "projects_delete");
   expect(projectsDelete?.inputSchema?.required).toEqual(["project"]);
+  expect(projectsDelete?.annotations).toMatchObject({
+    readOnlyHint: false,
+    destructiveHint: true,
+  });
 
   const datasetsCreate = tools.find((tool) => tool.name === "datasets_create");
   expect(datasetsCreate?.inputSchema?.required).toEqual([
@@ -82,6 +86,9 @@ test("server registers all available tools over the protocol", async () => {
     "task",
     "slug",
   ]);
+  expect(datasetsCreate?.inputSchema?.properties?.task).toMatchObject({
+    description: expect.any(String),
+  });
 
   const datasetsDelete = tools.find((tool) => tool.name === "datasets_delete");
   expect(datasetsDelete?.inputSchema?.required).toEqual(["dataset"]);
@@ -138,6 +145,10 @@ test("server registers all available tools over the protocol", async () => {
     (tool) => tool.name === "training_monitor",
   );
   expect(trainingMonitor?.inputSchema?.required).toEqual(["model"]);
+  expect(trainingMonitor?.annotations).toMatchObject({
+    readOnlyHint: true,
+    destructiveHint: false,
+  });
   expect(trainingMonitor?.inputSchema?.properties).toMatchObject({
     include_metrics: expect.any(Object),
     include_history: expect.any(Object),
@@ -151,8 +162,20 @@ test("server registers all available tools over the protocol", async () => {
     "dataset",
     "gpu_type",
   ]);
+  expect(trainingStart?.annotations).toMatchObject({
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  });
   expect(trainingStart?.inputSchema?.properties).toMatchObject({
     train_args: expect.any(Object),
     confirm_cost: expect.any(Object),
+    model: {
+      description: expect.any(String),
+    },
+    dataset: {
+      description: expect.any(String),
+    },
   });
 });
