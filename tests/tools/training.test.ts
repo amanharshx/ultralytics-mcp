@@ -431,4 +431,148 @@ describe("trainingStart", () => {
       }),
     ).rejects.toThrow(/train_args/);
   });
+
+  test("creates a model record before starting training from a detect checkpoint", async () => {
+    const createdModelId = "m".repeat(24);
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const path = new URL(String(url)).pathname;
+      if (path === `/api/datasets/${DATASET}`) {
+        return jsonResponse({ dataset: { _id: DATASET, task: "detect" } });
+      }
+      if (path === "/api/models") {
+        return jsonResponse({ model: { _id: createdModelId, task: "detect" } });
+      }
+      if (path === "/api/training/start") {
+        return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    await trainingStart(client, {
+      model: "yolo26n.pt",
+      project: PROJECT,
+      dataset: DATASET,
+      gpuType: "rtx-4090",
+      epochs: 100,
+      confirmCost: true,
+    });
+
+    expect(calls).toMatchObject([
+      {
+        url: `${BASE}/datasets/${DATASET}`,
+        method: "GET",
+      },
+      {
+        url: `${BASE}/models`,
+        method: "POST",
+        body: {
+          projectId: PROJECT,
+          task: "detect",
+          name: "yolo26n",
+        },
+      },
+      {
+        url: `${BASE}/training/start`,
+        method: "POST",
+        body: {
+          modelId: createdModelId,
+          projectId: PROJECT,
+          gpuType: "rtx-4090",
+          trainArgs: {
+            model: "yolo26n.pt",
+            data: DATASET,
+            epochs: 100,
+          },
+        },
+      },
+    ]);
+  });
+
+  test("allows semantic checkpoints for segment datasets and creates a semantic model", async () => {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const path = new URL(String(url)).pathname;
+      if (path === `/api/datasets/${DATASET}`) {
+        return jsonResponse({ dataset: { _id: DATASET, task: "segment" } });
+      }
+      if (path === "/api/models") {
+        return jsonResponse({
+          model: { _id: "m".repeat(24), task: "semantic" },
+        });
+      }
+      if (path === "/api/training/start") {
+        return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    await trainingStart(client, {
+      model: "yolo26n-sem.pt",
+      project: PROJECT,
+      dataset: DATASET,
+      gpuType: "rtx-4090",
+      confirmCost: true,
+    });
+
+    expect(calls[1]).toMatchObject({
+      url: `${BASE}/models`,
+      method: "POST",
+      body: {
+        projectId: PROJECT,
+        task: "semantic",
+        name: "yolo26n-sem",
+      },
+    });
+  });
+
+  test("rejects incompatible checkpoint and dataset task combinations", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === `/api/datasets/${DATASET}`) {
+        return jsonResponse({ dataset: { _id: DATASET, task: "semantic" } });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await expect(
+      trainingStart(client, {
+        model: "yolo26n-seg.pt",
+        project: PROJECT,
+        dataset: DATASET,
+        gpuType: "rtx-4090",
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/not compatible/);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.path).toBe(`/api/datasets/${DATASET}`);
+  });
 });
