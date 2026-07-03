@@ -37,10 +37,16 @@
     "test": "vitest run"
   },
   "keywords": [
-    "mcp",
     "ultralytics",
     "yolo",
-    "model-context-protocol"
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "codex",
+    "computer-vision",
+    "object-detection",
+    "model-training",
+    "inference"
   ],
   "author": "Aman Harsh",
   "license": "MIT",

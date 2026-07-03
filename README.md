@@ -1,6 +1,7 @@
 # Ultralytics Platform MCP
 
 [![npm version](https://img.shields.io/npm/v/ultralytics-mcp.svg)](https://www.npmjs.com/package/ultralytics-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/ultralytics-mcp.svg)](https://www.npmjs.com/package/ultralytics-mcp)
 [![CI](https://github.com/amanharshx/ultralytics-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/amanharshx/ultralytics-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
