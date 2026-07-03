@@ -67,29 +67,46 @@ export {
 } from "./projects.js";
 export { trainingMonitor, trainingStart } from "./training.js";
 
-/** Names of the read-only tools registered by `registerReadTools`. */
-export const READ_TOOL_NAMES = [
+/** Names of tools that do not mutate remote or local state. */
+export const READ_ONLY_TOOL_NAMES = [
   "projects_list",
   "projects_get",
   "explore_projects",
-  "projects_create",
-  "projects_delete",
   "datasets_list",
   "datasets_get",
   "explore_datasets",
   "dataset_images_list",
   "dataset_export",
-  "dataset_version_create",
+  "models_list",
+  "models_get",
+  "gpu_availability",
+  "training_monitor",
+  "model_predict",
+  "exports_list",
+  "export_status",
+] as const;
+
+/** Names of tools that mutate remote state or local filesystem state. */
+export const STATE_CHANGING_TOOL_NAMES = [
+  "projects_create",
+  "projects_delete",
   "datasets_create",
+  "dataset_version_create",
   "datasets_delete",
   "dataset_ingest",
   "dataset_upload_file",
   "dataset_upload_folder",
   "dataset_upload_video",
-  "models_list",
-  "models_get",
-  "gpu_availability",
+  "model_download",
+  "export_create",
+  "training_start",
 ] as const;
+
+/** Names of the tools grouped by operational semantics. */
+export const TOOL_SETS = {
+  readOnly: READ_ONLY_TOOL_NAMES,
+  stateChanging: STATE_CHANGING_TOOL_NAMES,
+} as const;
 
 /** Register the read-only tools onto a server, using a lazy client provider. */
 export function registerReadTools(
@@ -415,13 +432,6 @@ export function registerReadTools(
   );
 }
 
-/** Names of the monitor/predict/download tools. */
-export const ACTION_TOOL_NAMES = [
-  "training_monitor",
-  "model_predict",
-  "model_download",
-] as const;
-
 /** Register training monitor, predict, and download tools. */
 export function registerActionTools(
   server: McpServer,
@@ -506,14 +516,6 @@ export function registerActionTools(
       ),
   );
 }
-
-/** Names of the guarded write tools (exports + training start). */
-export const WRITE_TOOL_NAMES = [
-  "exports_list",
-  "export_status",
-  "export_create",
-  "training_start",
-] as const;
 
 /** Register export and training-start tools. The cost-incurring ones are guarded. */
 export function registerWriteTools(
@@ -627,9 +629,8 @@ export function registerWriteTools(
 
 /** All tool names registered so far. */
 export const TOOL_NAMES = [
-  ...READ_TOOL_NAMES,
-  ...ACTION_TOOL_NAMES,
-  ...WRITE_TOOL_NAMES,
+  ...READ_ONLY_TOOL_NAMES,
+  ...STATE_CHANGING_TOOL_NAMES,
 ] as const;
 
 /** Register all available tools onto a server. */
