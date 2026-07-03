@@ -79,6 +79,12 @@ type ToolDefinition = {
   stateChanging: boolean;
   description: string;
   inputSchema: Record<string, z.ZodTypeAny>;
+  annotations: {
+    readOnlyHint: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
   createHandler: (getClient: () => UltralyticsClient) => ToolHandler;
 };
 
@@ -93,6 +99,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "List computer-vision projects in your Ultralytics workspace.",
     inputSchema: { username: z.string().optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ username }) =>
@@ -106,7 +113,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description:
       "Get details for one project by id, slug, username/slug, or project ul:// URI.",
-    inputSchema: { project: z.string() },
+    inputSchema: {
+      project: z
+        .string()
+        .describe("Project ref by id, slug, username/slug, or ul:// URI."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ project }) =>
@@ -121,6 +133,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       q: z.string(),
       sort: z.string().optional(),
       offset: z.number().int().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
     },
     createHandler:
       (getClient) =>
@@ -143,6 +160,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       slug: z.string().optional(),
       description: z.string().optional(),
     },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     createHandler:
       (getClient) =>
       async ({ name, slug, description }) =>
@@ -160,7 +182,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: true,
     description:
       "Soft-delete a project by id, slug, username/slug, or project ul:// URI.",
-    inputSchema: { project: z.string() },
+    inputSchema: {
+      project: z
+        .string()
+        .describe("Project ref by id, slug, username/slug, or ul:// URI."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    },
     createHandler:
       (getClient) =>
       async ({ project }) =>
@@ -172,6 +203,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "List datasets in your Ultralytics workspace.",
     inputSchema: { username: z.string().optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ username }) =>
@@ -185,7 +217,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description:
       "Get details for one dataset by id, slug, username/slug, or dataset ul:// URI.",
-    inputSchema: { dataset: z.string() },
+    inputSchema: {
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ dataset }) =>
@@ -201,6 +238,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       sort: z.string().optional(),
       offset: z.number().int().optional(),
       task: z.array(z.string()).optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
     },
     createHandler:
       (getClient) =>
@@ -221,11 +263,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description: "Create a dataset in your Ultralytics workspace.",
     inputSchema: {
       name: z.string(),
-      task: z.string(),
+      task: z
+        .string()
+        .describe(
+          "Dataset task such as detect, segment, semantic, pose, obb, or classify.",
+        ),
       slug: z.string(),
       description: z.string().optional(),
       visibility: z.string().optional(),
       classNames: z.array(z.string()).optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     createHandler:
       (getClient) =>
@@ -247,7 +298,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "List images in a dataset with optional filtering.",
     inputSchema: {
-      dataset: z.string(),
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
       split: z.string().optional(),
       search: z.string().optional(),
       hasLabel: z.boolean().optional(),
@@ -256,6 +309,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       offset: z.number().optional(),
       includeImageUrls: z.boolean().optional(),
     },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({
@@ -287,9 +341,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "Get export link for latest or one frozen dataset version.",
     inputSchema: {
-      dataset: z.string(),
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
       version: z.number().optional(),
     },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ dataset, version }) =>
@@ -306,8 +363,15 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: true,
     description: "Create a frozen dataset version snapshot.",
     inputSchema: {
-      dataset: z.string(),
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
       description: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     createHandler:
       (getClient) =>
@@ -325,7 +389,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: true,
     description:
       "Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI.",
-    inputSchema: { dataset: z.string() },
+    inputSchema: {
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    },
     createHandler:
       (getClient) =>
       async ({ dataset }) =>
@@ -337,9 +410,17 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: true,
     description: "Start a remote URL ingest job for an existing dataset.",
     inputSchema: {
-      dataset: z.string(),
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
       sourceUrl: z.string(),
       targetSplit: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
     },
     createHandler:
       (getClient) =>
@@ -359,9 +440,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Upload a local dataset archive file and start ingest for an existing dataset.",
     inputSchema: {
-      dataset: z.string(),
-      file_path: z.string(),
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+      file_path: z.string().describe("Local path to dataset archive file."),
       targetSplit: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     createHandler:
       (getClient) =>
@@ -381,9 +469,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Upload a local image folder as a zip and start ingest for an existing dataset.",
     inputSchema: {
-      dataset: z.string(),
-      folder_path: z.string(),
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+      folder_path: z.string().describe("Local path to image folder."),
       targetSplit: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     createHandler:
       (getClient) =>
@@ -403,11 +498,18 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Upload a local video by extracting JPEG frames with ffmpeg, then start dataset ingest for an existing dataset.",
     inputSchema: {
-      dataset: z.string(),
-      video_path: z.string(),
+      dataset: z
+        .string()
+        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+      video_path: z.string().describe("Local path to source video file."),
       fps: z.number().optional(),
       max_frames: z.number().int().optional(),
       targetSplit: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     createHandler:
       (getClient) =>
@@ -428,7 +530,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description:
       "List models in a project by project id, slug, username/slug, or project ul:// URI.",
-    inputSchema: { project: z.string() },
+    inputSchema: {
+      project: z
+        .string()
+        .describe("Project ref by id, slug, username/slug, or ul:// URI."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ project }) =>
@@ -439,7 +546,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description: "Get one model by id, or by slug plus project.",
-    inputSchema: { model: z.string(), project: z.string().optional() },
+    inputSchema: {
+      model: z
+        .string()
+        .describe("Model id, or slug when project is also provided."),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ model, project }) =>
@@ -457,6 +573,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "Get current cloud-GPU stock status by GPU type.",
     inputSchema: {},
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     createHandler: (getClient) => async () =>
       toMcpTextResult(await gpuAvailability(getClient())),
   }),
@@ -467,11 +588,18 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Report a model's training status and progress (works for private and public projects).",
     inputSchema: {
-      model: z.string(),
+      model: z
+        .string()
+        .describe("Model id, or slug when project is also provided."),
       project: z.string().optional(),
       include_metrics: z.boolean().optional(),
       include_history: z.boolean().optional(),
       history_last_n: z.number().int().positive().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
     },
     createHandler:
       (getClient) =>
@@ -502,12 +630,23 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Run inference with a trained model on an image URL or base64 source (no local file paths).",
     inputSchema: {
-      model: z.string(),
-      source: z.string(),
+      model: z
+        .string()
+        .describe("Model id, or slug when project is also provided."),
+      source: z
+        .string()
+        .describe(
+          "Image URL or base64 input string. Local file paths are not supported.",
+        ),
       project: z.string().optional(),
       conf: z.number().optional(),
       iou: z.number().optional(),
       imgsz: z.number().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
     },
     createHandler:
       (getClient) =>
@@ -529,11 +668,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Download one trained model weight file to an explicit local path.",
     inputSchema: {
-      model: z.string(),
-      output_path: z.string(),
+      model: z
+        .string()
+        .describe("Model id, or slug when project is also provided."),
+      output_path: z
+        .string()
+        .describe("Local destination path for downloaded model weights."),
       project: z.string().optional(),
       filename: z.string().optional(),
       overwrite: z.boolean().optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     createHandler:
       (getClient) =>
@@ -552,7 +700,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: false,
     description: "List export jobs for a model.",
-    inputSchema: { model: z.string(), project: z.string().optional() },
+    inputSchema: {
+      model: z
+        .string()
+        .describe("Model id, or slug when project is also provided."),
+      project: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ model, project }) =>
@@ -569,7 +723,10 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: false,
     description: "Get status for one export job by 24-character export id.",
-    inputSchema: { export_id: z.string() },
+    inputSchema: {
+      export_id: z.string().describe("24-character export job id."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
       async ({ export_id }) =>
@@ -582,14 +739,25 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Create a model export job (state-changing, may cost credits). Requires confirm_cost=true.",
     inputSchema: {
-      model: z.string(),
-      format: z.string(),
+      model: z
+        .string()
+        .describe("Model id, or slug when project is also provided."),
+      format: z.string().describe("Requested export format."),
       project: z.string().optional(),
       gpu_type: z.string().optional(),
       imgsz: z.number().optional(),
       half: z.boolean().optional(),
       dynamic: z.boolean().optional(),
-      confirm_cost: z.boolean().optional(),
+      confirm_cost: z
+        .boolean()
+        .optional()
+        .describe("Must be true to allow a credit-costing export job."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
     },
     createHandler:
       (getClient) =>
@@ -621,16 +789,33 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Requires confirm_cost=true.",
     inputSchema: {
-      model: z.string(),
-      project: z.string(),
-      dataset: z.string(),
-      gpu_type: z.string(),
+      model: z
+        .string()
+        .describe(
+          "Existing model ref, or official YOLO base checkpoint such as yolo11n.pt or yolo11n-seg.pt. Checkpoint mode auto-creates a project model.",
+        ),
+      project: z
+        .string()
+        .describe("Project ref that owns the training job and resolved model."),
+      dataset: z
+        .string()
+        .describe("Dataset ref used as training data for the job."),
+      gpu_type: z.string().describe("Cloud GPU type to allocate for training."),
       train_args: z.record(z.string(), z.unknown()).optional(),
       epochs: z.number().optional(),
       imgsz: z.number().optional(),
       batch: z.number().optional(),
       name: z.string().optional(),
-      confirm_cost: z.boolean().optional(),
+      confirm_cost: z
+        .boolean()
+        .optional()
+        .describe("Must be true to allow a credit-costing training run."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
     },
     createHandler:
       (getClient) =>
@@ -696,6 +881,7 @@ function registerToolDefinitions(
       {
         description: definition.description,
         inputSchema: definition.inputSchema,
+        annotations: definition.annotations,
       },
       definition.createHandler(getClient),
     );
