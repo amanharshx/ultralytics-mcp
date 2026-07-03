@@ -79,6 +79,11 @@ type ToolDefinition = {
   stateChanging: boolean;
   description: string;
   inputSchema: Record<string, z.ZodTypeAny>;
+  docNote?: string;
+  examples?: Array<{
+    title: string;
+    input: Record<string, unknown>;
+  }>;
   annotations: {
     readOnlyHint: boolean;
     destructiveHint?: boolean;
@@ -451,6 +456,18 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       destructiveHint: false,
       idempotentHint: false,
     },
+    docNote:
+      "Uses a local archive file path and starts ingest into an existing dataset.",
+    examples: [
+      {
+        title: "Upload dataset archive",
+        input: {
+          dataset: "team/datasets/warehouse-items",
+          file_path: "/data/warehouse-items.zip",
+          targetSplit: "train",
+        },
+      },
+    ],
     createHandler:
       (getClient) =>
       async ({ dataset, file_path, targetSplit }) =>
@@ -480,6 +497,18 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       destructiveHint: false,
       idempotentHint: false,
     },
+    docNote:
+      "Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset.",
+    examples: [
+      {
+        title: "Upload image folder",
+        input: {
+          dataset: "team/datasets/warehouse-items",
+          folder_path: "/data/warehouse-items",
+          targetSplit: "train",
+        },
+      },
+    ],
     createHandler:
       (getClient) =>
       async ({ dataset, folder_path, targetSplit }) =>
@@ -511,6 +540,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       destructiveHint: false,
       idempotentHint: false,
     },
+    docNote:
+      "Uses a local video path, extracts JPEG frames with ffmpeg, and starts ingest into an existing dataset.",
+    examples: [
+      {
+        title: "Upload video for frame extraction",
+        input: {
+          dataset: "team/datasets/factory-lines",
+          video_path: "/videos/factory-shift.mp4",
+          fps: 2,
+          max_frames: 500,
+          targetSplit: "train",
+        },
+      },
+    ],
     createHandler:
       (getClient) =>
       async ({ dataset, video_path, fps, max_frames, targetSplit }) =>
@@ -648,6 +691,23 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       destructiveHint: false,
       openWorldHint: true,
     },
+    examples: [
+      {
+        title: "Predict from image URL",
+        input: {
+          model: "team/project/my-model",
+          source: "https://images.example.com/example.jpg",
+          conf: 0.25,
+        },
+      },
+      {
+        title: "Predict from base64 input",
+        input: {
+          model: "team/project/my-model",
+          source: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+        },
+      },
+    ],
     createHandler:
       (getClient) =>
       async ({ model, source, project, conf, iou, imgsz }) =>
@@ -683,6 +743,17 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       destructiveHint: false,
       idempotentHint: false,
     },
+    docNote: "Writes model weights to a local filesystem path.",
+    examples: [
+      {
+        title: "Download model weights",
+        input: {
+          model: "team/project/my-model",
+          output_path: "/tmp/model.pt",
+          overwrite: true,
+        },
+      },
+    ],
     createHandler:
       (getClient) =>
       async ({ model, output_path, project, filename, overwrite }) =>
@@ -759,6 +830,18 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       idempotentHint: false,
       openWorldHint: true,
     },
+    docNote:
+      "State-changing export job that may cost credits. Set `confirm_cost` to `true` explicitly.",
+    examples: [
+      {
+        title: "Create export job",
+        input: {
+          model: "team/project/my-model",
+          format: "onnx",
+          confirm_cost: true,
+        },
+      },
+    ],
     createHandler:
       (getClient) =>
       async ({
@@ -817,6 +900,30 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       idempotentHint: false,
       openWorldHint: true,
     },
+    docNote:
+      "Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt` trigger checkpoint mode, auto-create a project model, and require dataset-task compatibility.",
+    examples: [
+      {
+        title: "Train from existing model",
+        input: {
+          model: "team/project/my-model",
+          project: "team/project",
+          dataset: "team/datasets/warehouse-items",
+          gpu_type: "rtx-4090",
+          confirm_cost: true,
+        },
+      },
+      {
+        title: "Train from official YOLO checkpoint",
+        input: {
+          model: "yolo11n-seg.pt",
+          project: "team/project",
+          dataset: "team/datasets/road-segments",
+          gpu_type: "rtx-4090",
+          confirm_cost: true,
+        },
+      },
+    ],
     createHandler:
       (getClient) =>
       async ({
