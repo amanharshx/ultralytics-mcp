@@ -12,6 +12,7 @@ const KEY_METRICS = [
   "metrics/mAP50(M)",
   "metrics/mAP50-95(M)",
 ];
+const RESERVED_TRAIN_ARG_KEYS = ["data", "model"] as const;
 
 /** Format a percentage like Python's `str(round(x, 1))` (whole numbers keep `.0`). */
 function formatPercent(value: number): string {
@@ -21,6 +22,16 @@ function formatPercent(value: number): string {
 function validateHistoryLastN(historyLastN: number): void {
   if (!Number.isInteger(historyLastN) || historyLastN <= 0) {
     throw new Error("`history_last_n` must be a positive integer.");
+  }
+}
+
+function validateTrainArgs(trainArgs: Record<string, unknown>): void {
+  for (const key of RESERVED_TRAIN_ARG_KEYS) {
+    if (key in trainArgs) {
+      throw new Error(
+        `\`train_args.${key}\` is reserved; use top-level tool inputs instead.`,
+      );
+    }
   }
 }
 
@@ -152,6 +163,7 @@ export async function trainingStart(
     project: string;
     dataset: string;
     gpuType: string;
+    trainArgs?: Record<string, unknown>;
     epochs?: number;
     imgsz?: number;
     batch?: number;
@@ -164,6 +176,7 @@ export async function trainingStart(
     project,
     dataset,
     gpuType,
+    trainArgs: passthroughTrainArgs = {},
     epochs,
     imgsz,
     batch,
@@ -176,12 +189,16 @@ export async function trainingStart(
   if (!gpuType?.trim()) {
     throw new Error("`gpu_type` is required.");
   }
+  validateTrainArgs(passthroughTrainArgs);
 
   const modelId = await resolveModel(client, model, project);
   const projectId = await resolveProject(client, project);
   const datasetId = await resolveDataset(client, dataset);
 
-  const trainArgs: Record<string, unknown> = { data: datasetId };
+  const trainArgs: Record<string, unknown> = {
+    ...passthroughTrainArgs,
+    data: datasetId,
+  };
   if (epochs !== undefined) {
     if (epochs <= 0) {
       throw new Error("`epochs` must be greater than 0.");
