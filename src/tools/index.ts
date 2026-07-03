@@ -67,40 +67,613 @@ export {
 } from "./projects.js";
 export { trainingMonitor, trainingStart } from "./training.js";
 
+type RegistrationGroup = "read" | "action" | "write";
+
+type ToolHandler = (
+  args: Record<string, unknown>,
+) => Promise<ReturnType<typeof toMcpTextResult>>;
+
+type ToolDefinition = {
+  name: string;
+  registrationGroup: RegistrationGroup;
+  stateChanging: boolean;
+  description: string;
+  inputSchema: Record<string, z.ZodTypeAny>;
+  createHandler: (getClient: () => UltralyticsClient) => ToolHandler;
+};
+
+function tool(definition: ToolDefinition): ToolDefinition {
+  return definition;
+}
+
+export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
+  tool({
+    name: "projects_list",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "List computer-vision projects in your Ultralytics workspace.",
+    inputSchema: { username: z.string().optional() },
+    createHandler:
+      (getClient) =>
+      async ({ username }) =>
+        toMcpTextResult(
+          await projectsList(getClient(), username as string | undefined),
+        ),
+  }),
+  tool({
+    name: "projects_get",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Get details for one project by id, slug, username/slug, or project ul:// URI.",
+    inputSchema: { project: z.string() },
+    createHandler:
+      (getClient) =>
+      async ({ project }) =>
+        toMcpTextResult(await projectsGet(getClient(), project as string)),
+  }),
+  tool({
+    name: "explore_projects",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "Search public projects on Ultralytics Explore.",
+    inputSchema: {
+      q: z.string(),
+      sort: z.string().optional(),
+      offset: z.number().int().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ q, sort, offset }) =>
+        toMcpTextResult(
+          await exploreProjects(getClient(), {
+            q: q as string,
+            sort: sort as string | undefined,
+            offset: offset as number | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "projects_create",
+    registrationGroup: "read",
+    stateChanging: true,
+    description: "Create a project in your Ultralytics workspace.",
+    inputSchema: {
+      name: z.string(),
+      slug: z.string().optional(),
+      description: z.string().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ name, slug, description }) =>
+        toMcpTextResult(
+          await projectsCreate(getClient(), {
+            name: name as string,
+            slug: slug as string | undefined,
+            description: description as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "projects_delete",
+    registrationGroup: "read",
+    stateChanging: true,
+    description:
+      "Soft-delete a project by id, slug, username/slug, or project ul:// URI.",
+    inputSchema: { project: z.string() },
+    createHandler:
+      (getClient) =>
+      async ({ project }) =>
+        toMcpTextResult(await projectsDelete(getClient(), project as string)),
+  }),
+  tool({
+    name: "datasets_list",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "List datasets in your Ultralytics workspace.",
+    inputSchema: { username: z.string().optional() },
+    createHandler:
+      (getClient) =>
+      async ({ username }) =>
+        toMcpTextResult(
+          await datasetsList(getClient(), username as string | undefined),
+        ),
+  }),
+  tool({
+    name: "datasets_get",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Get details for one dataset by id, slug, username/slug, or dataset ul:// URI.",
+    inputSchema: { dataset: z.string() },
+    createHandler:
+      (getClient) =>
+      async ({ dataset }) =>
+        toMcpTextResult(await datasetsGet(getClient(), dataset as string)),
+  }),
+  tool({
+    name: "explore_datasets",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "Search public datasets on Ultralytics Explore.",
+    inputSchema: {
+      q: z.string(),
+      sort: z.string().optional(),
+      offset: z.number().int().optional(),
+      task: z.array(z.string()).optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ q, sort, offset, task }) =>
+        toMcpTextResult(
+          await exploreDatasets(getClient(), {
+            q: q as string,
+            sort: sort as string | undefined,
+            offset: offset as number | undefined,
+            task: task as string[] | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "datasets_create",
+    registrationGroup: "read",
+    stateChanging: true,
+    description: "Create a dataset in your Ultralytics workspace.",
+    inputSchema: {
+      name: z.string(),
+      task: z.string(),
+      slug: z.string(),
+      description: z.string().optional(),
+      visibility: z.string().optional(),
+      classNames: z.array(z.string()).optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ name, task, slug, description, visibility, classNames }) =>
+        toMcpTextResult(
+          await datasetsCreate(getClient(), {
+            name: name as string,
+            task: task as string,
+            slug: slug as string,
+            description: description as string | undefined,
+            visibility: visibility as string | undefined,
+            classNames: classNames as string[] | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_images_list",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "List images in a dataset with optional filtering.",
+    inputSchema: {
+      dataset: z.string(),
+      split: z.string().optional(),
+      search: z.string().optional(),
+      hasLabel: z.boolean().optional(),
+      classIds: z.array(z.string()).optional(),
+      limit: z.number().optional(),
+      offset: z.number().optional(),
+      includeImageUrls: z.boolean().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({
+        dataset,
+        split,
+        search,
+        hasLabel,
+        classIds,
+        limit,
+        offset,
+        includeImageUrls,
+      }) =>
+        toMcpTextResult(
+          await datasetImagesList(getClient(), {
+            dataset: dataset as string,
+            split: split as string | undefined,
+            search: search as string | undefined,
+            hasLabel: hasLabel as boolean | undefined,
+            classIds: classIds as string[] | undefined,
+            limit: limit as number | undefined,
+            offset: offset as number | undefined,
+            includeImageUrls: includeImageUrls as boolean | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_export",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "Get export link for latest or one frozen dataset version.",
+    inputSchema: {
+      dataset: z.string(),
+      version: z.number().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, version }) =>
+        toMcpTextResult(
+          await datasetExport(getClient(), {
+            dataset: dataset as string,
+            version: version as number | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_version_create",
+    registrationGroup: "read",
+    stateChanging: true,
+    description: "Create a frozen dataset version snapshot.",
+    inputSchema: {
+      dataset: z.string(),
+      description: z.string().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, description }) =>
+        toMcpTextResult(
+          await datasetVersionCreate(getClient(), {
+            dataset: dataset as string,
+            description: description as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "datasets_delete",
+    registrationGroup: "read",
+    stateChanging: true,
+    description:
+      "Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI.",
+    inputSchema: { dataset: z.string() },
+    createHandler:
+      (getClient) =>
+      async ({ dataset }) =>
+        toMcpTextResult(await datasetsDelete(getClient(), dataset as string)),
+  }),
+  tool({
+    name: "dataset_ingest",
+    registrationGroup: "read",
+    stateChanging: true,
+    description: "Start a remote URL ingest job for an existing dataset.",
+    inputSchema: {
+      dataset: z.string(),
+      sourceUrl: z.string(),
+      targetSplit: z.string().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, sourceUrl, targetSplit }) =>
+        toMcpTextResult(
+          await datasetsIngest(getClient(), {
+            dataset: dataset as string,
+            sourceUrl: sourceUrl as string,
+            targetSplit: targetSplit as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_upload_file",
+    registrationGroup: "read",
+    stateChanging: true,
+    description:
+      "Upload a local dataset archive file and start ingest for an existing dataset.",
+    inputSchema: {
+      dataset: z.string(),
+      file_path: z.string(),
+      targetSplit: z.string().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, file_path, targetSplit }) =>
+        toMcpTextResult(
+          await datasetUploadFile(getClient(), {
+            dataset: dataset as string,
+            filePath: file_path as string,
+            targetSplit: targetSplit as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_upload_folder",
+    registrationGroup: "read",
+    stateChanging: true,
+    description:
+      "Upload a local image folder as a zip and start ingest for an existing dataset.",
+    inputSchema: {
+      dataset: z.string(),
+      folder_path: z.string(),
+      targetSplit: z.string().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, folder_path, targetSplit }) =>
+        toMcpTextResult(
+          await datasetUploadFolder(getClient(), {
+            dataset: dataset as string,
+            folderPath: folder_path as string,
+            targetSplit: targetSplit as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_upload_video",
+    registrationGroup: "read",
+    stateChanging: true,
+    description:
+      "Upload a local video by extracting JPEG frames with ffmpeg, then start dataset ingest for an existing dataset.",
+    inputSchema: {
+      dataset: z.string(),
+      video_path: z.string(),
+      fps: z.number().optional(),
+      max_frames: z.number().int().optional(),
+      targetSplit: z.string().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, video_path, fps, max_frames, targetSplit }) =>
+        toMcpTextResult(
+          await datasetUploadVideo(getClient(), {
+            dataset: dataset as string,
+            videoPath: video_path as string,
+            fps: fps as number | undefined,
+            maxFrames: max_frames as number | undefined,
+            targetSplit: targetSplit as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "models_list",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "List models in a project by project id, slug, username/slug, or project ul:// URI.",
+    inputSchema: { project: z.string() },
+    createHandler:
+      (getClient) =>
+      async ({ project }) =>
+        toMcpTextResult(await modelsList(getClient(), project as string)),
+  }),
+  tool({
+    name: "models_get",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "Get one model by id, or by slug plus project.",
+    inputSchema: { model: z.string(), project: z.string().optional() },
+    createHandler:
+      (getClient) =>
+      async ({ model, project }) =>
+        toMcpTextResult(
+          await modelsGet(
+            getClient(),
+            model as string,
+            project as string | undefined,
+          ),
+        ),
+  }),
+  tool({
+    name: "gpu_availability",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "Get current cloud-GPU stock status by GPU type.",
+    inputSchema: {},
+    createHandler: (getClient) => async () =>
+      toMcpTextResult(await gpuAvailability(getClient())),
+  }),
+  tool({
+    name: "training_monitor",
+    registrationGroup: "action",
+    stateChanging: false,
+    description:
+      "Report a model's training status and progress (works for private and public projects).",
+    inputSchema: {
+      model: z.string(),
+      project: z.string().optional(),
+      include_metrics: z.boolean().optional(),
+      include_history: z.boolean().optional(),
+      history_last_n: z.number().int().positive().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({
+        model,
+        project,
+        include_metrics,
+        include_history,
+        history_last_n,
+      }) =>
+        toMcpTextResult(
+          await trainingMonitor(
+            getClient(),
+            model as string,
+            project as string | undefined,
+            {
+              includeMetrics: include_metrics as boolean | undefined,
+              includeHistory: include_history as boolean | undefined,
+              historyLastN: history_last_n as number | undefined,
+            },
+          ),
+        ),
+  }),
+  tool({
+    name: "model_predict",
+    registrationGroup: "action",
+    stateChanging: false,
+    description:
+      "Run inference with a trained model on an image URL or base64 source (no local file paths).",
+    inputSchema: {
+      model: z.string(),
+      source: z.string(),
+      project: z.string().optional(),
+      conf: z.number().optional(),
+      iou: z.number().optional(),
+      imgsz: z.number().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ model, source, project, conf, iou, imgsz }) =>
+        toMcpTextResult(
+          await modelPredict(getClient(), model as string, {
+            source: source as string,
+            project: project as string | undefined,
+            conf: conf as number | undefined,
+            iou: iou as number | undefined,
+            imgsz: imgsz as number | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "model_download",
+    registrationGroup: "action",
+    stateChanging: true,
+    description:
+      "Download one trained model weight file to an explicit local path.",
+    inputSchema: {
+      model: z.string(),
+      output_path: z.string(),
+      project: z.string().optional(),
+      filename: z.string().optional(),
+      overwrite: z.boolean().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({ model, output_path, project, filename, overwrite }) =>
+        toMcpTextResult(
+          await modelDownload(getClient(), model as string, {
+            outputPath: output_path as string,
+            project: project as string | undefined,
+            filename: filename as string | undefined,
+            overwrite: overwrite as boolean | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "exports_list",
+    registrationGroup: "write",
+    stateChanging: false,
+    description: "List export jobs for a model.",
+    inputSchema: { model: z.string(), project: z.string().optional() },
+    createHandler:
+      (getClient) =>
+      async ({ model, project }) =>
+        toMcpTextResult(
+          await exportsList(
+            getClient(),
+            model as string,
+            project as string | undefined,
+          ),
+        ),
+  }),
+  tool({
+    name: "export_status",
+    registrationGroup: "write",
+    stateChanging: false,
+    description: "Get status for one export job by 24-character export id.",
+    inputSchema: { export_id: z.string() },
+    createHandler:
+      (getClient) =>
+      async ({ export_id }) =>
+        toMcpTextResult(await exportStatus(getClient(), export_id as string)),
+  }),
+  tool({
+    name: "export_create",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Create a model export job (state-changing, may cost credits). Requires confirm_cost=true.",
+    inputSchema: {
+      model: z.string(),
+      format: z.string(),
+      project: z.string().optional(),
+      gpu_type: z.string().optional(),
+      imgsz: z.number().optional(),
+      half: z.boolean().optional(),
+      dynamic: z.boolean().optional(),
+      confirm_cost: z.boolean().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({
+        model,
+        format,
+        project,
+        gpu_type,
+        imgsz,
+        half,
+        dynamic,
+        confirm_cost,
+      }) =>
+        toMcpTextResult(
+          await exportCreate(getClient(), model as string, format as string, {
+            project: project as string | undefined,
+            gpuType: gpu_type as string | undefined,
+            imgsz: imgsz as number | undefined,
+            half: half as boolean | undefined,
+            dynamic: dynamic as boolean | undefined,
+            confirmCost: confirm_cost as boolean | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "training_start",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Requires confirm_cost=true.",
+    inputSchema: {
+      model: z.string(),
+      project: z.string(),
+      dataset: z.string(),
+      gpu_type: z.string(),
+      train_args: z.record(z.string(), z.unknown()).optional(),
+      epochs: z.number().optional(),
+      imgsz: z.number().optional(),
+      batch: z.number().optional(),
+      name: z.string().optional(),
+      confirm_cost: z.boolean().optional(),
+    },
+    createHandler:
+      (getClient) =>
+      async ({
+        model,
+        project,
+        dataset,
+        gpu_type,
+        train_args,
+        epochs,
+        imgsz,
+        batch,
+        name,
+        confirm_cost,
+      }) =>
+        toMcpTextResult(
+          await trainingStart(getClient(), {
+            model: model as string,
+            project: project as string,
+            dataset: dataset as string,
+            gpuType: gpu_type as string,
+            trainArgs: train_args as Record<string, unknown> | undefined,
+            epochs: epochs as number | undefined,
+            imgsz: imgsz as number | undefined,
+            batch: batch as number | undefined,
+            name: name as string | undefined,
+            confirmCost: confirm_cost as boolean | undefined,
+          }),
+        ),
+  }),
+];
+
+function toolNames(predicate: (tool: ToolDefinition) => boolean): string[] {
+  return TOOL_DEFINITIONS.filter(predicate).map((tool) => tool.name);
+}
+
 /** Names of tools that do not mutate remote or local state. */
-export const READ_ONLY_TOOL_NAMES = [
-  "projects_list",
-  "projects_get",
-  "explore_projects",
-  "datasets_list",
-  "datasets_get",
-  "explore_datasets",
-  "dataset_images_list",
-  "dataset_export",
-  "models_list",
-  "models_get",
-  "gpu_availability",
-  "training_monitor",
-  "model_predict",
-  "exports_list",
-  "export_status",
-] as const;
+export const READ_ONLY_TOOL_NAMES = toolNames((tool) => !tool.stateChanging);
 
 /** Names of tools that mutate remote state or local filesystem state. */
-export const STATE_CHANGING_TOOL_NAMES = [
-  "projects_create",
-  "projects_delete",
-  "datasets_create",
-  "dataset_version_create",
-  "datasets_delete",
-  "dataset_ingest",
-  "dataset_upload_file",
-  "dataset_upload_folder",
-  "dataset_upload_video",
-  "model_download",
-  "export_create",
-  "training_start",
-] as const;
+export const STATE_CHANGING_TOOL_NAMES = toolNames(
+  (tool) => tool.stateChanging,
+);
 
 /** Names of the tools grouped by operational semantics. */
 export const TOOL_SETS = {
@@ -108,328 +681,33 @@ export const TOOL_SETS = {
   stateChanging: STATE_CHANGING_TOOL_NAMES,
 } as const;
 
+function registerToolDefinitions(
+  server: McpServer,
+  getClient: () => UltralyticsClient,
+  registrationGroup: RegistrationGroup,
+): void {
+  for (const definition of TOOL_DEFINITIONS) {
+    if (definition.registrationGroup !== registrationGroup) {
+      continue;
+    }
+
+    server.registerTool(
+      definition.name,
+      {
+        description: definition.description,
+        inputSchema: definition.inputSchema,
+      },
+      definition.createHandler(getClient),
+    );
+  }
+}
+
 /** Register the read-only tools onto a server, using a lazy client provider. */
 export function registerReadTools(
   server: McpServer,
   getClient: () => UltralyticsClient,
 ): void {
-  server.registerTool(
-    "projects_list",
-    {
-      description:
-        "List computer-vision projects in your Ultralytics workspace.",
-      inputSchema: { username: z.string().optional() },
-    },
-    async ({ username }) =>
-      toMcpTextResult(await projectsList(getClient(), username)),
-  );
-
-  server.registerTool(
-    "projects_get",
-    {
-      description:
-        "Get details for one project by id, slug, username/slug, or project ul:// URI.",
-      inputSchema: { project: z.string() },
-    },
-    async ({ project }) =>
-      toMcpTextResult(await projectsGet(getClient(), project)),
-  );
-
-  server.registerTool(
-    "explore_projects",
-    {
-      description: "Search public projects on Ultralytics Explore.",
-      inputSchema: {
-        q: z.string(),
-        sort: z.string().optional(),
-        offset: z.number().int().optional(),
-      },
-    },
-    async ({ q, sort, offset }) =>
-      toMcpTextResult(await exploreProjects(getClient(), { q, sort, offset })),
-  );
-
-  server.registerTool(
-    "projects_create",
-    {
-      description: "Create a project in your Ultralytics workspace.",
-      inputSchema: {
-        name: z.string(),
-        slug: z.string().optional(),
-        description: z.string().optional(),
-      },
-    },
-    async ({ name, slug, description }) =>
-      toMcpTextResult(
-        await projectsCreate(getClient(), { name, slug, description }),
-      ),
-  );
-
-  server.registerTool(
-    "projects_delete",
-    {
-      description:
-        "Soft-delete a project by id, slug, username/slug, or project ul:// URI.",
-      inputSchema: { project: z.string() },
-    },
-    async ({ project }) =>
-      toMcpTextResult(await projectsDelete(getClient(), project)),
-  );
-
-  server.registerTool(
-    "datasets_list",
-    {
-      description: "List datasets in your Ultralytics workspace.",
-      inputSchema: { username: z.string().optional() },
-    },
-    async ({ username }) =>
-      toMcpTextResult(await datasetsList(getClient(), username)),
-  );
-
-  server.registerTool(
-    "datasets_get",
-    {
-      description:
-        "Get details for one dataset by id, slug, username/slug, or dataset ul:// URI.",
-      inputSchema: { dataset: z.string() },
-    },
-    async ({ dataset }) =>
-      toMcpTextResult(await datasetsGet(getClient(), dataset)),
-  );
-
-  server.registerTool(
-    "explore_datasets",
-    {
-      description: "Search public datasets on Ultralytics Explore.",
-      inputSchema: {
-        q: z.string(),
-        sort: z.string().optional(),
-        offset: z.number().int().optional(),
-        task: z.array(z.string()).optional(),
-      },
-    },
-    async ({ q, sort, offset, task }) =>
-      toMcpTextResult(
-        await exploreDatasets(getClient(), { q, sort, offset, task }),
-      ),
-  );
-
-  server.registerTool(
-    "datasets_create",
-    {
-      description: "Create a dataset in your Ultralytics workspace.",
-      inputSchema: {
-        name: z.string(),
-        task: z.string(),
-        slug: z.string(),
-        description: z.string().optional(),
-        visibility: z.string().optional(),
-        classNames: z.array(z.string()).optional(),
-      },
-    },
-    async ({ name, task, slug, description, visibility, classNames }) =>
-      toMcpTextResult(
-        await datasetsCreate(getClient(), {
-          name,
-          task,
-          slug,
-          description,
-          visibility,
-          classNames,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "dataset_images_list",
-    {
-      description: "List images in a dataset with optional filtering.",
-      inputSchema: {
-        dataset: z.string(),
-        split: z.string().optional(),
-        search: z.string().optional(),
-        hasLabel: z.boolean().optional(),
-        classIds: z.array(z.string()).optional(),
-        limit: z.number().optional(),
-        offset: z.number().optional(),
-        includeImageUrls: z.boolean().optional(),
-      },
-    },
-    async ({
-      dataset,
-      split,
-      search,
-      hasLabel,
-      classIds,
-      limit,
-      offset,
-      includeImageUrls,
-    }) =>
-      toMcpTextResult(
-        await datasetImagesList(getClient(), {
-          dataset,
-          split,
-          search,
-          hasLabel,
-          classIds,
-          limit,
-          offset,
-          includeImageUrls,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "dataset_export",
-    {
-      description: "Get export link for latest or one frozen dataset version.",
-      inputSchema: {
-        dataset: z.string(),
-        version: z.number().optional(),
-      },
-    },
-    async ({ dataset, version }) =>
-      toMcpTextResult(await datasetExport(getClient(), { dataset, version })),
-  );
-
-  server.registerTool(
-    "dataset_version_create",
-    {
-      description: "Create a frozen dataset version snapshot.",
-      inputSchema: {
-        dataset: z.string(),
-        description: z.string().optional(),
-      },
-    },
-    async ({ dataset, description }) =>
-      toMcpTextResult(
-        await datasetVersionCreate(getClient(), { dataset, description }),
-      ),
-  );
-
-  server.registerTool(
-    "datasets_delete",
-    {
-      description:
-        "Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI.",
-      inputSchema: { dataset: z.string() },
-    },
-    async ({ dataset }) =>
-      toMcpTextResult(await datasetsDelete(getClient(), dataset)),
-  );
-
-  server.registerTool(
-    "dataset_ingest",
-    {
-      description: "Start a remote URL ingest job for an existing dataset.",
-      inputSchema: {
-        dataset: z.string(),
-        sourceUrl: z.string(),
-        targetSplit: z.string().optional(),
-      },
-    },
-    async ({ dataset, sourceUrl, targetSplit }) =>
-      toMcpTextResult(
-        await datasetsIngest(getClient(), { dataset, sourceUrl, targetSplit }),
-      ),
-  );
-
-  server.registerTool(
-    "dataset_upload_file",
-    {
-      description:
-        "Upload a local dataset archive file and start ingest for an existing dataset.",
-      inputSchema: {
-        dataset: z.string(),
-        file_path: z.string(),
-        targetSplit: z.string().optional(),
-      },
-    },
-    async ({ dataset, file_path, targetSplit }) =>
-      toMcpTextResult(
-        await datasetUploadFile(getClient(), {
-          dataset,
-          filePath: file_path,
-          targetSplit,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "dataset_upload_folder",
-    {
-      description:
-        "Upload a local image folder as a zip and start ingest for an existing dataset.",
-      inputSchema: {
-        dataset: z.string(),
-        folder_path: z.string(),
-        targetSplit: z.string().optional(),
-      },
-    },
-    async ({ dataset, folder_path, targetSplit }) =>
-      toMcpTextResult(
-        await datasetUploadFolder(getClient(), {
-          dataset,
-          folderPath: folder_path,
-          targetSplit,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "dataset_upload_video",
-    {
-      description:
-        "Upload a local video by extracting JPEG frames with ffmpeg, then start dataset ingest for an existing dataset.",
-      inputSchema: {
-        dataset: z.string(),
-        video_path: z.string(),
-        fps: z.number().optional(),
-        max_frames: z.number().int().optional(),
-        targetSplit: z.string().optional(),
-      },
-    },
-    async ({ dataset, video_path, fps, max_frames, targetSplit }) =>
-      toMcpTextResult(
-        await datasetUploadVideo(getClient(), {
-          dataset,
-          videoPath: video_path,
-          fps,
-          maxFrames: max_frames,
-          targetSplit,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "models_list",
-    {
-      description:
-        "List models in a project by project id, slug, username/slug, or project ul:// URI.",
-      inputSchema: { project: z.string() },
-    },
-    async ({ project }) =>
-      toMcpTextResult(await modelsList(getClient(), project)),
-  );
-
-  server.registerTool(
-    "models_get",
-    {
-      description: "Get one model by id, or by slug plus project.",
-      inputSchema: { model: z.string(), project: z.string().optional() },
-    },
-    async ({ model, project }) =>
-      toMcpTextResult(await modelsGet(getClient(), model, project)),
-  );
-
-  server.registerTool(
-    "gpu_availability",
-    {
-      description: "Get current cloud-GPU stock status by GPU type.",
-      inputSchema: {},
-    },
-    async () => toMcpTextResult(await gpuAvailability(getClient())),
-  );
+  registerToolDefinitions(server, getClient, "read");
 }
 
 /** Register training monitor, predict, and download tools. */
@@ -437,84 +715,7 @@ export function registerActionTools(
   server: McpServer,
   getClient: () => UltralyticsClient,
 ): void {
-  server.registerTool(
-    "training_monitor",
-    {
-      description:
-        "Report a model's training status and progress (works for private and public projects).",
-      inputSchema: {
-        model: z.string(),
-        project: z.string().optional(),
-        include_metrics: z.boolean().optional(),
-        include_history: z.boolean().optional(),
-        history_last_n: z.number().int().positive().optional(),
-      },
-    },
-    async ({
-      model,
-      project,
-      include_metrics,
-      include_history,
-      history_last_n,
-    }) =>
-      toMcpTextResult(
-        await trainingMonitor(getClient(), model, project, {
-          includeMetrics: include_metrics,
-          includeHistory: include_history,
-          historyLastN: history_last_n,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "model_predict",
-    {
-      description:
-        "Run inference with a trained model on an image URL or base64 source (no local file paths).",
-      inputSchema: {
-        model: z.string(),
-        source: z.string(),
-        project: z.string().optional(),
-        conf: z.number().optional(),
-        iou: z.number().optional(),
-        imgsz: z.number().optional(),
-      },
-    },
-    async ({ model, source, project, conf, iou, imgsz }) =>
-      toMcpTextResult(
-        await modelPredict(getClient(), model, {
-          source,
-          project,
-          conf,
-          iou,
-          imgsz,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "model_download",
-    {
-      description:
-        "Download one trained model weight file to an explicit local path.",
-      inputSchema: {
-        model: z.string(),
-        output_path: z.string(),
-        project: z.string().optional(),
-        filename: z.string().optional(),
-        overwrite: z.boolean().optional(),
-      },
-    },
-    async ({ model, output_path, project, filename, overwrite }) =>
-      toMcpTextResult(
-        await modelDownload(getClient(), model, {
-          outputPath: output_path,
-          project,
-          filename,
-          overwrite,
-        }),
-      ),
-  );
+  registerToolDefinitions(server, getClient, "action");
 }
 
 /** Register export and training-start tools. The cost-incurring ones are guarded. */
@@ -522,116 +723,11 @@ export function registerWriteTools(
   server: McpServer,
   getClient: () => UltralyticsClient,
 ): void {
-  server.registerTool(
-    "exports_list",
-    {
-      description: "List export jobs for a model.",
-      inputSchema: { model: z.string(), project: z.string().optional() },
-    },
-    async ({ model, project }) =>
-      toMcpTextResult(await exportsList(getClient(), model, project)),
-  );
-
-  server.registerTool(
-    "export_status",
-    {
-      description: "Get status for one export job by 24-character export id.",
-      inputSchema: { export_id: z.string() },
-    },
-    async ({ export_id }) =>
-      toMcpTextResult(await exportStatus(getClient(), export_id)),
-  );
-
-  server.registerTool(
-    "export_create",
-    {
-      description:
-        "Create a model export job (state-changing, may cost credits). Requires confirm_cost=true.",
-      inputSchema: {
-        model: z.string(),
-        format: z.string(),
-        project: z.string().optional(),
-        gpu_type: z.string().optional(),
-        imgsz: z.number().optional(),
-        half: z.boolean().optional(),
-        dynamic: z.boolean().optional(),
-        confirm_cost: z.boolean().optional(),
-      },
-    },
-    async ({
-      model,
-      format,
-      project,
-      gpu_type,
-      imgsz,
-      half,
-      dynamic,
-      confirm_cost,
-    }) =>
-      toMcpTextResult(
-        await exportCreate(getClient(), model, format, {
-          project,
-          gpuType: gpu_type,
-          imgsz,
-          half,
-          dynamic,
-          confirmCost: confirm_cost,
-        }),
-      ),
-  );
-
-  server.registerTool(
-    "training_start",
-    {
-      description:
-        "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Requires confirm_cost=true.",
-      inputSchema: {
-        model: z.string(),
-        project: z.string(),
-        dataset: z.string(),
-        gpu_type: z.string(),
-        train_args: z.record(z.string(), z.unknown()).optional(),
-        epochs: z.number().optional(),
-        imgsz: z.number().optional(),
-        batch: z.number().optional(),
-        name: z.string().optional(),
-        confirm_cost: z.boolean().optional(),
-      },
-    },
-    async ({
-      model,
-      project,
-      dataset,
-      gpu_type,
-      train_args,
-      epochs,
-      imgsz,
-      batch,
-      name,
-      confirm_cost,
-    }) =>
-      toMcpTextResult(
-        await trainingStart(getClient(), {
-          model,
-          project,
-          dataset,
-          gpuType: gpu_type,
-          trainArgs: train_args,
-          epochs,
-          imgsz,
-          batch,
-          name,
-          confirmCost: confirm_cost,
-        }),
-      ),
-  );
+  registerToolDefinitions(server, getClient, "write");
 }
 
 /** All tool names registered so far. */
-export const TOOL_NAMES = [
-  ...READ_ONLY_TOOL_NAMES,
-  ...STATE_CHANGING_TOOL_NAMES,
-] as const;
+export const TOOL_NAMES = TOOL_DEFINITIONS.map((tool) => tool.name);
 
 /** Register all available tools onto a server. */
 export function registerTools(
