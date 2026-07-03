@@ -143,4 +143,16 @@ test("server registers all available tools over the protocol", async () => {
     include_history: expect.any(Object),
     history_last_n: expect.any(Object),
   });
+
+  const trainingStart = tools.find((tool) => tool.name === "training_start");
+  expect(trainingStart?.inputSchema?.required).toEqual([
+    "model",
+    "project",
+    "dataset",
+    "gpu_type",
+  ]);
+  expect(trainingStart?.inputSchema?.properties).toMatchObject({
+    train_args: expect.any(Object),
+    confirm_cost: expect.any(Object),
+  });
 });
