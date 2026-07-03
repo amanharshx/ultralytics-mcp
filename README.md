@@ -23,7 +23,7 @@ dataset uploads.
   - [Codex](#codex)
 - [Verify Setup](#verify-setup)
 - [What You Can Do](#what-you-can-do)
-- [Tools](#tools-27)
+- [Tools](#tools)
 - [Safety](#safety)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -144,64 +144,16 @@ You should see `ultralytics` in configured MCP servers.
 - Pass advanced YOLO training settings through `training_start.train_args`
 - Start training from existing project models or official YOLO base checkpoints
 
-## Tools (27)
+## Tools
 
-### Projects (5 tools)
+See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-path behavior, and examples for tricky tools.
 
-| Tool | Description |
-| --- | --- |
-| `projects_list` | List projects in your Ultralytics workspace |
-| `projects_get` | Get one project by id, slug, `username/slug`, or `ul://` |
-| `projects_create` | Create a new project |
-| `projects_delete` | Soft-delete a project |
-| `explore_projects` | Search public projects on Ultralytics Explore |
-
-### Datasets (12 tools)
-
-| Tool | Description |
-| --- | --- |
-| `datasets_list` | List datasets in your Ultralytics workspace |
-| `datasets_get` | Get one dataset by id, slug, `username/slug`, or `ul://` |
-| `datasets_create` | Create a new dataset |
-| `datasets_delete` | Soft-delete a dataset |
-| `dataset_images_list` | List images in a dataset with optional filters |
-| `dataset_ingest` | Start a remote ingest job from a source URL |
-| `dataset_upload_file` | Upload a local archive file for dataset ingest |
-| `dataset_upload_folder` | Upload a local image folder for dataset ingest |
-| `dataset_upload_video` | Upload a local video by extracting frames for dataset ingest |
-| `dataset_export` | Get an export link for latest or frozen dataset version |
-| `dataset_version_create` | Create a frozen dataset version snapshot |
-| `explore_datasets` | Search public datasets on Ultralytics Explore |
-
-### Models (4 tools)
-
-| Tool | Description |
-| --- | --- |
-| `models_list` | List trained models and summary metrics |
-| `models_get` | Get one model and its details |
-| `model_predict` | Run inference from an image URL or base64 input |
-| `model_download` | Download a model weight file to a local path |
-
-### Training (2 tools)
-
-| Tool | Description |
-| --- | --- |
-| `training_monitor` | Inspect status, progress, latest metrics, and optional history |
-| `training_start` | Start a cloud training job from an existing model or official YOLO base checkpoint, with explicit cost confirmation and optional `train_args` passthrough |
-
-### Exports (3 tools)
-
-| Tool | Description |
-| --- | --- |
-| `exports_list` | List export jobs |
-| `export_status` | Check export job status |
-| `export_create` | Create an export job with explicit cost confirmation |
-
-### Infrastructure (1 tool)
-
-| Tool | Description |
-| --- | --- |
-| `gpu_availability` | Check cloud GPU availability |
+- Projects: 5 tools
+- Datasets: 12 tools
+- Models: 4 tools
+- Training: 2 tools
+- Exports: 3 tools
+- Infrastructure: 1 tool
 
 ## Safety
 
@@ -245,4 +197,5 @@ npm install
 npm run check
 npm test
 npm run build
+npm run generate:tools
 ```

@@ -35,5 +35,8 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build
-        run: npm run build
+      - name: Generate tool docs
+        run: npm run generate:tools
+
+      - name: Verify generated docs are committed
+        run: git diff --exit-code -- TOOLS.md
