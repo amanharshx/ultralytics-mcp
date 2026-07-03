@@ -4,7 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, expect, test } from "vitest";
 
 import { createServer, SERVER_VERSION } from "../src/server.js";
-import { TOOL_NAMES } from "../src/tools/index.js";
+import { TOOL_NAMES, TOOL_SETS } from "../src/tools/index.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -25,6 +25,19 @@ test("server version stays in sync with package.json", () => {
   };
 
   expect(SERVER_VERSION).toBe(packageJson.version);
+});
+
+test("tool taxonomy keeps write tools out of read-only set", () => {
+  expect(TOOL_SETS.readOnly).toContain("projects_list");
+  expect(TOOL_SETS.readOnly).not.toContain("projects_create");
+  expect(TOOL_SETS.readOnly).not.toContain("dataset_upload_file");
+  expect(TOOL_SETS.stateChanging).toContain("projects_create");
+  expect(TOOL_SETS.stateChanging).toContain("training_start");
+  expect([...TOOL_NAMES]).toContain("training_start");
+  const overlap = TOOL_SETS.readOnly.filter((name) =>
+    TOOL_SETS.stateChanging.includes(name),
+  );
+  expect(overlap).toEqual([]);
 });
 
 test("server registers all available tools over the protocol", async () => {
