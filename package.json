@@ -9,6 +9,7 @@
   "files": [
     "dist",
     "README.md",
+    "TOOLS.md",
     "package.json"
   ],
   "repository": {
@@ -30,6 +31,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "biome check .",
     "format": "biome check --write .",
+    "generate:tools": "npm run build && node scripts/generate-tools.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build",
     "test": "vitest run"
