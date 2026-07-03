@@ -142,6 +142,7 @@ You should see `ultralytics` in configured MCP servers.
 - Download model weights to local path
 - Create exports and training jobs with explicit cost confirmation
 - Pass advanced YOLO training settings through `training_start.train_args`
+- Start training from existing project models or official YOLO base checkpoints
 
 ## Tools (27)
 
@@ -186,7 +187,7 @@ You should see `ultralytics` in configured MCP servers.
 | Tool | Description |
 | --- | --- |
 | `training_monitor` | Inspect status, progress, latest metrics, and optional history |
-| `training_start` | Start a cloud training job with explicit cost confirmation and optional `train_args` passthrough |
+| `training_start` | Start a cloud training job from an existing model or official YOLO base checkpoint, with explicit cost confirmation and optional `train_args` passthrough |
 
 ### Exports (3 tools)
 
