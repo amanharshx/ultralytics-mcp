@@ -24,6 +24,13 @@ interface Resource {
   username?: string;
 }
 
+export interface ResolvedDatasetDetails {
+  id: string;
+  task: string | null;
+  name: string | null;
+  slug: string | null;
+}
+
 /** Return true when `ref` is a 24-hex Platform object id. */
 export function looksLikeId(ref: string): boolean {
   return ID_RE.test(ref.trim());
@@ -62,6 +69,16 @@ function listField(data: unknown, field: string): Resource[] {
     }
   }
   return [];
+}
+
+function recordField(data: unknown, field: string): Record<string, unknown> {
+  if (data && typeof data === "object") {
+    const value = (data as Record<string, unknown>)[field];
+    if (value && typeof value === "object") {
+      return value as Record<string, unknown>;
+    }
+  }
+  return {};
 }
 
 function select(matches: Resource[], kind: string, ref: string): Resource {
@@ -164,6 +181,27 @@ export async function resolveDataset(
       (username === null || dataset.username === username),
   );
   return select(matches, "dataset", ref)._id as string;
+}
+
+/** Resolve a dataset ref and return its id plus task metadata. */
+export async function resolveDatasetDetails(
+  client: UltralyticsClient,
+  ref: string,
+): Promise<ResolvedDatasetDetails> {
+  const id = await resolveDataset(client, ref);
+  const data = await client.get(`/datasets/${id}`);
+  const dataset =
+    data &&
+    typeof data === "object" &&
+    "dataset" in (data as Record<string, unknown>)
+      ? recordField(data, "dataset")
+      : ((data as Record<string, unknown> | null) ?? {});
+  return {
+    id,
+    task: typeof dataset.task === "string" ? dataset.task : null,
+    name: typeof dataset.name === "string" ? dataset.name : null,
+    slug: typeof dataset.slug === "string" ? dataset.slug : null,
+  };
 }
 
 /** Resolve a model id, slug plus project, or model ul:// URI. */

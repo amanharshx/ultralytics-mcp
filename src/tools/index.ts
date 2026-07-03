@@ -582,7 +582,7 @@ export function registerWriteTools(
     "training_start",
     {
       description:
-        "Start a cloud training job (state-changing, may cost credits). Requires confirm_cost=true.",
+        "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Requires confirm_cost=true.",
       inputSchema: {
         model: z.string(),
         project: z.string(),

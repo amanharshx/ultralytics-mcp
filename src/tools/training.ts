@@ -2,7 +2,12 @@
 
 import type { UltralyticsClient } from "../client.js";
 import { UltralyticsApiError } from "../errors.js";
-import { resolveDataset, resolveModel, resolveProject } from "../resolve.js";
+import {
+  resolveDataset,
+  resolveDatasetDetails,
+  resolveModel,
+  resolveProject,
+} from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, pyField } from "./shared.js";
 
@@ -13,6 +18,23 @@ const KEY_METRICS = [
   "metrics/mAP50-95(M)",
 ];
 const RESERVED_TRAIN_ARG_KEYS = ["data", "model"] as const;
+const CHECKPOINT_TASK_SUFFIXES = [
+  ["-seg", "segment"],
+  ["-sem", "semantic"],
+  ["-pose", "pose"],
+  ["-obb", "obb"],
+  ["-cls", "classify"],
+] as const;
+const BASE_CHECKPOINT_RE =
+  /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
+const DATASET_TASK_COMPATIBILITY: Record<string, string[]> = {
+  detect: ["detect"],
+  segment: ["segment", "semantic"],
+  semantic: ["semantic"],
+  pose: ["pose"],
+  obb: ["obb"],
+  classify: ["classify"],
+};
 
 /** Format a percentage like Python's `str(round(x, 1))` (whole numbers keep `.0`). */
 function formatPercent(value: number): string {
@@ -33,6 +55,59 @@ function validateTrainArgs(trainArgs: Record<string, unknown>): void {
       );
     }
   }
+}
+
+function normalizeCheckpointRef(ref: string): string {
+  const trimmed = ref.trim();
+  return trimmed.toLowerCase().endsWith(".pt") ? trimmed : `${trimmed}.pt`;
+}
+
+function inferCheckpointTask(ref: string): string | null {
+  const trimmed = ref.trim();
+  if (!BASE_CHECKPOINT_RE.test(trimmed)) {
+    return null;
+  }
+  const normalized = normalizeCheckpointRef(trimmed).toLowerCase();
+  for (const [suffix, task] of CHECKPOINT_TASK_SUFFIXES) {
+    if (normalized.endsWith(`${suffix}.pt`)) {
+      return task;
+    }
+  }
+  return "detect";
+}
+
+function checkpointModelName(ref: string): string {
+  return normalizeCheckpointRef(ref).replace(/\.pt$/i, "");
+}
+
+function validateCheckpointCompatibility(
+  datasetTask: string | null,
+  checkpointTask: string,
+): void {
+  if (datasetTask === null) {
+    throw new Error(
+      "Resolved dataset is missing a task; cannot select a base checkpoint.",
+    );
+  }
+  const allowedTasks = DATASET_TASK_COMPATIBILITY[datasetTask];
+  if (!allowedTasks) {
+    throw new Error(`Unsupported dataset task '${datasetTask}'.`);
+  }
+  if (!allowedTasks.includes(checkpointTask)) {
+    throw new Error(
+      `Checkpoint task '${checkpointTask}' is not compatible with dataset task '${datasetTask}'.`,
+    );
+  }
+}
+
+function createdModelId(data: unknown): string {
+  const record = asRecord(data);
+  const item = asRecord("model" in record ? record.model : data);
+  const id = item._id;
+  if (typeof id !== "string" || !id.trim()) {
+    throw new Error("Create model response did not include a model id.");
+  }
+  return id;
 }
 
 interface TrainingMonitorOptions {
@@ -191,14 +266,33 @@ export async function trainingStart(
   }
   validateTrainArgs(passthroughTrainArgs);
 
-  const modelId = await resolveModel(client, model, project);
   const projectId = await resolveProject(client, project);
-  const datasetId = await resolveDataset(client, dataset);
+  const checkpointTask = inferCheckpointTask(model);
+  const datasetDetails =
+    checkpointTask === null
+      ? { id: await resolveDataset(client, dataset), task: null }
+      : await resolveDatasetDetails(client, dataset);
+  const datasetId = datasetDetails.id;
 
+  let modelId: string;
   const trainArgs: Record<string, unknown> = {
     ...passthroughTrainArgs,
     data: datasetId,
   };
+  if (checkpointTask === null) {
+    modelId = await resolveModel(client, model, project);
+  } else {
+    validateCheckpointCompatibility(datasetDetails.task, checkpointTask);
+    const checkpoint = normalizeCheckpointRef(model);
+    const created = await client.postJson("/models", {
+      projectId,
+      task: checkpointTask,
+      name: checkpointModelName(checkpoint),
+    });
+    modelId = createdModelId(created);
+    trainArgs.model = checkpoint;
+  }
+
   if (epochs !== undefined) {
     if (epochs <= 0) {
       throw new Error("`epochs` must be greater than 0.");
