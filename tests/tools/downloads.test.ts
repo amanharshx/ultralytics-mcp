@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -91,6 +91,22 @@ describe("modelDownload", () => {
     );
     // Untouched.
     expect(await readFile(outputPath, "utf8")).toBe("existing");
+  });
+
+  test("rejects symlink targets even when overwrite is enabled", async () => {
+    const { client } = downloadClient(
+      [{ name: "best.pt", url: "https://x/best.pt" }],
+      "weights",
+    );
+    const linkedPath = join(tmp, "linked.pt");
+    const outputPath = join(tmp, "best.pt");
+    await writeFile(linkedPath, "existing");
+    await symlink(linkedPath, outputPath);
+
+    await expect(
+      modelDownload(client, ID, { outputPath, overwrite: true }),
+    ).rejects.toThrow(/symbolic link/);
+    expect(await readFile(linkedPath, "utf8")).toBe("existing");
   });
 
   test("requires an existing parent directory", async () => {
