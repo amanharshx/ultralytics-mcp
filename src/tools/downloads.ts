@@ -2,9 +2,9 @@
  * fetch never forwards API credentials (handled by client.downloadBytes).
  */
 
-import { stat, writeFile } from "node:fs/promises";
+import { lstat, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import type { UltralyticsClient } from "../client.js";
 import { resolveModel } from "../resolve.js";
@@ -80,6 +80,39 @@ async function statSafe(
   }
 }
 
+async function lstatSafe(
+  target: string,
+): Promise<{ exists: boolean; isDir: boolean; isSymlink: boolean }> {
+  try {
+    const info = await lstat(target);
+    return {
+      exists: true,
+      isDir: info.isDirectory(),
+      isSymlink: info.isSymbolicLink(),
+    };
+  } catch {
+    return { exists: false, isDir: false, isSymlink: false };
+  }
+}
+
+async function writeFileAtomic(
+  target: string,
+  content: Uint8Array,
+): Promise<void> {
+  const parent = dirname(target);
+  const temporary = join(
+    parent,
+    `.${basename(target)}.${process.pid}.${Date.now()}.tmp`,
+  );
+  try {
+    await writeFile(temporary, content, { flag: "wx" });
+    await rename(temporary, target);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 async function downloadTarget(
   outputPath: string,
   overwrite: boolean,
@@ -98,9 +131,12 @@ async function downloadTarget(
     throw new Error(`Output parent is not a directory: ${parent}`);
   }
 
-  const targetInfo = await statSafe(target);
+  const targetInfo = await lstatSafe(target);
   if (targetInfo.exists && targetInfo.isDir) {
     throw new Error(`Output path is a directory: ${target}`);
+  }
+  if (targetInfo.exists && targetInfo.isSymlink) {
+    throw new Error(`Output path is a symbolic link: ${target}`);
   }
   if (targetInfo.exists && !overwrite) {
     throw new Error(
@@ -135,7 +171,7 @@ export async function modelDownload(
   }
 
   const content = await client.downloadBytes(signedUrl);
-  await writeFile(target, content);
+  await writeFileAtomic(target, content);
   return {
     summary: `Downloaded ${selectedName} to ${target} (${content.length} bytes).`,
     data: {
