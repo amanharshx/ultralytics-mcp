@@ -138,6 +138,8 @@ function renderSharedSections() {
     "- `dataset_upload_folder` uploads a local image folder.",
     "- `dataset_upload_video` extracts frames from a local video file with `ffmpeg`.",
     "- `model_download` writes model weights to a local destination path.",
+    "- Review local upload paths before approving tool calls; upload tools read from the MCP client host.",
+    "- Review `model_download.output_path` and `overwrite` before approving downloads.",
     "",
     "## Cost and Safety",
     "",

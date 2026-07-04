@@ -241,6 +241,8 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 - `training_start` requires `confirm_cost: true`
 - Ambiguous project or dataset refs fail instead of guessing
 - Signed upload and download URLs do not forward `Authorization`
+- Local upload tools read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
+- `model_download` writes to the requested local path; review `output_path` and `overwrite` before approving
 
 ## Troubleshooting
 
