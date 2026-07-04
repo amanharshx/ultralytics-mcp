@@ -152,7 +152,7 @@ ULTRALYTICS_API_KEY = "ul_your_api_key_here"
 
 [<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install in Cursor">](https://cursor.com/en/install-mcp?name=ultralytics&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsInVsdHJhbHl0aWNzLW1jcEBsYXRlc3QiXSwiZW52Ijp7IlVMVFJBTFlUSUNTX0FQSV9LRVkiOiJ1bF95b3VyX2FwaV9rZXlfaGVyZSJ9fQ%3D%3D)
 
-> [!IMPORTANT]
+> **Important**
 > The install button writes a placeholder key. After installing, open your Cursor MCP config and replace `ul_your_api_key_here` with your Ultralytics API key, then restart Cursor.
 
 #### Or install manually:
@@ -175,7 +175,7 @@ Follow the MCP install [guide](https://github.com/google-gemini/gemini-cli/blob/
 
 [<img src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF" alt="Install in VS Code">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ultralytics%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522ultralytics-mcp%2540latest%2522%255D%252C%2522env%2522%253A%257B%2522ULTRALYTICS_API_KEY%2522%253A%2522ul_your_api_key_here%2522%257D%257D)
 
-> [!IMPORTANT]
+> **Important**
 > The install button writes a placeholder key. After installing, open your VS Code MCP config and replace `ul_your_api_key_here` with your Ultralytics API key, then restart VS Code.
 
 #### Or install manually:
