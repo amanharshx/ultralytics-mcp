@@ -1,10 +1,15 @@
 import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, expect, test } from "vitest";
 
 import { createServer, SERVER_VERSION } from "../src/server.js";
-import { TOOL_NAMES, TOOL_SETS } from "../src/tools/index.js";
+import {
+  registerReadTools,
+  TOOL_NAMES,
+  TOOL_SETS,
+} from "../src/tools/index.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -16,6 +21,23 @@ afterEach(async () => {
     }
   }
 });
+
+async function listTools(server: McpServer) {
+  const client = new Client({ name: "test-client", version: "0.0.0" });
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+
+  cleanups.push(async () => {
+    await client.close();
+    await server.close();
+  });
+
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+
+  const { tools } = await client.listTools();
+  return tools;
+}
 
 test("server version stays in sync with package.json", () => {
   const packageJson = JSON.parse(
@@ -40,24 +62,28 @@ test("tool taxonomy keeps write tools out of read-only set", () => {
   expect(overlap).toEqual([]);
 });
 
+test("registerReadTools registers only read-only tools", async () => {
+  const server = new McpServer({
+    name: "ultralytics-read-only",
+    version: SERVER_VERSION,
+  });
+
+  registerReadTools(server, () => {
+    throw new Error("client must not be created during tool listing");
+  });
+
+  const tools = await listTools(server);
+  expect(tools.map((tool) => tool.name).sort()).toEqual(
+    [...TOOL_SETS.readOnly].sort(),
+  );
+});
+
 test("server registers all available tools over the protocol", async () => {
   // A throwing client factory proves listing never constructs a client.
   const server = createServer(() => {
     throw new Error("client must not be created during tool listing");
   });
-  const client = new Client({ name: "test-client", version: "0.0.0" });
-  const [clientTransport, serverTransport] =
-    InMemoryTransport.createLinkedPair();
-
-  cleanups.push(async () => {
-    await client.close();
-    await server.close();
-  });
-
-  await server.connect(serverTransport);
-  await client.connect(clientTransport);
-
-  const { tools } = await client.listTools();
+  const tools = await listTools(server);
   const names = tools.map((tool) => tool.name).sort();
   expect(names).toEqual([...TOOL_NAMES].sort());
 

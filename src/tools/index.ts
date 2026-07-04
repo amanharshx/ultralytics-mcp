@@ -1,9 +1,9 @@
 /** Tool registration for the MCP server.
  *
  * Logic functions live in the sibling modules and are re-exported for tests and
- * the parity fixture runner. `registerReadTools` wires them onto an `McpServer`
- * with Zod input schemas. User-facing tool names stay snake_case for parity with
- * the Python package.
+ * the parity fixture runner. Registration helpers wire tools onto an
+ * `McpServer` with Zod input schemas. User-facing tool names stay snake_case for
+ * parity with the Python package.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -157,7 +157,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "projects_create",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description: "Create a project in your Ultralytics workspace.",
     inputSchema: {
@@ -183,7 +183,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "projects_delete",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description:
       "Soft-delete a project by id, slug, username/slug, or project ul:// URI.",
@@ -263,7 +263,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "datasets_create",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description: "Create a dataset in your Ultralytics workspace.",
     inputSchema: {
@@ -364,7 +364,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "dataset_version_create",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description: "Create a frozen dataset version snapshot.",
     inputSchema: {
@@ -390,7 +390,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "datasets_delete",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description:
       "Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI.",
@@ -411,7 +411,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "dataset_ingest",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description: "Start a remote URL ingest job for an existing dataset.",
     inputSchema: {
@@ -440,7 +440,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "dataset_upload_file",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description:
       "Upload a local dataset archive file and start ingest for an existing dataset.",
@@ -481,7 +481,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "dataset_upload_folder",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description:
       "Upload a local image folder as a zip and start ingest for an existing dataset.",
@@ -522,7 +522,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "dataset_upload_video",
-    registrationGroup: "read",
+    registrationGroup: "write",
     stateChanging: true,
     description:
       "Upload a local video by extracting JPEG frames with ffmpeg, then start dataset ingest for an existing dataset.",
@@ -626,7 +626,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "training_monitor",
-    registrationGroup: "action",
+    registrationGroup: "read",
     stateChanging: false,
     description:
       "Report a model's training status and progress (works for private and public projects).",
@@ -668,7 +668,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "model_predict",
-    registrationGroup: "action",
+    registrationGroup: "read",
     stateChanging: false,
     description:
       "Run inference with a trained model on an image URL or base64 source (no local file paths).",
@@ -768,7 +768,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "exports_list",
-    registrationGroup: "write",
+    registrationGroup: "read",
     stateChanging: false,
     description: "List export jobs for a model.",
     inputSchema: {
@@ -791,7 +791,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   }),
   tool({
     name: "export_status",
-    registrationGroup: "write",
+    registrationGroup: "read",
     stateChanging: false,
     description: "Get status for one export job by 24-character export id.",
     inputSchema: {
@@ -1003,7 +1003,7 @@ export function registerReadTools(
   registerToolDefinitions(server, getClient, "read");
 }
 
-/** Register training monitor, predict, and download tools. */
+/** Register local action tools. */
 export function registerActionTools(
   server: McpServer,
   getClient: () => UltralyticsClient,
@@ -1011,7 +1011,7 @@ export function registerActionTools(
   registerToolDefinitions(server, getClient, "action");
 }
 
-/** Register export and training-start tools. The cost-incurring ones are guarded. */
+/** Register remote mutation tools. The cost-incurring ones are guarded. */
 export function registerWriteTools(
   server: McpServer,
   getClient: () => UltralyticsClient,
