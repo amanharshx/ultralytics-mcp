@@ -170,11 +170,10 @@ export async function resolveDataset(
     [username, slug] = simpleUsernameSlug(parts, "dataset", ref);
   }
 
-  const params: Record<string, string> = { slug };
-  if (username) {
-    params.username = username;
-  }
-  const data = await client.get("/datasets", params);
+  const data = await client.get(
+    "/datasets",
+    username ? { username } : undefined,
+  );
   const matches = listField(data, "datasets").filter(
     (dataset) =>
       dataset.slug === slug &&

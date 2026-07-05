@@ -10,7 +10,6 @@
       "method": "GET",
       "path": "/api/datasets",
       "query": {
-        "slug": "data",
         "username": "user"
       },
       "response": {
