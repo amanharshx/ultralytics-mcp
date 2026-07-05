@@ -23,6 +23,7 @@ import {
   exploreDatasets,
   exploreProjects,
   modelDownload,
+  modelsDelete,
   modelsGet,
   projectsCreate,
   projectsDelete,
@@ -259,6 +260,12 @@ const TOOL_RUNNERS: Record<
     projectsDelete(client, args.project as string),
   models_get: (client, args) =>
     modelsGet(client, args.model as string, args.project as string | undefined),
+  models_delete: (client, args) =>
+    modelsDelete(
+      client,
+      args.model as string,
+      args.project as string | undefined,
+    ),
   training_monitor: (client, args) =>
     trainingMonitor(
       client,
@@ -313,6 +320,7 @@ describe("parity fixtures", () => {
         "dataset_upload_folder.json",
         "dataset_upload_video.json",
         "models_get.json",
+        "models_delete.json",
         "projects_create.json",
         "projects_delete.json",
         "projects_list.json",
