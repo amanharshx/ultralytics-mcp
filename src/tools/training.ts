@@ -3,6 +3,7 @@
 import type { UltralyticsClient } from "../client.js";
 import { UltralyticsApiError } from "../errors.js";
 import {
+  parseRef,
   resolveDataset,
   resolveDatasetDetails,
   resolveModel,
@@ -62,18 +63,67 @@ function normalizeCheckpointRef(ref: string): string {
   return trimmed.toLowerCase().endsWith(".pt") ? trimmed : `${trimmed}.pt`;
 }
 
-function inferCheckpointTask(ref: string): string | null {
+function checkpointFromRef(ref: string): string | null {
   const trimmed = ref.trim();
-  if (!BASE_CHECKPOINT_RE.test(trimmed)) {
+  if (BASE_CHECKPOINT_RE.test(trimmed)) {
+    return normalizeCheckpointRef(trimmed);
+  }
+
+  const parsed = parseRef(trimmed);
+  if (!parsed.isUlUri || parsed.parts.length !== 3) {
     return null;
   }
-  const normalized = normalizeCheckpointRef(trimmed).toLowerCase();
+  const [owner, , checkpoint] = parsed.parts;
+  if (owner !== "ultralytics" || !BASE_CHECKPOINT_RE.test(checkpoint)) {
+    return null;
+  }
+  return normalizeCheckpointRef(checkpoint);
+}
+
+function inferCheckpointTask(checkpoint: string): string {
+  const normalized = checkpoint.toLowerCase();
   for (const [suffix, task] of CHECKPOINT_TASK_SUFFIXES) {
     if (normalized.endsWith(`${suffix}.pt`)) {
       return task;
     }
   }
   return "detect";
+}
+
+function storedTrainModel(data: unknown): string | null {
+  const record = asRecord(data);
+  const item = asRecord("model" in record ? record.model : data);
+  const trainArgs = asRecord(item.trainArgs);
+  const model = trainArgs.model;
+  return typeof model === "string" && model.trim() ? model : null;
+}
+
+function createdModelId(data: unknown): string {
+  const record = asRecord(data);
+  const model = asRecord(record.model);
+  const nested = asRecord(record.data);
+  const nestedModel = asRecord(nested.model);
+  const candidates = [
+    record.modelId,
+    record._id,
+    record.id,
+    model.modelId,
+    model._id,
+    model.id,
+    nested.modelId,
+    nested._id,
+    nested.id,
+    nestedModel.modelId,
+    nestedModel._id,
+    nestedModel.id,
+  ];
+  const id = candidates.find(
+    (value) => typeof value === "string" && value.trim(),
+  );
+  if (typeof id !== "string") {
+    throw new Error("Create model response did not include a model id.");
+  }
+  return id;
 }
 
 function checkpointModelName(ref: string): string {
@@ -98,16 +148,6 @@ function validateCheckpointCompatibility(
       `Checkpoint task '${checkpointTask}' is not compatible with dataset task '${datasetTask}'.`,
     );
   }
-}
-
-function createdModelId(data: unknown): string {
-  const record = asRecord(data);
-  const item = asRecord("model" in record ? record.model : data);
-  const id = item._id;
-  if (typeof id !== "string" || !id.trim()) {
-    throw new Error("Create model response did not include a model id.");
-  }
-  return id;
 }
 
 interface TrainingMonitorOptions {
@@ -265,11 +305,20 @@ export async function trainingStart(
     throw new Error("`gpu_type` is required.");
   }
   validateTrainArgs(passthroughTrainArgs);
+  if (epochs !== undefined && epochs <= 0) {
+    throw new Error("`epochs` must be greater than 0.");
+  }
+  if (imgsz !== undefined && imgsz <= 0) {
+    throw new Error("`imgsz` must be greater than 0.");
+  }
+  if (batch !== undefined && batch !== -1 && batch <= 0) {
+    throw new Error("`batch` must be -1 for auto or greater than 0.");
+  }
 
   const projectId = await resolveProject(client, project);
-  const checkpointTask = inferCheckpointTask(model);
+  const checkpoint = checkpointFromRef(model);
   const datasetDetails =
-    checkpointTask === null
+    checkpoint === null
       ? { id: await resolveDataset(client, dataset), task: null }
       : await resolveDatasetDetails(client, dataset);
   const datasetId = datasetDetails.id;
@@ -279,11 +328,19 @@ export async function trainingStart(
     ...passthroughTrainArgs,
     data: datasetId,
   };
-  if (checkpointTask === null) {
+  if (checkpoint === null) {
     modelId = await resolveModel(client, model, project);
+    const modelData = await client.get(`/models/${modelId}`);
+    const trainModel = storedTrainModel(modelData);
+    if (trainModel === null) {
+      throw new Error(
+        "Resolved model has no stored base checkpoint; pass a base checkpoint like `yolo26x.pt` instead.",
+      );
+    }
+    trainArgs.model = trainModel;
   } else {
+    const checkpointTask = inferCheckpointTask(checkpoint);
     validateCheckpointCompatibility(datasetDetails.task, checkpointTask);
-    const checkpoint = normalizeCheckpointRef(model);
     const created = await client.postJson("/models", {
       projectId,
       task: checkpointTask,
@@ -294,21 +351,12 @@ export async function trainingStart(
   }
 
   if (epochs !== undefined) {
-    if (epochs <= 0) {
-      throw new Error("`epochs` must be greater than 0.");
-    }
     trainArgs.epochs = epochs;
   }
   if (imgsz !== undefined) {
-    if (imgsz <= 0) {
-      throw new Error("`imgsz` must be greater than 0.");
-    }
     trainArgs.imgsz = imgsz;
   }
   if (batch !== undefined) {
-    if (batch <= 0) {
-      throw new Error("`batch` must be greater than 0.");
-    }
     trainArgs.batch = batch;
   }
   if (name) {
