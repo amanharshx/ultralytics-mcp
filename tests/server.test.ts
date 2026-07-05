@@ -119,6 +119,14 @@ test("server registers all available tools over the protocol", async () => {
   const datasetsDelete = tools.find((tool) => tool.name === "datasets_delete");
   expect(datasetsDelete?.inputSchema?.required).toEqual(["dataset"]);
 
+  const modelsDelete = tools.find((tool) => tool.name === "models_delete");
+  expect(modelsDelete?.inputSchema?.required).toEqual(["model"]);
+  expect(modelsDelete?.annotations).toMatchObject({
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+  });
+
   const datasetImagesList = tools.find(
     (tool) => tool.name === "dataset_images_list",
   );

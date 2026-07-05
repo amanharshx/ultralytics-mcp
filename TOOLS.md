@@ -274,7 +274,7 @@ Notes: Uses a local video path, extracts JPEG frames with ffmpeg, and starts ing
 
 ## Models
 
-4 tools.
+5 tools.
 
 ### models_list
 
@@ -291,6 +291,17 @@ Metadata: read-only
 Get one model by id, or by slug plus project.
 
 Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `model` | string | Yes | Model id, or slug when project is also provided. |
+| `project` | string | No | Project ref required when model is given by slug. |
+
+### models_delete
+
+Delete a model by id, or by slug plus project.
+
+Metadata: state-changing, destructive, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

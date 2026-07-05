@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { modelsGet, modelsList } from "../../src/tools/models.js";
+import { modelsDelete, modelsGet, modelsList } from "../../src/tools/models.js";
 import { jsonResponse, routeClient } from "../helpers.js";
 
 describe("modelsList", () => {
@@ -86,5 +86,56 @@ describe("modelsGet", () => {
     expect(result.summary).toBe(
       "Model 'None' [None] status=None, epochs=None, params=None.",
     );
+  });
+});
+
+describe("modelsDelete", () => {
+  test("deletes a model by id", async () => {
+    const id = "a".repeat(24);
+    const { client, calls } = routeClient((path) => {
+      if (path === `/api/models/${id}`) {
+        return jsonResponse({ success: true });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await modelsDelete(client, id);
+
+    expect(result.summary).toBe(`Deleted model ${id}.`);
+    expect(result.data).toEqual({
+      id,
+      response: { success: true },
+    });
+    expect(calls[0].path).toBe(`/api/models/${id}`);
+  });
+
+  test("resolves slug plus project before deleting", async () => {
+    const projectId = "b".repeat(24);
+    const modelId = "c".repeat(24);
+    const { client, calls } = routeClient((path, params) => {
+      if (path === "/api/projects" && params.get("username") === "user") {
+        return jsonResponse({
+          projects: [{ _id: projectId, slug: "proj", username: "user" }],
+        });
+      }
+      if (path === "/api/models" && params.get("projectId") === projectId) {
+        return jsonResponse({
+          models: [{ _id: modelId, slug: "exp" }],
+        });
+      }
+      if (path === `/api/models/${modelId}`) {
+        return jsonResponse({ success: true });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await modelsDelete(client, "exp", "user/proj");
+
+    expect(result.summary).toBe(`Deleted model ${modelId}.`);
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/projects",
+      "/api/models",
+      `/api/models/${modelId}`,
+    ]);
   });
 });
