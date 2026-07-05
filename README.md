@@ -230,7 +230,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 
 - Projects: 5 tools
 - Datasets: 12 tools
-- Models: 4 tools
+- Models: 5 tools
 - Training: 2 tools
 - Exports: 3 tools
 - Infrastructure: 1 tool
