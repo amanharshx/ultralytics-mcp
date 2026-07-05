@@ -1,0 +1,65 @@
+{
+  "tool": "models_delete",
+  "args": {
+    "model": "exp",
+    "project": "user/road"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "query": {
+        "username": "user"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "projects": [
+            {
+              "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+              "slug": "road",
+              "username": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models",
+      "query": {
+        "projectId": "aaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "models": [
+            {
+              "_id": "cccccccccccccccccccccccc",
+              "slug": "exp"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/models/cccccccccccccccccccccccc",
+      "response": {
+        "status": 200,
+        "json": {
+          "success": true
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deleted model cccccccccccccccccccccccc.",
+    "data": {
+      "id": "cccccccccccccccccccccccc",
+      "response": {
+        "success": true
+      }
+    }
+  }
+}
