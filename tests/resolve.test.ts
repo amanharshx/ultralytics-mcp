@@ -121,7 +121,47 @@ describe("resolveProject", () => {
 });
 
 describe("resolveDataset", () => {
-  test("resolves a dataset ul:// URI with slug and username params", async () => {
+  test("resolves a dataset ul:// URI by querying username and filtering slug locally", async () => {
+    const { client, calls } = clientWith(
+      () =>
+        new Response(
+          JSON.stringify({
+            datasets: [
+              { _id: "x".repeat(24), slug: "other", username: "u" },
+              { _id: "d".repeat(24), slug: "data", username: "u" },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    expect(await resolveDataset(client, "ul://u/datasets/data")).toBe(
+      "d".repeat(24),
+    );
+    expect(calls[0].path).toBe("/api/datasets");
+    expect(calls[0].params.get("username")).toBe("u");
+    expect(calls[0].params.has("slug")).toBe(false);
+  });
+
+  test("resolves username/slug by querying username and filtering slug locally", async () => {
+    const { client, calls } = clientWith(
+      () =>
+        new Response(
+          JSON.stringify({
+            datasets: [
+              { _id: "x".repeat(24), slug: "other", username: "u" },
+              { _id: "d".repeat(24), slug: "data", username: "u" },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    expect(await resolveDataset(client, "u/data")).toBe("d".repeat(24));
+    expect(calls[0].path).toBe("/api/datasets");
+    expect(calls[0].params.get("username")).toBe("u");
+    expect(calls[0].params.has("slug")).toBe(false);
+  });
+
+  test("resolves a bare dataset slug without sending a slug query", async () => {
     const { client, calls } = clientWith(
       () =>
         new Response(
@@ -131,12 +171,10 @@ describe("resolveDataset", () => {
           { status: 200 },
         ),
     );
-    expect(await resolveDataset(client, "ul://u/datasets/data")).toBe(
-      "d".repeat(24),
-    );
+    expect(await resolveDataset(client, "data")).toBe("d".repeat(24));
     expect(calls[0].path).toBe("/api/datasets");
-    expect(calls[0].params.get("slug")).toBe("data");
-    expect(calls[0].params.get("username")).toBe("u");
+    expect(calls[0].params.has("slug")).toBe(false);
+    expect(calls[0].params.has("username")).toBe(false);
   });
 
   test("a malformed dataset ul:// URI is rejected", async () => {

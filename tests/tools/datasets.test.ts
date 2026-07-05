@@ -880,7 +880,7 @@ describe("datasetUploadFile", () => {
     });
 
     expect(calls.map((call) => call.url)).toEqual([
-      `${BASE}/datasets?slug=data&username=user`,
+      `${BASE}/datasets?username=user`,
       `${BASE}/upload/signed-url`,
       `${BASE}/upload/complete`,
       `${BASE}/datasets/ingest`,
