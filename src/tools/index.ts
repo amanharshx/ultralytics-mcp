@@ -28,7 +28,7 @@ import {
 import { modelDownload } from "./downloads.js";
 import { exportCreate, exportStatus, exportsList } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
-import { modelsGet, modelsList } from "./models.js";
+import { modelsDelete, modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
 import {
   exploreProjects,
@@ -56,7 +56,7 @@ export {
 export { modelDownload } from "./downloads.js";
 export { exportCreate, exportStatus, exportsList } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
-export { modelsGet, modelsList } from "./models.js";
+export { modelsDelete, modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
 export {
   exploreProjects,
@@ -604,6 +604,36 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       async ({ model, project }) =>
         toMcpTextResult(
           await modelsGet(
+            getClient(),
+            model as string,
+            project as string | undefined,
+          ),
+        ),
+  }),
+  tool({
+    name: "models_delete",
+    registrationGroup: "write",
+    stateChanging: true,
+    description: "Delete a model by id, or by slug plus project.",
+    inputSchema: {
+      model: z
+        .string()
+        .describe("Model id, or slug when project is also provided."),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ model, project }) =>
+        toMcpTextResult(
+          await modelsDelete(
             getClient(),
             model as string,
             project as string | undefined,

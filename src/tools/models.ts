@@ -1,4 +1,4 @@
-/** Read-only model tools. */
+/** Model tools. */
 
 import type { UltralyticsClient } from "../client.js";
 import { resolveModel, resolveProject } from "../resolve.js";
@@ -41,5 +41,19 @@ export async function modelsGet(
       `Model '${pyField(fields.name)}' [${pyField(fields.task)}] status=${pyField(fields.status)}, ` +
       `epochs=${pyField(fields.epochs)}, params=${pyField(info.parameters)}.`,
     data: item,
+  };
+}
+
+/** Delete a model by id, or by slug within a project. */
+export async function modelsDelete(
+  client: UltralyticsClient,
+  model: string,
+  project?: string,
+): Promise<NormalizedToolResult> {
+  const modelId = await resolveModel(client, model, project);
+  const data = await client.delete(`/models/${modelId}`);
+  return {
+    summary: `Deleted model ${modelId}.`,
+    data: { id: modelId, response: data },
   };
 }
