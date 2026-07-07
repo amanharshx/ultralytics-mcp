@@ -21,6 +21,9 @@ describe("generate-tools script", () => {
     expect(output).toContain("# Tools Reference");
     expect(output).toContain("Auto-generated. Do not edit by hand.");
     expect(output).toContain("## Conventions");
+    expect(output).toContain("## Platform Behaviors");
+    expect(output).toContain("new dataset image records");
+    expect(output).toContain("classify");
     expect(output).toContain("## Projects");
     expect(output).toContain("## Datasets");
     expect(output).toContain("## Models");
