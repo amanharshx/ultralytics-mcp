@@ -22,6 +22,42 @@ function fileUrl(info: Record<string, unknown>): string | null {
   return value ? String(value) : null;
 }
 
+function urlPathBasename(info: Record<string, unknown>): string | null {
+  const url = fileUrl(info);
+  if (url === null) {
+    return null;
+  }
+  try {
+    return basename(new URL(url).pathname);
+  } catch {
+    return null;
+  }
+}
+
+function fileMatchesName(
+  file: Record<string, unknown>,
+  filename: string,
+): boolean {
+  const name = fileName(file);
+  const requested = basename(filename);
+  if (name !== null && (name === filename || basename(name) === requested)) {
+    return true;
+  }
+  return urlPathBasename(file) === requested;
+}
+
+function availableFileNames(files: Record<string, unknown>[]): string {
+  return files
+    .map((file) => {
+      const name = fileName(file) ?? "unknown";
+      const urlName = urlPathBasename(file);
+      return urlName && urlName !== basename(name)
+        ? `${name} (url: ${urlName})`
+        : name;
+    })
+    .join(", ");
+}
+
 function modelFiles(data: unknown): Record<string, unknown>[] {
   const record = asRecord(data);
   const files = record.files ?? record.modelFiles ?? record.models;
@@ -43,16 +79,21 @@ function selectModelFile(
   }
   if (filename) {
     for (const file of files) {
-      if (fileName(file) === filename) {
+      if (fileMatchesName(file, filename)) {
         return file;
       }
     }
     throw new Error(
-      `No model file named '${filename}' was returned by the API.`,
+      `No model file matching '${filename}'. Available: ${availableFileNames(files)}.`,
     );
   }
   for (const file of files) {
-    if (fileName(file) === "best.pt") {
+    if (urlPathBasename(file) === "best.pt") {
+      return file;
+    }
+  }
+  for (const file of files) {
+    if (basename(fileName(file) ?? "") === "best.pt") {
       return file;
     }
   }
