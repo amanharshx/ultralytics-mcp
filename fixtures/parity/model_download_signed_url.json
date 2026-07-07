@@ -18,8 +18,8 @@
               "url": "https://signed.example/last.pt"
             },
             {
-              "name": "best.pt",
-              "url": "https://signed.example/best.pt"
+              "name": "exp-4.pt",
+              "downloadUrl": "https://signed.example/models/aaaaaaaaaaaaaaaaaaaaaaaa/best.pt?download=1"
             }
           ]
         }
@@ -27,14 +27,14 @@
     }
   ],
   "download": {
-    "url": "https://signed.example/best.pt",
+    "url": "https://signed.example/models/aaaaaaaaaaaaaaaaaaaaaaaa/best.pt?download=1",
     "body_text": "weights"
   },
   "expected": {
-    "summary": "Downloaded best.pt to __TMP__/best.pt (7 bytes).",
+    "summary": "Downloaded exp-4.pt to __TMP__/best.pt (7 bytes).",
     "data": {
       "modelId": "aaaaaaaaaaaaaaaaaaaaaaaa",
-      "filename": "best.pt",
+      "filename": "exp-4.pt",
       "path": "__TMP__/best.pt",
       "bytes": 7
     }
