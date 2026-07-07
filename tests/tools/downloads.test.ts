@@ -21,10 +21,7 @@ afterEach(async () => {
 });
 
 /** Client with a files endpoint and a recorded signed-URL download fetch. */
-function downloadClient(
-  files: Array<{ name: string; url: string }>,
-  body: string,
-) {
+function downloadClient(files: Array<Record<string, unknown>>, body: string) {
   const downloadCalls: { url: string; auth: string | undefined }[] = [];
   const fetchImpl = (async (url: string | URL) => {
     if (String(url).endsWith(`/models/${ID}/files`)) {
@@ -76,6 +73,102 @@ describe("modelDownload", () => {
     expect(downloadCalls[0].url).toBe("https://signed.example/best.pt");
     expect(downloadCalls[0].auth).toBeUndefined();
     expect(await readFile(outputPath, "utf8")).toBe("weights");
+  });
+
+  test("matches requested filename against the signed URL path basename", async () => {
+    const { client, downloadCalls } = downloadClient(
+      [
+        {
+          name: "exp-4.pt",
+          downloadUrl: "https://signed.example/models/abc/best.pt?x=1",
+        },
+      ],
+      "weights",
+    );
+    const outputPath = join(tmp, "best.pt");
+
+    const result = await modelDownload(client, ID, {
+      outputPath,
+      filename: "best.pt",
+    });
+
+    expect(result.summary).toBe(
+      `Downloaded exp-4.pt to ${outputPath} (7 bytes).`,
+    );
+    expect(result.data).toEqual({
+      modelId: ID,
+      filename: "exp-4.pt",
+      path: outputPath,
+      bytes: 7,
+    });
+    expect(downloadCalls[0].url).toBe(
+      "https://signed.example/models/abc/best.pt?x=1",
+    );
+  });
+
+  test("selects by friendly model filename before signed URL path basename", async () => {
+    const { client, downloadCalls } = downloadClient(
+      [
+        {
+          name: "exp-4.pt",
+          downloadUrl: "https://signed.example/models/abc/best.pt",
+        },
+      ],
+      "weights",
+    );
+    const outputPath = join(tmp, "exp-4.pt");
+
+    await modelDownload(client, ID, {
+      outputPath,
+      filename: "exp-4.pt",
+    });
+
+    expect(downloadCalls[0].url).toBe(
+      "https://signed.example/models/abc/best.pt",
+    );
+  });
+
+  test("prefers best.pt from signed URL path when no filename is requested", async () => {
+    const { client, downloadCalls } = downloadClient(
+      [
+        {
+          name: "last.pt",
+          downloadUrl: "https://signed.example/models/abc/last.pt",
+        },
+        {
+          name: "exp-4.pt",
+          downloadUrl: "https://signed.example/models/abc/best.pt",
+        },
+      ],
+      "weights",
+    );
+    const outputPath = join(tmp, "best.pt");
+
+    await modelDownload(client, ID, { outputPath });
+
+    expect(downloadCalls[0].url).toBe(
+      "https://signed.example/models/abc/best.pt",
+    );
+  });
+
+  test("lists file names and URL basenames when requested filename is missing", async () => {
+    const { client } = downloadClient(
+      [
+        {
+          name: "exp-4.pt",
+          downloadUrl: "https://signed.example/models/abc/best.pt",
+        },
+        { name: "last.pt", downloadUrl: "not a url" },
+      ],
+      "weights",
+    );
+    const outputPath = join(tmp, "missing.pt");
+
+    await expect(
+      modelDownload(client, ID, { outputPath, filename: "missing.pt" }),
+    ).rejects.toThrow(
+      /No model file matching 'missing.pt'. Available: exp-4.pt \(url: best.pt\), last.pt/,
+    );
   });
 
   test("refuses to overwrite an existing file by default", async () => {
