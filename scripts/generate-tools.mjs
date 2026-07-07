@@ -147,6 +147,11 @@ function renderSharedSections() {
     "- `export_create` requires `confirm_cost=true` and starts a credit-costing export job.",
     "- `projects_delete` and `datasets_delete` are soft-delete operations.",
     "",
+    "## Platform Behaviors",
+    "",
+    "- Re-uploading images with label files can create new dataset image records instead of attaching labels to existing images. To label existing images, edit them on the platform; re-uploading labeled copies may duplicate image records.",
+    "- Images-only dataset uploads may be inferred as `classify` by the platform even when the dataset was created for detection. Include labels in a task-specific archive when task preservation matters.",
+    "",
   ].join("\n");
 }
 

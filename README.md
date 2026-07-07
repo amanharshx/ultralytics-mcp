@@ -243,6 +243,8 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 - Signed upload and download URLs do not forward `Authorization`
 - Local upload tools read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
 - `model_download` writes to the requested local path; review `output_path` and `overwrite` before approving
+- Re-uploading labeled copies may duplicate dataset image records instead of attaching labels to existing images
+- Images-only dataset uploads may be inferred as `classify`; include labels when task preservation matters
 
 ## Troubleshooting
 

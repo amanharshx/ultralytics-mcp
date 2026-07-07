@@ -25,6 +25,11 @@ Auto-generated reference for Ultralytics Platform MCP tools.
 - `export_create` requires `confirm_cost=true` and starts a credit-costing export job.
 - `projects_delete` and `datasets_delete` are soft-delete operations.
 
+## Platform Behaviors
+
+- Re-uploading images with label files can create new dataset image records instead of attaching labels to existing images. To label existing images, edit them on the platform; re-uploading labeled copies may duplicate image records.
+- Images-only dataset uploads may be inferred as `classify` by the platform even when the dataset was created for detection. Include labels in a task-specific archive when task preservation matters.
+
 ## Projects
 
 5 tools.
@@ -232,7 +237,7 @@ Metadata: state-changing, non-idempotent
 | `folder_path` | string | Yes | Local path to image folder. |
 | `targetSplit` | string | No |  |
 
-Notes: Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset.
+Notes: Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.
 
 #### Upload image folder
 
