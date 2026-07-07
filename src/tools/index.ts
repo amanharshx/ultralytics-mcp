@@ -498,7 +498,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       idempotentHint: false,
     },
     docNote:
-      "Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset.",
+      "Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.",
     examples: [
       {
         title: "Upload image folder",
