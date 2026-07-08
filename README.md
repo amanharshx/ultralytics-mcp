@@ -45,12 +45,20 @@ https://github.com/user-attachments/assets/cc927af9-0211-41f1-9054-eb9c74578f34
 2. Open `Settings -> API Keys`.
 3. Create or copy an API key.
 
+See the official [Ultralytics API key docs](https://docs.ultralytics.com/platform/account/api-keys) for key creation, usage, and revocation details.
+
 ## Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `ULTRALYTICS_API_KEY` | ✅ | Ultralytics API key. Expected format: `ul_` followed by 40 hex characters |
 | `ULTRALYTICS_API_BASE` | ❌ | Advanced: override API base URL. Default: `https://platform.ultralytics.com/api` |
+
+Treat `ULTRALYTICS_API_KEY` as a bearer token. Pass it through your MCP client's
+environment configuration only. Never paste real keys into prompts, scripts, or
+committed config files. Project-scoped `.mcp.json` files are ignored by this repo
+to reduce accidental key commits; if a key is exposed, revoke it in Ultralytics
+Platform and create a replacement.
 
 ## Installation
 
@@ -241,6 +249,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 
 ## Safety
 
+- `ULTRALYTICS_API_KEY` is a bearer token; pass it via MCP client `env` and never commit real keys
 - `export_create` requires `confirm_cost: true`
 - `training_start` requires `confirm_cost: true`
 - Ambiguous project or dataset refs fail instead of guessing
@@ -277,6 +286,14 @@ ULTRALYTICS_API_KEY=ul_your_api_key_here npx -y ultralytics-mcp@latest
 ```
 
 If command exits immediately with config error, fix environment first.
+
+### Platform API errors
+
+For authentication, rate-limit, or endpoint behavior, compare against the
+official [Ultralytics Platform REST API docs](https://docs.ultralytics.com/platform/api).
+When asking for help, include the tool name, request summary, response status,
+redacted response body, and a minimal reproduction. Do not include real API
+keys, signed URLs, private dataset contents, or private model artifacts.
 
 ## Development
 
