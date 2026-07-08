@@ -3,7 +3,7 @@
   "name": "io.github.amanharshx/ultralytics-mcp",
   "title": "Ultralytics Platform MCP",
   "description": "MCP server for Ultralytics Platform projects, datasets, training, prediction, exports, and models.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "websiteUrl": "https://github.com/amanharshx/ultralytics-mcp#readme",
   "repository": {
     "url": "https://github.com/amanharshx/ultralytics-mcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "ultralytics-mcp",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "transport": {
         "type": "stdio"
       },
