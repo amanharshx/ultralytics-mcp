@@ -1,5 +1,6 @@
 {
   "name": "ultralytics-mcp",
+  "mcpName": "io.github.amanharshx/ultralytics-mcp",
   "version": "0.1.8",
   "description": "MCP for Ultralytics Platform workflows, datasets, training, prediction, and model operations.",
   "type": "module",
@@ -9,6 +10,7 @@
   "files": [
     "dist",
     "README.md",
+    "server.json",
     "TOOLS.md",
     "package.json"
   ],
