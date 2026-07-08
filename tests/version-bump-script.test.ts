@@ -19,13 +19,34 @@ test("version bump script repairs nested lockfile version on same-version rerun"
 
   const packageJsonPath = join(dir, "package.json");
   const packageLockPath = join(dir, "package-lock.json");
+  const serverJsonPath = join(dir, "server.json");
 
   writeFileSync(
     packageJsonPath,
     JSON.stringify(
       {
         name: "fixture-package",
+        mcpName: "io.github.example/fixture-package",
         version: "0.1.4",
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    serverJsonPath,
+    JSON.stringify(
+      {
+        name: "io.github.example/fixture-package",
+        version: "0.1.3",
+        packages: [
+          {
+            registryType: "npm",
+            identifier: "fixture-package",
+            version: "0.1.3",
+            transport: { type: "stdio" },
+          },
+        ],
       },
       null,
       2,
@@ -62,8 +83,16 @@ test("version bump script repairs nested lockfile version on same-version rerun"
     version: string;
     packages: { "": { version: string } };
   };
+  const updatedServerJson = JSON.parse(
+    readFileSync(serverJsonPath, "utf8"),
+  ) as {
+    version: string;
+    packages: Array<{ version: string }>;
+  };
 
   expect(updatedPackageJson.version).toBe("0.1.4");
   expect(updatedLockfile.version).toBe("0.1.4");
   expect(updatedLockfile.packages[""].version).toBe("0.1.4");
+  expect(updatedServerJson.version).toBe("0.1.4");
+  expect(updatedServerJson.packages[0]?.version).toBe("0.1.4");
 });
