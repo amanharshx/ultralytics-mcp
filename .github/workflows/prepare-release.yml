@@ -69,6 +69,7 @@ jobs:
           ## Key Changes
           - bump `package.json` to ${{ steps.version.outputs.next_version }}
           - bump `package-lock.json` to ${{ steps.version.outputs.next_version }}
+          - bump `server.json` to ${{ steps.version.outputs.next_version }}
           - prepare main for tag ${{ steps.version.outputs.next_tag }}
           EOF
           )
@@ -81,7 +82,7 @@ jobs:
 
           node scripts/bump-version.mjs "${{ steps.version.outputs.next_version }}"
 
-          git add package.json package-lock.json
+          git add package.json package-lock.json server.json
           git commit -m "chore: bump version to ${{ steps.version.outputs.next_tag }}"
           git push -f -u origin "$BRANCH"
 
