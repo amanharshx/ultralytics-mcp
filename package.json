@@ -1,7 +1,7 @@
 {
   "name": "ultralytics-mcp",
   "mcpName": "io.github.amanharshx/ultralytics-mcp",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "MCP for Ultralytics Platform workflows, datasets, training, prediction, and model operations.",
   "type": "module",
   "bin": {
