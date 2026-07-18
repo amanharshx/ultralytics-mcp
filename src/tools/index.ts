@@ -457,7 +457,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       idempotentHint: false,
     },
     docNote:
-      "Uses a local archive file path and starts ingest into an existing dataset.",
+      "Uses a local archive file path and starts ingest into an existing dataset. Named YOLO ZIP archives preserve labels and classes on later ingests; archives without class names may map labels by positional index.",
     examples: [
       {
         title: "Upload dataset archive",
