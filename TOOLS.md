@@ -213,7 +213,7 @@ Metadata: state-changing, non-idempotent
 | `file_path` | string | Yes | Local path to dataset archive file. |
 | `targetSplit` | string | No |  |
 
-Notes: Uses a local archive file path and starts ingest into an existing dataset.
+Notes: Uses a local archive file path and starts ingest into an existing dataset. Named YOLO ZIP archives preserve labels and classes on later ingests; archives without class names may map labels by positional index.
 
 #### Upload dataset archive
 
