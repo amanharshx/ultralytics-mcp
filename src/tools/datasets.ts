@@ -6,7 +6,8 @@ import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { zipSync } from "fflate";
+import { strFromU8, unzipSync, zipSync } from "fflate";
+import { parse } from "yaml";
 
 import type { UltralyticsClient } from "../client.js";
 import { resolveDataset } from "../resolve.js";
@@ -256,6 +257,66 @@ async function buildDatasetFolderZip(
   return zipBytes;
 }
 
+function extractArchiveClassMapping(
+  content: Uint8Array,
+  filename: string,
+): Record<string, string> | undefined {
+  if (!filename.toLowerCase().endsWith(".zip")) {
+    return undefined;
+  }
+
+  let files: Record<string, Uint8Array>;
+  try {
+    files = unzipSync(content, {
+      filter: ({ name }) => /(^|\/)data\.ya?ml$/i.test(name),
+    });
+  } catch {
+    return undefined;
+  }
+
+  const paths = Object.keys(files);
+  const rootPaths = paths.filter((path) => !path.includes("/"));
+  const selectedPath =
+    rootPaths.length === 1
+      ? rootPaths[0]
+      : rootPaths.length === 0 && paths.length === 1
+        ? paths[0]
+        : undefined;
+  if (selectedPath === undefined) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = parse(strFromU8(files[selectedPath]));
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const names = (parsed as Record<string, unknown>).names;
+  const values = Array.isArray(names)
+    ? names
+    : typeof names === "object" && names !== null
+      ? Object.values(names)
+      : [];
+  if (
+    values.length === 0 ||
+    values.some(
+      (value) => typeof value !== "string" || value.trim().length === 0,
+    )
+  ) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Array.from(new Set(values.map((value) => (value as string).trim()))).map(
+      (name) => [name, name],
+    ),
+  );
+}
+
 async function uploadDatasetContent(
   client: UltralyticsClient,
   options: {
@@ -265,6 +326,7 @@ async function uploadDatasetContent(
     totalBytes: number;
     content: Uint8Array;
     targetSplit?: string;
+    classMapping?: Record<string, string>;
   },
 ): Promise<{ sessionId: string; ingest: Record<string, unknown> }> {
   const signed = asRecord(
@@ -287,6 +349,12 @@ async function uploadDatasetContent(
   };
   if (options.targetSplit !== undefined) {
     ingestPayload.targetSplit = options.targetSplit;
+  }
+  if (
+    options.classMapping !== undefined &&
+    Object.keys(options.classMapping).length > 0
+  ) {
+    ingestPayload.classMapping = options.classMapping;
   }
   const ingest = asRecord(
     await client.postJson("/datasets/ingest", ingestPayload),
@@ -572,6 +640,7 @@ export async function datasetUploadFile(
   const meta = await datasetUploadFileMeta(options.filePath);
   const datasetId = await resolveDataset(client, options.dataset);
   const content = await readFile(options.filePath);
+  const classMapping = extractArchiveClassMapping(content, meta.filename);
 
   const upload = await uploadDatasetContent(client, {
     datasetId,
@@ -580,6 +649,7 @@ export async function datasetUploadFile(
     totalBytes: meta.totalBytes,
     content,
     targetSplit: options.targetSplit,
+    classMapping,
   });
   const ingest = upload.ingest;
   const jobId = ingest.jobId ?? ingest.id ?? "None";
