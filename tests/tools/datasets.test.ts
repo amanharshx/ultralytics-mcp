@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
@@ -41,6 +42,7 @@ function captureClient(responder: (url: string) => Response) {
       fetchImpl: impl,
     }),
     calls,
+    fetchImpl: impl,
   };
 }
 
@@ -810,7 +812,112 @@ describe("datasetsIngest", () => {
 });
 
 describe("datasetUploadFile", () => {
-  test("uploads file through signed URL flow and starts ingest", async () => {
+  test("sends complete identity class mapping from indexed YOLO names", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-upload-"));
+    const filePath = join(tmp, "coco8.zip");
+    await writeFile(
+      filePath,
+      zipSync({
+        "data.yaml": strToU8("names:\n  0: person\n  1: bicycle\n"),
+      }),
+    );
+
+    const { calls, fetchImpl } = captureClient((url) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/datasets") {
+        return jsonResponse({
+          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+        });
+      }
+      if (path === "/api/upload/signed-url") {
+        return jsonResponse({
+          sessionId: "session_123",
+          uploadUrl: "https://signed.example/upload",
+        });
+      }
+      return jsonResponse({ jobId: "job_123" });
+    });
+    const uploadClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+      uploadFetchImpl: (async () =>
+        new Response("", { status: 200 })) as unknown as typeof fetch,
+    });
+
+    await datasetUploadFile(uploadClient, {
+      dataset: "user/data",
+      filePath,
+    });
+
+    expect(calls.at(-1)).toMatchObject({
+      body: {
+        classMapping: { person: "person", bicycle: "bicycle" },
+      },
+    });
+  });
+
+  test("sends complete identity class mapping from named YOLO ZIP", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-upload-"));
+    const filePath = join(tmp, "dataset.ZIP");
+    const archive = zipSync({
+      "data.yaml": strToU8("names:\n  - person\n  - car\n"),
+      "images/large-dummy.jpg": new Uint8Array(1024 * 1024),
+    });
+    await writeFile(filePath, archive);
+
+    expect(
+      Object.keys(
+        unzipSync(archive, {
+          filter: ({ name }) => /(^|\/)data\.ya?ml$/i.test(name),
+        }),
+      ),
+    ).toEqual(["data.yaml"]);
+
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async (url: string | URL, init: RequestInit = {}) => {
+        const body =
+          typeof init.body === "string" ? JSON.parse(init.body) : undefined;
+        calls.push({
+          url: String(url),
+          method: (init.method ?? "GET").toUpperCase(),
+          body,
+        });
+        const path = new URL(String(url)).pathname;
+        if (path === "/api/datasets") {
+          return jsonResponse({
+            datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
+          });
+        }
+        if (path === "/api/upload/signed-url") {
+          return jsonResponse({
+            sessionId: "session_123",
+            uploadUrl: "https://signed.example/upload",
+          });
+        }
+        return jsonResponse({ jobId: "job_123" });
+      }) as unknown as typeof fetch,
+      uploadFetchImpl: (async () =>
+        new Response("", { status: 200 })) as unknown as typeof fetch,
+    });
+
+    await datasetUploadFile(client, { dataset: "user/data", filePath });
+
+    expect(calls.at(-1)).toEqual({
+      url: `${BASE}/datasets/ingest`,
+      method: "POST",
+      body: {
+        datasetId: "d".repeat(24),
+        sessionId: "session_123",
+        classMapping: { person: "person", car: "car" },
+      },
+    });
+  });
+
+  test("omits class mapping for an archive with no readable YAML metadata", async () => {
     const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-upload-"));
     const filePath = join(tmp, "dataset.zip");
     await writeFile(filePath, "archive");
