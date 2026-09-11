@@ -87,30 +87,30 @@ export async function projectsGet(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const ref = resolveProject(project);
-  const resolvedOwner = ref.owner ?? (await client.getAccountOwner());
+  const { owner: refOwner, project: refSlug } = resolveProject(project);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
   const data = await client.get(
-    `/projects/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(ref.project)}`,
+    `/projects/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`,
   );
   const record = asRecord(data);
-  const fields = asRecord(record.project);
+  const projectFields = asRecord(record.project);
   const models = Array.isArray(record.models)
     ? (record.models as unknown[])
     : [];
   const isOwner = typeof record.isOwner === "boolean" ? record.isOwner : null;
   const normalized = {
-    id: fields.id ?? null,
-    name: fields.name ?? null,
-    slug: fields.project ?? null,
-    username: fields.owner ?? null,
-    visibility: fields.visibility ?? null,
-    modelCount: fields.modelCount ?? null,
+    id: projectFields.id ?? null,
+    name: projectFields.name ?? null,
+    slug: projectFields.project ?? null,
+    username: projectFields.owner ?? null,
+    visibility: projectFields.visibility ?? null,
+    modelCount: projectFields.modelCount ?? null,
   };
   return {
     summary:
       `Project '${pyField(normalized.slug)}' for owner '${resolvedOwner}': ` +
       `'${pyField(normalized.name)}' (${pyField(normalized.visibility)}), ` +
-      `${pyCount(fields, "modelCount")} model(s).`,
+      `${pyCount(projectFields, "modelCount")} model(s).`,
     data: {
       ...normalized,
       models,

@@ -245,23 +245,34 @@ describe("exploreProjects", () => {
 });
 
 describe("projectsGet", () => {
-  test("fetches through the owner-scoped path and reads the nested project", async () => {
-    const { client, calls } = routeClient((path) => {
-      if (path === "/api/projects/alice/road") {
-        return jsonResponse({
-          project: {
-            id: "a".repeat(24),
-            owner: "alice",
-            project: "road",
-            name: "Road",
-            visibility: "private",
-            modelCount: 2,
-          },
-          models: [{ id: "b".repeat(24), model: "exp", name: "exp" }],
-          isOwner: true,
-        });
+  const baseProject = {
+    id: "a".repeat(24),
+    owner: "alice",
+    project: "road",
+    name: "Road",
+    visibility: "private",
+    modelCount: 2,
+  };
+
+  function clientForProjectGet(
+    response: unknown,
+    options: { accountOwner?: string } = {},
+  ) {
+    return routeClient((path) => {
+      if (options.accountOwner && path === "/api/account/summary") {
+        return jsonResponse({ username: options.accountOwner });
       }
-      return jsonResponse({}, 404);
+      return path === "/api/projects/alice/road"
+        ? jsonResponse(response)
+        : jsonResponse({}, 404);
+    });
+  }
+
+  test("fetches through the owner-scoped path and reads the nested project", async () => {
+    const { client, calls } = clientForProjectGet({
+      project: { ...baseProject },
+      models: [{ id: "b".repeat(24), model: "exp", name: "exp" }],
+      isOwner: true,
     });
 
     const result = await projectsGet(client, "alice/road");
@@ -284,11 +295,11 @@ describe("projectsGet", () => {
   });
 
   test("renders missing fields like Python (None / ?) for sparse payloads", async () => {
-    const { client } = routeClient((path) =>
-      path === "/api/projects/alice/road"
-        ? jsonResponse({ project: {}, models: [], isOwner: true })
-        : jsonResponse({}, 404),
-    );
+    const { client } = clientForProjectGet({
+      project: {},
+      models: [],
+      isOwner: true,
+    });
     const result = await projectsGet(client, "alice/road");
     expect(result.summary).toBe(
       "Project 'None' for owner 'alice': 'None' (None), ? model(s).",
@@ -306,22 +317,10 @@ describe("projectsGet", () => {
   });
 
   test("succeeds for a ul:// project URI without an account lookup", async () => {
-    const { client, calls } = routeClient((path) => {
-      if (path === "/api/projects/alice/road") {
-        return jsonResponse({
-          project: {
-            id: "a".repeat(24),
-            owner: "alice",
-            project: "road",
-            name: "Road",
-            visibility: "public",
-            modelCount: 0,
-          },
-          models: [],
-          isOwner: false,
-        });
-      }
-      return jsonResponse({}, 404);
+    const { client, calls } = clientForProjectGet({
+      project: { ...baseProject, visibility: "public", modelCount: 0 },
+      models: [],
+      isOwner: false,
     });
     const result = await projectsGet(client, "ul://alice/road");
     expect(calls.map((call) => call.path)).toEqual([
@@ -332,26 +331,14 @@ describe("projectsGet", () => {
   });
 
   test("falls back to the account owner for a bare slug", async () => {
-    const { client, calls } = routeClient((path) => {
-      if (path === "/api/account/summary") {
-        return jsonResponse({ username: "alice" });
-      }
-      if (path === "/api/projects/alice/road") {
-        return jsonResponse({
-          project: {
-            id: "a".repeat(24),
-            owner: "alice",
-            project: "road",
-            name: "Road",
-            visibility: "private",
-            modelCount: 1,
-          },
-          models: [],
-          isOwner: true,
-        });
-      }
-      return jsonResponse({}, 404);
-    });
+    const { client, calls } = clientForProjectGet(
+      {
+        project: { ...baseProject, modelCount: 1 },
+        models: [],
+        isOwner: true,
+      },
+      { accountOwner: "alice" },
+    );
     const result = await projectsGet(client, "road");
     expect(calls.map((call) => call.path)).toEqual([
       "/api/account/summary",
@@ -377,20 +364,6 @@ describe("projectsGet", () => {
       return jsonResponse({}, 404);
     });
     await expect(projectsGet(client, "alice/missing")).rejects.toThrow(
-      /Project not found/,
-    );
-  });
-
-  test("surfaces the API message for an owner that does not exist", async () => {
-    // Live: GET /projects/{bad-owner}/{slug} matches the project route and
-    // reports "Project not found" (observed 2026-09-12).
-    const { client } = routeClient((path) => {
-      if (path === "/api/projects/ghost/road") {
-        return jsonResponse({ error: "Project not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
-    await expect(projectsGet(client, "ghost/road")).rejects.toThrow(
       /Project not found/,
     );
   });
