@@ -113,6 +113,33 @@ describe("projectsList", () => {
     expect(calls.map((call) => call.path)).toEqual(["/api/projects/bob"]);
   });
 
+  test("accepts the owner through the username alias", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/projects/bob") {
+        return jsonResponse({ projects: [], total: 0, region: "us" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await projectsList(client, undefined, "bob");
+    expect(result.summary).toBe("0 project(s) for owner 'bob'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/projects/bob"]);
+  });
+
+  test("prefers owner over the username alias when both are given", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/projects/alice") {
+        return jsonResponse({ projects: [], total: 0, region: "us" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await projectsList(client, "alice", "bob");
+    expect(result.summary).toBe("0 project(s) for owner 'alice'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/projects/alice"]);
+  });
+
   test("treats a blank owner as omitted", async () => {
     const { client, calls } = routeClient((path) => {
       if (path === "/api/account/summary") {

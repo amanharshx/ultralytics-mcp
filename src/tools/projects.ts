@@ -15,17 +15,19 @@ function resourceId(item: Record<string, unknown>, fallback?: string): string {
  *
  * Reads the live owner-scoped endpoint. When no owner is given, the owner is
  * filled from the account summary and named in the summary output so the
- * caller can tell which workspace was read. An explicit owner always wins
- * over the cached account owner.
+ * caller can tell which workspace was read. An explicit `owner` always wins;
+ * `username` remains as a compatibility alias for it.
  */
 export async function projectsList(
   client: UltralyticsClient,
+  owner?: string,
   username?: string,
 ): Promise<NormalizedToolResult> {
-  const trimmed = username?.trim();
-  const owner =
-    trimmed && trimmed.length > 0 ? trimmed : await client.getAccountOwner();
-  const data = await client.get(`/projects/${encodeURIComponent(owner)}`);
+  const explicit = owner?.trim() || username?.trim() || undefined;
+  const resolvedOwner = explicit ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/projects/${encodeURIComponent(resolvedOwner)}`,
+  );
   const items = listField(data, "projects").map((project) => ({
     id: project.id ?? null,
     name: project.name ?? null,
@@ -35,7 +37,7 @@ export async function projectsList(
     modelCount: project.modelCount ?? null,
   }));
   return {
-    summary: `${items.length} project(s) for owner '${owner}'.`,
+    summary: `${items.length} project(s) for owner '${resolvedOwner}'.`,
     data: items,
   };
 }

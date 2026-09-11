@@ -163,7 +163,11 @@ const TOOL_RUNNERS: Record<
   ) => Promise<NormalizedToolResult>
 > = {
   projects_list: (client, args) =>
-    projectsList(client, args.username as string | undefined),
+    projectsList(
+      client,
+      args.owner as string | undefined,
+      args.username as string | undefined,
+    ),
   projects_create: (client, args) =>
     projectsCreate(client, {
       name: args.name as string,
