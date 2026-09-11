@@ -283,12 +283,7 @@ describe("projectsGet", () => {
       "Project 'road' for owner 'alice': 'Road' (private), 2 model(s).",
     );
     expect(result.data).toEqual({
-      id: "a".repeat(24),
-      name: "Road",
-      slug: "road",
-      username: "alice",
-      visibility: "private",
-      modelCount: 2,
+      project: { ...baseProject },
       models: [{ id: "b".repeat(24), model: "exp", name: "exp" }],
       isOwner: true,
     });
@@ -305,12 +300,7 @@ describe("projectsGet", () => {
       "Project 'None' for owner 'alice': 'None' (None), ? model(s).",
     );
     expect(result.data).toEqual({
-      id: null,
-      name: null,
-      slug: null,
-      username: null,
-      visibility: null,
-      modelCount: null,
+      project: {},
       models: [],
       isOwner: true,
     });
@@ -327,7 +317,10 @@ describe("projectsGet", () => {
       "/api/projects/alice/road",
     ]);
     expect(result.summary).toContain("for owner 'alice'");
-    expect(result.data).toMatchObject({ slug: "road", isOwner: false });
+    expect(result.data).toMatchObject({
+      project: { project: "road" },
+      isOwner: false,
+    });
   });
 
   test("falls back to the account owner for a bare slug", async () => {
@@ -345,7 +338,9 @@ describe("projectsGet", () => {
       "/api/projects/alice/road",
     ]);
     expect(result.summary).toContain("for owner 'alice'");
-    expect(result.data).toMatchObject({ slug: "road", username: "alice" });
+    expect(result.data).toMatchObject({
+      project: { project: "road", owner: "alice" },
+    });
   });
 
   test("rejects a bare id without any network call", async () => {

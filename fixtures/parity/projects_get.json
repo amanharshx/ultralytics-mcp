@@ -58,12 +58,25 @@
   "expected": {
     "summary": "Project 'example-project-3' for owner 'example-owner': 'Example project 3' (private), 0 model(s).",
     "data": {
-      "id": "000000000000000000000003",
-      "name": "Example project 3",
-      "slug": "example-project-3",
-      "username": "example-owner",
-      "visibility": "private",
-      "modelCount": 0,
+      "project": {
+        "id": "000000000000000000000003",
+        "owner": "example-owner",
+        "project": "example-project-3",
+        "name": "Example project 3",
+        "visibility": "private",
+        "iconColor": "blue",
+        "modelCount": 0,
+        "starCount": 0,
+        "isStarred": false,
+        "viewPreferences": {
+          "sortBy": "newest",
+          "groupBy": "task",
+          "statusFilter": "all"
+        },
+        "createdAt": "2026-03-18T02:18:13.769Z",
+        "updatedAt": "2026-06-28T02:01:24.259Z",
+        "metadata": {}
+      },
       "models": [],
       "isOwner": true
     }

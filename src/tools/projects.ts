@@ -98,21 +98,13 @@ export async function projectsGet(
     ? (record.models as unknown[])
     : [];
   const isOwner = typeof record.isOwner === "boolean" ? record.isOwner : null;
-  const normalized = {
-    id: projectFields.id ?? null,
-    name: projectFields.name ?? null,
-    slug: projectFields.project ?? null,
-    username: projectFields.owner ?? null,
-    visibility: projectFields.visibility ?? null,
-    modelCount: projectFields.modelCount ?? null,
-  };
   return {
     summary:
-      `Project '${pyField(normalized.slug)}' for owner '${resolvedOwner}': ` +
-      `'${pyField(normalized.name)}' (${pyField(normalized.visibility)}), ` +
+      `Project '${pyField(projectFields.project)}' for owner '${resolvedOwner}': ` +
+      `'${pyField(projectFields.name)}' (${pyField(projectFields.visibility)}), ` +
       `${pyCount(projectFields, "modelCount")} model(s).`,
     data: {
-      ...normalized,
+      project: projectFields,
       models,
       isOwner,
     },
