@@ -55,6 +55,99 @@ describe("UltralyticsClient.get", () => {
     expect(String(err)).toMatch(/authentication failed/);
   });
 
+  test("surfaces a 404 verbatim with a static hint naming all candidate causes", async () => {
+    // Live capture: GET /api/projects/{bad-owner} -> 404 {"error":"Owner not found"}
+    const { impl } = makeFetch([
+      new Response(JSON.stringify({ error: "Owner not found" }), {
+        status: 404,
+      }),
+    ]);
+    const err = await client(impl)
+      .get("/projects/ghost")
+      .catch((e) => e as UltralyticsApiError);
+    expect(err).toBeInstanceOf(UltralyticsApiError);
+    expect(err.statusCode).toBe(404);
+    expect(err.apiMessage).toBe("Owner not found");
+    expect(String(err)).toMatch(/HTTP 404/);
+    expect(String(err)).toMatch(/Owner not found/);
+    expect(String(err)).toMatch(/owner may not exist/);
+    expect(String(err)).toMatch(/resource may not exist/);
+    expect(String(err)).toMatch(/API key may lack access/);
+  });
+
+  test("uses the same static 404 hint for a missing project", async () => {
+    // Live capture: GET /api/projects/{owner}/{bad-slug} -> 404 {"error":"Project not found"}
+    const ownerFetch = makeFetch([
+      new Response(JSON.stringify({ error: "Owner not found" }), {
+        status: 404,
+      }),
+    ]);
+    const projectFetch = makeFetch([
+      new Response(JSON.stringify({ error: "Project not found" }), {
+        status: 404,
+      }),
+    ]);
+    const ownerErr = await client(ownerFetch.impl)
+      .get("/projects/ghost")
+      .catch((e) => e as UltralyticsApiError);
+    const projectErr = await client(projectFetch.impl)
+      .get("/projects/alice/missing")
+      .catch((e) => e as UltralyticsApiError);
+    expect(projectErr.apiMessage).toBe("Project not found");
+    expect(String(projectErr)).toMatch(/HTTP 404/);
+    expect(String(projectErr)).toMatch(/Project not found/);
+    // Same static hint regardless of which route matched: never branch on message text.
+    const hintOf = (err: UltralyticsApiError): string => {
+      const match = /HTTP 404 \((.*)\):/.exec(String(err));
+      return match?.[1] ?? "";
+    };
+    expect(hintOf(projectErr)).toBe(hintOf(ownerErr));
+    expect(hintOf(projectErr)).toMatch(/owner may not exist/);
+  });
+
+  test("keeps a rejected key distinct from a missing resource", async () => {
+    // Live captures: bad key -> 401 {"error":"Invalid API key"},
+    // unknown owner -> 404 {"error":"Owner not found"}
+    const unauthorized = makeFetch([
+      new Response(JSON.stringify({ error: "Invalid API key" }), {
+        status: 401,
+      }),
+    ]);
+    const notFound = makeFetch([
+      new Response(JSON.stringify({ error: "Owner not found" }), {
+        status: 404,
+      }),
+    ]);
+    const authErr = await client(unauthorized.impl)
+      .get("/projects/alice")
+      .catch((e) => e as UltralyticsApiError);
+    const missingErr = await client(notFound.impl)
+      .get("/projects/ghost")
+      .catch((e) => e as UltralyticsApiError);
+    expect(authErr.statusCode).toBe(401);
+    expect(authErr.apiMessage).toBe("Invalid API key");
+    expect(String(authErr)).toMatch(/HTTP 401/);
+    expect(String(authErr)).toMatch(/Invalid API key/);
+    expect(String(authErr)).toMatch(/authentication failed/);
+    expect(String(missingErr)).not.toMatch(/authentication failed/);
+    expect(String(authErr)).not.toMatch(/owner may not exist/);
+  });
+
+  test("preserves status and message for a 405 with an empty body", async () => {
+    // Live capture: GET /api/projects -> 405 with empty body
+    const { impl } = makeFetch([
+      new Response("", { status: 405, statusText: "Method Not Allowed" }),
+    ]);
+    const err = await client(impl)
+      .get("/projects")
+      .catch((e) => e as UltralyticsApiError);
+    expect(err).toBeInstanceOf(UltralyticsApiError);
+    expect(err.statusCode).toBe(405);
+    expect(String(err)).toMatch(/HTTP 405/);
+    expect(String(err)).toMatch(/HTTP 405 \(.*method not allowed.*\):/i);
+    expect(String(err)).toMatch(/method not allowed/i);
+  });
+
   test("retries a 429 once then succeeds", async () => {
     const { impl, calls } = makeFetch([
       new Response(JSON.stringify({ error: "rate" }), {
