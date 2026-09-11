@@ -501,44 +501,211 @@ describe("datasetImagesList", () => {
 });
 
 describe("datasetsCreate", () => {
-  test("posts the dataset payload and validates task before network", async () => {
-    const { client, calls } = captureClient(() =>
-      jsonResponse({
-        dataset: { _id: "d".repeat(24), slug: "data", task: "detect" },
-      }),
-    );
-    const result = await datasetsCreate(client, {
-      name: "Dataset",
-      task: "detect",
-      slug: "data",
-      visibility: "private",
-      classNames: ["car", "person"],
+  function clientForCreate(
+    createResponse: unknown,
+    options: { accountOwner?: string; status?: number } = {},
+  ) {
+    const calls: { path: string; method: string; body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (
+        parsed.pathname === "/api/datasets" &&
+        (init.method ?? "GET").toUpperCase() === "POST"
+      ) {
+        return jsonResponse(createResponse, options.status ?? 201);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
     });
-    await expect(
-      datasetsCreate(client, {
-        name: "Bad",
-        task: "bad-task",
-        slug: "bad",
-      }),
-    ).rejects.toThrow(/Unsupported dataset task/);
-    await expect(
-      datasetsCreate(client, { name: "Bad", task: "detect", slug: "" }),
-    ).rejects.toThrow(/`slug` is required/);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toEqual({
-      url: `${BASE}/datasets`,
-      method: "POST",
-      body: {
-        name: "Dataset",
-        task: "detect",
-        slug: "data",
-        visibility: "private",
-        classNames: ["car", "person"],
-      },
+    return { client, calls };
+  }
+
+  const flatCreate = {
+    id: "a".repeat(24),
+    owner: "alice",
+    dataset: "cars",
+    region: "eu",
+  };
+
+  test("sends the slug as dataset, defaults to private, and fills the owner", async () => {
+    const { client, calls } = clientForCreate(flatCreate, {
+      accountOwner: "alice",
+    });
+    const result = await datasetsCreate(client, {
+      name: "Cars",
+      dataset: "cars",
+      task: "detect",
+    });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/account/summary",
+      "POST /api/datasets",
+    ]);
+    expect(calls[1].body).toEqual({
+      dataset: "cars",
+      name: "Cars",
+      task: "detect",
+      visibility: "private",
+      owner: "alice",
     });
     expect(result.summary).toBe(
-      `Created dataset ${"d".repeat(24)} slug=data task=detect.`,
+      `Created dataset 'cars' for owner 'alice' with id '${"a".repeat(24)}' (private).`,
     );
+    expect(result.data).toEqual(flatCreate);
+  });
+
+  test("sends public visibility, description, and class names when requested", async () => {
+    const { client, calls } = clientForCreate(flatCreate, {
+      accountOwner: "alice",
+    });
+    const result = await datasetsCreate(client, {
+      name: "Cars",
+      dataset: "cars",
+      task: "detect",
+      visibility: "public",
+      description: "Detection dataset",
+      classNames: ["car", "person"],
+    });
+    expect(calls[1].body).toEqual({
+      dataset: "cars",
+      name: "Cars",
+      task: "detect",
+      visibility: "public",
+      owner: "alice",
+      description: "Detection dataset",
+      classNames: ["car", "person"],
+    });
+    expect(result.summary).toContain("(public)");
+    expect(result.data).toEqual(flatCreate);
+  });
+
+  test("prefers an explicit owner and skips the account summary", async () => {
+    const { client, calls } = clientForCreate(flatCreate);
+    const result = await datasetsCreate(client, {
+      name: "Cars",
+      dataset: "cars",
+      task: "detect",
+      owner: "bob",
+    });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "POST /api/datasets",
+    ]);
+    expect(calls[0].body).toMatchObject({ owner: "bob" });
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("treats a blank owner as omitted", async () => {
+    const { client, calls } = clientForCreate(flatCreate, {
+      accountOwner: "alice",
+    });
+    await datasetsCreate(client, {
+      name: "Cars",
+      dataset: "cars",
+      task: "detect",
+      owner: "   ",
+    });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/account/summary",
+      "POST /api/datasets",
+    ]);
+    expect(calls[1].body).toMatchObject({ owner: "alice" });
+  });
+
+  test("reports id, owner, and slug from the flat response", async () => {
+    const { client } = clientForCreate(
+      { id: "c".repeat(24), owner: "bob", dataset: "track", region: "us" },
+      { accountOwner: "bob" },
+    );
+    const result = await datasetsCreate(client, {
+      name: "Track",
+      dataset: "track",
+      task: "detect",
+    });
+    expect(result.summary).toContain(`'track'`);
+    expect(result.summary).toContain(`'bob'`);
+    expect(result.summary).toContain("c".repeat(24));
+    expect(result.data).toEqual({
+      id: "c".repeat(24),
+      owner: "bob",
+      dataset: "track",
+      region: "us",
+    });
+  });
+
+  test("validates task and dataset before network", async () => {
+    const { client, calls } = clientForCreate(flatCreate, {
+      accountOwner: "alice",
+    });
+    await expect(
+      datasetsCreate(client, { name: "Bad", dataset: "bad", task: "bad-task" }),
+    ).rejects.toThrow(/Unsupported dataset task/);
+    await expect(
+      datasetsCreate(client, { name: "Bad", dataset: "", task: "detect" }),
+    ).rejects.toThrow(/`dataset` is required/);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("surfaces the API message for invalid visibility", async () => {
+    const { client } = clientForCreate(
+      { error: 'Invalid option: expected one of "public"|"private"' },
+      { accountOwner: "alice", status: 400 },
+    );
+    await expect(
+      datasetsCreate(client, {
+        name: "Cars",
+        dataset: "cars",
+        task: "detect",
+        visibility: "secret",
+      }),
+    ).rejects.toThrow(/Invalid option/);
+  });
+
+  test("surfaces the API message for an owner without access", async () => {
+    const { client } = clientForCreate(
+      { error: "Access denied" },
+      { status: 403 },
+    );
+    await expect(
+      datasetsCreate(client, {
+        name: "Cars",
+        dataset: "cars",
+        task: "detect",
+        owner: "ghost-owner",
+      }),
+    ).rejects.toThrow(/Access denied/);
+  });
+
+  test("surfaces the API invalid-input error", async () => {
+    const { client } = clientForCreate(
+      { error: "Invalid input: expected string, received undefined" },
+      { accountOwner: "alice", status: 400 },
+    );
+    await expect(
+      datasetsCreate(client, {
+        name: "Cars",
+        dataset: "cars",
+        task: "detect",
+        visibility: "private",
+      }),
+    ).rejects.toThrow(/Invalid input/);
   });
 });
 

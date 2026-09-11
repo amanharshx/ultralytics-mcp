@@ -294,17 +294,29 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "datasets_create",
     registrationGroup: "write",
     stateChanging: true,
-    description: "Create a dataset in your Ultralytics workspace.",
+    description:
+      "Create a dataset in your Ultralytics workspace. Defaults to private visibility (the platform defaults to public when visibility is omitted).",
     inputSchema: {
       name: z.string(),
+      dataset: z
+        .string()
+        .describe(
+          "URL slug for the new dataset (distinct from the display name given by name).",
+        ),
       task: z
         .string()
         .describe(
           "Dataset task such as detect, segment, semantic, pose, obb, or classify.",
         ),
-      slug: z.string(),
+      owner: z
+        .string()
+        .optional()
+        .describe("Workspace owner; defaults to the account owner."),
+      visibility: z
+        .string()
+        .optional()
+        .describe('Visibility "private" (default) or "public".'),
       description: z.string().optional(),
-      visibility: z.string().optional(),
       classNames: z.array(z.string()).optional(),
     },
     annotations: {
@@ -314,12 +326,21 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     },
     createHandler:
       (getClient) =>
-      async ({ name, task, slug, description, visibility, classNames }) =>
+      async ({
+        name,
+        dataset,
+        task,
+        owner,
+        description,
+        visibility,
+        classNames,
+      }) =>
         toMcpTextResult(
           await datasetsCreate(getClient(), {
             name: name as string,
+            dataset: dataset as string,
             task: task as string,
-            slug: slug as string,
+            owner: owner as string | undefined,
             description: description as string | undefined,
             visibility: visibility as string | undefined,
             classNames: classNames as string[] | undefined,

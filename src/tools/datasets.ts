@@ -52,11 +52,6 @@ const UPLOAD_TYPES: Array<[suffix: string, contentType: string]> = [
 ];
 const execFile = promisify(execFileCb);
 
-function resourceId(item: Record<string, unknown>, fallback?: string): string {
-  const value = item._id ?? item.id ?? item.projectId ?? item.datasetId;
-  return String(value ?? fallback ?? "None");
-}
-
 function validateTargetSplit(targetSplit?: string): void {
   if (targetSplit !== undefined && !TARGET_SPLITS.has(targetSplit)) {
     const allowed = Array.from(TARGET_SPLITS).sort().join(", ");
@@ -462,14 +457,21 @@ export async function datasetsGet(
 
 export interface DatasetsCreateOptions {
   name: string;
+  dataset: string;
   task: string;
-  slug: string;
-  description?: string;
+  owner?: string;
   visibility?: string;
+  description?: string;
   classNames?: string[];
 }
 
-/** Create a dataset. */
+/** Create a dataset safely without publishing by accident.
+ *
+ * Sends the URL slug as `dataset` (the API rejects `slug`), defaults
+ * visibility to private, accepts an optional owner defaulting to the
+ * account owner, and reads the flat create response. The summary names
+ * the id, owner, and slug so the caller can tell what was created where.
+ */
 export async function datasetsCreate(
   client: UltralyticsClient,
   options: DatasetsCreateOptions,
@@ -480,20 +482,22 @@ export async function datasetsCreate(
       `Unsupported dataset task '${options.task}'. Expected one of: ${allowed}.`,
     );
   }
-  if (!options.slug.trim()) {
-    throw new Error("`slug` is required.");
+  if (!options.dataset?.trim()) {
+    throw new Error("`dataset` is required.");
   }
 
+  const explicitOwner = options.owner?.trim() || undefined;
+  const resolvedOwner = explicitOwner ?? (await client.getAccountOwner());
+  const visibility = options.visibility ?? "private";
   const payload: Record<string, unknown> = {
+    dataset: options.dataset,
     name: options.name,
     task: options.task,
-    slug: options.slug,
+    visibility,
+    owner: resolvedOwner,
   };
   if (options.description !== undefined) {
     payload.description = options.description;
-  }
-  if (options.visibility !== undefined) {
-    payload.visibility = options.visibility;
   }
   if (options.classNames !== undefined) {
     payload.classNames = options.classNames;
@@ -501,13 +505,12 @@ export async function datasetsCreate(
 
   const data = await client.postJson("/datasets", payload);
   const record = asRecord(data);
-  const item = asRecord("dataset" in record ? record.dataset : data);
-  const id = resourceId(item);
-  const slug = item.slug ?? options.slug;
-  const task = item.task ?? options.task;
   return {
-    summary: `Created dataset ${id} slug=${String(slug)} task=${String(task)}.`,
-    data: item,
+    summary:
+      `Created dataset '${pyField(record.dataset ?? options.dataset)}' ` +
+      `for owner '${pyField(record.owner ?? resolvedOwner)}' ` +
+      `with id '${pyField(record.id)}' (${pyField(visibility)}).`,
+    data: record,
   };
 }
 
