@@ -1,13 +1,15 @@
 /** Resolve Platform references to owner-scoped paths.
  *
- * Project references resolve by pure string parsing with no network calls:
- * `owner/slug`, `ul://owner/project`, and bare `slug` all parse directly
- * into an `{owner, project}` pair. Ids are not addressable on any endpoint,
- * so a bare 24-character hex id is rejected with an actionable error.
+ * Project and dataset references resolve by pure string parsing with no
+ * network calls: `owner/slug`, `ul://owner/<kind>`, and bare `slug` all
+ * parse directly into an `{owner, <kind>}` pair. Ids are not addressable on
+ * any endpoint, so a bare 24-character hex id is rejected with an actionable
+ * error.
  *
- * Dataset and model lookups below are unmigrated legacy: they still resolve
- * to ids for endpoints whose live contract has not been captured yet. They
- * keep their previous behavior until their own migration; do not extend them.
+ * Model lookups and the legacy id lookups below are unmigrated legacy: they
+ * still resolve to ids for endpoints whose live contract has not been
+ * captured yet. They keep their previous behavior until their own migration;
+ * do not extend them.
  */
 
 import type { UltralyticsClient } from "./client.js";
@@ -96,6 +98,71 @@ export function resolveProject(ref: string): ResolvedProjectRef {
   return {
     owner: parts.length === 2 ? parts[0] : null,
     project: parts[parts.length - 1],
+  };
+}
+
+/** Owner-scoped dataset reference. `owner` is null for a bare slug; the
+ * caller fills it from the account summary (see `getAccountOwner`). */
+export interface ResolvedDatasetRef {
+  owner: string | null;
+  dataset: string;
+}
+
+const DATASET_REF_HELP =
+  "Use 'slug', 'owner/slug', or a 'ul://owner/dataset' URI.";
+const DATASET_IDS_NOT_ADDRESSABLE = "Dataset ids are not addressable.";
+
+/** Parse a dataset ref into an `{owner, dataset}` pair with no network call.
+ *
+ * Accepts `owner/slug`, `ul://owner/dataset`, and a bare `slug`. Rejects
+ * bare 24-character hex ids (not addressable), model `ul://` URIs, and the
+ * legacy `ul://owner/datasets/slug` URI form with errors that point at the
+ * correct form. A 2-part `ul://` project URI is structurally identical to a
+ * dataset URI, so it resolves as a dataset ref; the tool context decides the
+ * kind, exactly as the `owner/slug` path form does.
+ */
+export function resolveDataset(ref: string): ResolvedDatasetRef {
+  const trimmed = ref.trim();
+  if (!trimmed) {
+    throw new ResolutionError(
+      `Cannot parse dataset reference ''. ${DATASET_REF_HELP} ${DATASET_IDS_NOT_ADDRESSABLE}`,
+    );
+  }
+  if (looksLikeId(trimmed)) {
+    throw new ResolutionError(
+      `${DATASET_IDS_NOT_ADDRESSABLE} ${DATASET_REF_HELP} '${trimmed}' is a bare id, ` +
+        "which is no longer accepted.",
+    );
+  }
+
+  const { isUlUri, parts } = parseRef(trimmed);
+  if (isUlUri) {
+    if (parts.length === 3 && parts[1] === "datasets") {
+      throw new ResolutionError(
+        `'${trimmed}' is a legacy dataset URI. ${DATASET_REF_HELP}`,
+      );
+    }
+    if (parts.length === 3) {
+      throw new ResolutionError(
+        `'${trimmed}' is a model URI, not a dataset. ${DATASET_REF_HELP}`,
+      );
+    }
+    if (parts.length !== 2) {
+      throw new ResolutionError(
+        `Unsupported dataset ul:// URI '${trimmed}'. Expected 'ul://owner/dataset'.`,
+      );
+    }
+    return { owner: parts[0], dataset: parts[1] };
+  }
+  if (parts.length === 0 || parts.length > 2) {
+    throw new ResolutionError(
+      `Cannot parse dataset reference '${trimmed}'. ${DATASET_REF_HELP} ` +
+        DATASET_IDS_NOT_ADDRESSABLE,
+    );
+  }
+  return {
+    owner: parts.length === 2 ? parts[0] : null,
+    dataset: parts[parts.length - 1],
   };
 }
 
@@ -225,8 +292,17 @@ export async function resolveLegacyProjectId(
   return select(matches, "project", ref)._id as string;
 }
 
-/** Resolve a dataset id, slug, username/slug, or dataset ul:// URI. */
-export async function resolveDataset(
+/** Legacy dataset-id lookup for unmigrated tools only.
+ *
+ * Preserves the previous list-then-filter behavior (including id
+ * passthrough) for consumers whose live contract has not been captured yet
+ * (dataset get/delete/images/export/version/ingest/upload, training start).
+ * Ticket 01 keeps their behavior by design ("adapting those call sites is in
+ * scope; migrating their behaviour is not"), so this lookup stays until the
+ * later dataset tickets migrate those consumers. Migrated tools use the pure
+ * {@link resolveDataset} instead. Do not use for new code.
+ */
+export async function resolveLegacyDatasetId(
   client: UltralyticsClient,
   ref: string,
 ): Promise<string> {
@@ -260,12 +336,16 @@ export async function resolveDataset(
   return select(matches, "dataset", ref)._id as string;
 }
 
-/** Resolve a dataset ref and return its id plus task metadata. */
-export async function resolveDatasetDetails(
+/** Legacy dataset details lookup for unmigrated tools only.
+ *
+ * Preserves the previous id-then-fetch behavior until the later dataset
+ * tickets migrate its consumers. Do not use for new code.
+ */
+export async function resolveLegacyDatasetDetails(
   client: UltralyticsClient,
   ref: string,
 ): Promise<ResolvedDatasetDetails> {
-  const id = await resolveDataset(client, ref);
+  const id = await resolveLegacyDatasetId(client, ref);
   const data = await client.get(`/datasets/${id}`);
   const dataset =
     data &&

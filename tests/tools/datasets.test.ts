@@ -47,39 +47,156 @@ function captureClient(responder: (url: string) => Response) {
 }
 
 describe("datasetsList", () => {
-  test("normalizes items and summarizes count", async () => {
-    const { client } = routeClient((path) => {
-      if (path === "/api/datasets") {
+  /** Client whose datasets path answers 404 Owner not found for `ghost`. */
+  function ghostOwnerClient() {
+    return routeClient((path) => {
+      if (path === "/api/datasets/ghost") {
+        return jsonResponse({ error: "Owner not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+  }
+
+  test("fills the owner from the account summary and reads live field names", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/datasets/alice") {
         return jsonResponse({
           datasets: [
             {
-              _id: "d".repeat(24),
+              id: "a".repeat(24),
+              owner: "alice",
+              dataset: "cars",
               name: "Cars",
-              slug: "cars",
+              visibility: "private",
               task: "detect",
               imageCount: 100,
               classCount: 5,
-              visibility: "private",
+              classNames: ["car"],
+              status: "ready",
+              errorCount: 0,
+              extra: "omitted",
+            },
+            {
+              id: "b".repeat(24),
+              owner: "alice",
+              dataset: "bare",
+              name: "Bare",
+              visibility: "public",
             },
           ],
+          total: 2,
+          region: "eu",
         });
       }
       return jsonResponse({}, 404);
     });
 
     const result = await datasetsList(client);
-    expect(result.summary).toBe("1 dataset(s).");
+    expect(result.summary).toBe("2 dataset(s) for owner 'alice'.");
     expect(result.data).toEqual([
       {
-        id: "d".repeat(24),
+        id: "a".repeat(24),
         name: "Cars",
         slug: "cars",
+        username: "alice",
+        visibility: "private",
         task: "detect",
         imageCount: 100,
         classCount: 5,
-        visibility: "private",
+      },
+      {
+        id: "b".repeat(24),
+        name: "Bare",
+        slug: "bare",
+        username: "alice",
+        visibility: "public",
+        task: null,
+        imageCount: null,
+        classCount: null,
       },
     ]);
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/datasets/alice",
+    ]);
+  });
+
+  test("prefers an explicit owner and skips the account summary", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/datasets/bob") {
+        return jsonResponse({ datasets: [], total: 0, region: "eu" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await datasetsList(client, "bob");
+    expect(result.summary).toBe("0 dataset(s) for owner 'bob'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/datasets/bob"]);
+  });
+
+  test("accepts the owner through the username alias", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/datasets/bob") {
+        return jsonResponse({ datasets: [], total: 0, region: "eu" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await datasetsList(client, undefined, "bob");
+    expect(result.summary).toBe("0 dataset(s) for owner 'bob'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/datasets/bob"]);
+  });
+
+  test("prefers owner over the username alias when both are given", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/datasets/alice") {
+        return jsonResponse({ datasets: [], total: 0, region: "eu" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await datasetsList(client, "alice", "bob");
+    expect(result.summary).toBe("0 dataset(s) for owner 'alice'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/datasets/alice"]);
+  });
+
+  test("treats a blank owner as omitted", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/datasets/alice") {
+        return jsonResponse({ datasets: [], total: 0, region: "eu" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await datasetsList(client, "   ");
+    expect(result.summary).toBe("0 dataset(s) for owner 'alice'.");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/datasets/alice",
+    ]);
+  });
+
+  test("surfaces the API message for an owner that does not exist", async () => {
+    const { client } = ghostOwnerClient();
+    await expect(datasetsList(client, "ghost")).rejects.toThrow(
+      /Owner not found/,
+    );
+  });
+
+  test("attaches the static not-found hint through the tool", async () => {
+    // Live capture: GET /api/datasets/{bad-owner} -> 404 {"error":"Owner not found"}
+    const { client } = ghostOwnerClient();
+    const err = await datasetsList(client, "ghost").catch((e) => e as Error);
+    expect(String(err)).toMatch(/HTTP 404/);
+    expect(String(err)).toMatch(/Owner not found/);
+    expect(String(err)).toMatch(/owner may not exist/);
+    expect(String(err)).toMatch(/resource may not exist/);
+    expect(String(err)).toMatch(/API key may lack access/);
   });
 });
 

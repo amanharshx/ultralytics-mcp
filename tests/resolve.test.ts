@@ -5,6 +5,7 @@ import {
   looksLikeId,
   parseRef,
   resolveDataset,
+  resolveLegacyDatasetId,
   resolveLegacyProjectId,
   resolveModel,
   resolveProject,
@@ -182,6 +183,81 @@ describe("resolveLegacyProjectId (legacy id lookup for unmigrated tools)", () =>
 });
 
 describe("resolveDataset", () => {
+  test("parses owner/slug into a pair with no network call", () => {
+    expect(resolveDataset("u/data")).toEqual({ owner: "u", dataset: "data" });
+  });
+
+  test("parses a ul:// dataset URI into a pair with no network call", () => {
+    expect(resolveDataset("ul://u/data")).toEqual({
+      owner: "u",
+      dataset: "data",
+    });
+  });
+
+  test("rejects the legacy ul://owner/datasets/slug URI and points at the current form", () => {
+    expect(() => resolveDataset("ul://u/datasets/data")).toThrow(
+      /legacy dataset URI.*ul:\/\/owner\/dataset/s,
+    );
+  });
+
+  test("parses a bare slug with a null owner and no network call", () => {
+    expect(resolveDataset("data")).toEqual({ owner: null, dataset: "data" });
+  });
+
+  test("trims surrounding whitespace", () => {
+    expect(resolveDataset("  u/data  ")).toEqual({
+      owner: "u",
+      dataset: "data",
+    });
+  });
+
+  test("rejects a bare 24-hex id and names the accepted ref forms", () => {
+    expect(() => resolveDataset("6a15700a49a694644aeb62aa")).toThrow(
+      /not addressable.*slug.*owner\/slug.*ul:\/\//s,
+    );
+  });
+
+  test("rejects an uppercase 24-hex id", () => {
+    expect(() => resolveDataset("6A15700A49A694644AEB62AA")).toThrow(
+      /not addressable/,
+    );
+  });
+
+  test("rejects a blank reference", () => {
+    expect(() => resolveDataset("   ")).toThrow(/Cannot parse dataset/);
+  });
+
+  test("rejects a slash-only reference", () => {
+    expect(() => resolveDataset("///")).toThrow(/Cannot parse dataset/);
+  });
+
+  test("rejects a three-segment reference", () => {
+    expect(() => resolveDataset("a/b/c")).toThrow(/Cannot parse dataset/);
+  });
+
+  test("a model URI is rejected and points at the dataset form", () => {
+    expect(() => resolveDataset("ul://u/proj/mod")).toThrow(
+      /model URI.*ul:\/\/owner\/dataset/s,
+    );
+  });
+
+  test("a malformed dataset ul:// URI names the expected form", () => {
+    expect(() => resolveDataset("ul://only-one-part")).toThrow(
+      /Unsupported dataset ul:\/\/ URI.*ul:\/\/owner\/dataset/s,
+    );
+  });
+});
+
+describe("resolveLegacyDatasetId (legacy id lookup for unmigrated tools)", () => {
+  test("id passthrough makes no request", async () => {
+    const id = "6a15700a49a694644aeb62aa";
+    const { client, calls } = clientWith(
+      () => new Response(null, { status: 500 }),
+    );
+    expect(await resolveLegacyDatasetId(client, id)).toBe(id);
+    expect(calls).toHaveLength(0);
+  });
+
   test("resolves a dataset ul:// URI by querying username and filtering slug locally", async () => {
     const { client, calls } = clientWith(
       () =>
@@ -195,7 +271,7 @@ describe("resolveDataset", () => {
           { status: 200 },
         ),
     );
-    expect(await resolveDataset(client, "ul://u/datasets/data")).toBe(
+    expect(await resolveLegacyDatasetId(client, "ul://u/datasets/data")).toBe(
       "d".repeat(24),
     );
     expect(calls[0].path).toBe("/api/datasets");
@@ -216,7 +292,7 @@ describe("resolveDataset", () => {
           { status: 200 },
         ),
     );
-    expect(await resolveDataset(client, "u/data")).toBe("d".repeat(24));
+    expect(await resolveLegacyDatasetId(client, "u/data")).toBe("d".repeat(24));
     expect(calls[0].path).toBe("/api/datasets");
     expect(calls[0].params.get("username")).toBe("u");
     expect(calls[0].params.has("slug")).toBe(false);
@@ -232,7 +308,7 @@ describe("resolveDataset", () => {
           { status: 200 },
         ),
     );
-    expect(await resolveDataset(client, "data")).toBe("d".repeat(24));
+    expect(await resolveLegacyDatasetId(client, "data")).toBe("d".repeat(24));
     expect(calls[0].path).toBe("/api/datasets");
     expect(calls[0].params.has("slug")).toBe(false);
     expect(calls[0].params.has("username")).toBe(false);
@@ -241,7 +317,7 @@ describe("resolveDataset", () => {
   test("a malformed dataset ul:// URI is rejected", async () => {
     const { client } = clientWith(() => new Response(null, { status: 500 }));
     await expect(
-      resolveDataset(client, "ul://u/project/model"),
+      resolveLegacyDatasetId(client, "ul://u/project/model"),
     ).rejects.toThrow(/Unsupported dataset ul:\/\/ URI/);
   });
 });

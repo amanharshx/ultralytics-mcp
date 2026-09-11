@@ -10,7 +10,7 @@ import { strFromU8, unzipSync, zipSync } from "fflate";
 import { parse } from "yaml";
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveDataset } from "../resolve.js";
+import { resolveLegacyDatasetId } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch, validateExploreTasks } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -362,25 +362,37 @@ async function uploadDatasetContent(
   return { sessionId, ingest };
 }
 
-/** List datasets in the workspace, optionally filtered by username. */
+/** List datasets in the workspace, optionally filtered by owner.
+ *
+ * Reads the live owner-scoped endpoint. When no owner is given, the owner is
+ * filled from the account summary and named in the summary output so the
+ * caller can tell which workspace was read. An explicit `owner` always wins;
+ * `username` remains as a compatibility alias for it.
+ */
 export async function datasetsList(
   client: UltralyticsClient,
+  owner?: string,
   username?: string,
 ): Promise<NormalizedToolResult> {
+  const explicitOwner = owner?.trim() || username?.trim() || undefined;
+  const resolvedOwner = explicitOwner ?? (await client.getAccountOwner());
   const data = await client.get(
-    "/datasets",
-    username ? { username } : undefined,
+    `/datasets/${encodeURIComponent(resolvedOwner)}`,
   );
   const items = listField(data, "datasets").map((dataset) => ({
-    id: dataset._id ?? null,
+    id: dataset.id ?? null,
     name: dataset.name ?? null,
-    slug: dataset.slug ?? null,
+    slug: dataset.dataset ?? null,
+    username: dataset.owner ?? null,
+    visibility: dataset.visibility ?? null,
     task: dataset.task ?? null,
     imageCount: dataset.imageCount ?? null,
     classCount: dataset.classCount ?? null,
-    visibility: dataset.visibility ?? null,
   }));
-  return { summary: `${items.length} dataset(s).`, data: items };
+  return {
+    summary: `${items.length} dataset(s) for owner '${resolvedOwner}'.`,
+    data: items,
+  };
 }
 
 export interface ExploreDatasetsOptions {
@@ -425,7 +437,7 @@ export async function datasetsGet(
   client: UltralyticsClient,
   dataset: string,
 ): Promise<NormalizedToolResult> {
-  const datasetId = await resolveDataset(client, dataset);
+  const datasetId = await resolveLegacyDatasetId(client, dataset);
   const data = await client.get(`/datasets/${datasetId}`);
   const record = asRecord(data);
   const item = "dataset" in record ? record.dataset : data;
@@ -523,7 +535,7 @@ export async function datasetImagesList(
     throw new Error("`offset` must be greater than or equal to 0.");
   }
 
-  const datasetId = await resolveDataset(client, options.dataset);
+  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
   const params: Record<string, unknown> = {};
   if (options.split !== undefined) {
     params.split = options.split;
@@ -582,7 +594,7 @@ export async function datasetsDelete(
   client: UltralyticsClient,
   dataset: string,
 ): Promise<NormalizedToolResult> {
-  const datasetId = await resolveDataset(client, dataset);
+  const datasetId = await resolveLegacyDatasetId(client, dataset);
   const data = await client.delete(`/datasets/${datasetId}`);
   return {
     summary: `Deleted dataset ${datasetId} (soft delete).`,
@@ -606,7 +618,7 @@ export async function datasetsIngest(
   }
   validateTargetSplit(options.targetSplit);
 
-  const datasetId = await resolveDataset(client, options.dataset);
+  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
   const payload: Record<string, unknown> = {
     datasetId,
     sourceUrl: options.sourceUrl,
@@ -638,7 +650,7 @@ export async function datasetUploadFile(
   validateTargetSplit(options.targetSplit);
 
   const meta = await datasetUploadFileMeta(options.filePath);
-  const datasetId = await resolveDataset(client, options.dataset);
+  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
   const content = await readFile(options.filePath);
   const classMapping = extractArchiveClassMapping(content, meta.filename);
 
@@ -686,7 +698,7 @@ export async function datasetUploadFolder(
     );
   }
 
-  const datasetId = await resolveDataset(client, options.dataset);
+  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
   const content = await buildDatasetFolderZip(folder.files);
   const filename = `${basename(folder.folderPath)}.zip`;
   const upload = await uploadDatasetContent(client, {
@@ -795,7 +807,7 @@ export async function datasetUploadVideo(
     });
     const folder = await datasetFolderImages(outputDir);
     const content = await buildDatasetFolderZip(folder.files);
-    const datasetId = await resolveDataset(client, options.dataset);
+    const datasetId = await resolveLegacyDatasetId(client, options.dataset);
     const filename = `${basename(resolvedVideo).replace(/\.[^.]+$/, "")}.zip`;
     const upload = await uploadDatasetContent(client, {
       datasetId,
@@ -838,7 +850,7 @@ export async function datasetExport(
     throw new Error("`version` must be greater than 0.");
   }
 
-  const datasetId = await resolveDataset(client, options.dataset);
+  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
   const data = asRecord(
     await client.get(
       `/datasets/${datasetId}/export`,
@@ -870,7 +882,7 @@ export async function datasetVersionCreate(
   client: UltralyticsClient,
   options: DatasetVersionCreateOptions,
 ): Promise<NormalizedToolResult> {
-  const datasetId = await resolveDataset(client, options.dataset);
+  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
   const payload: Record<string, unknown> = {};
   if (options.description !== undefined) {
     payload.description = options.description;

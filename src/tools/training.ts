@@ -4,8 +4,8 @@ import type { UltralyticsClient } from "../client.js";
 import { UltralyticsApiError } from "../errors.js";
 import {
   parseRef,
-  resolveDataset,
-  resolveDatasetDetails,
+  resolveLegacyDatasetDetails,
+  resolveLegacyDatasetId,
   resolveLegacyProjectId,
   resolveModel,
 } from "../resolve.js";
@@ -319,8 +319,8 @@ export async function trainingStart(
   const checkpoint = checkpointFromRef(model);
   const datasetDetails =
     checkpoint === null
-      ? { id: await resolveDataset(client, dataset), task: null }
-      : await resolveDatasetDetails(client, dataset);
+      ? { id: await resolveLegacyDatasetId(client, dataset), task: null }
+      : await resolveLegacyDatasetDetails(client, dataset);
   const datasetId = datasetDetails.id;
 
   let modelId: string;
