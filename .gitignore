@@ -2,3 +2,11 @@ node_modules/
 dist/
 .DS_Store
 .mcp.json
+
+# Local secrets / API keys
+.env
+.env.*
+.env/
+
+# Local git worktrees
+.worktrees/
