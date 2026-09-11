@@ -108,6 +108,34 @@ describe("UltralyticsClient POST", () => {
   });
 });
 
+describe("UltralyticsClient.getAccountOwner", () => {
+  test("reads the owner from the account summary", async () => {
+    const { impl, calls } = makeFetch([
+      new Response(JSON.stringify({ username: "alice" }), { status: 200 }),
+    ]);
+    const owner = await client(impl).getAccountOwner();
+    expect(owner).toBe("alice");
+    expect(calls[0].url).toBe(`${BASE}/account/summary`);
+  });
+
+  test("caches the owner for the lifetime of the client", async () => {
+    const { impl, calls } = makeFetch([
+      new Response(JSON.stringify({ username: "alice" }), { status: 200 }),
+    ]);
+    const owned = client(impl);
+    await expect(owned.getAccountOwner()).resolves.toBe("alice");
+    await expect(owned.getAccountOwner()).resolves.toBe("alice");
+    expect(calls).toHaveLength(1);
+  });
+
+  test("fails loudly when the summary has no username", async () => {
+    const { impl } = makeFetch([
+      new Response(JSON.stringify({ plan: "pro" }), { status: 200 }),
+    ]);
+    await expect(client(impl).getAccountOwner()).rejects.toThrow(/username/);
+  });
+});
+
 describe("UltralyticsClient.downloadBytes", () => {
   test("fetches a signed URL without forwarding Authorization", async () => {
     const api = makeFetch([new Response("{}", { status: 200 })]);

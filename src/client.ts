@@ -49,6 +49,7 @@ export class UltralyticsClient {
   private readonly fetchImpl: FetchLike;
   private readonly downloadFetchImpl: FetchLike;
   private readonly uploadFetchImpl: FetchLike;
+  private accountOwner: string | undefined;
 
   constructor(options: ClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? getApiBase()).replace(/\/+$/, "");
@@ -112,6 +113,30 @@ export class UltralyticsClient {
   /** DELETE requests are state-changing and do not retry 429 responses. */
   async delete(path: string): Promise<unknown> {
     return this.request("DELETE", path, { retryOn429: false });
+  }
+
+  /** Return the workspace owner for this API key.
+   *
+   * Read once from `GET /api/account/summary` and cached for the lifetime of
+   * the client. The API key determines the workspace, so the owner cannot
+   * change without a new client and the cache is never invalidated.
+   */
+  async getAccountOwner(): Promise<string> {
+    if (this.accountOwner !== undefined) {
+      return this.accountOwner;
+    }
+    const data = await this.get("/account/summary");
+    const username =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>).username
+        : undefined;
+    if (typeof username !== "string" || !username.trim()) {
+      throw new Error(
+        "Account summary did not include a username; cannot determine the workspace owner.",
+      );
+    }
+    this.accountOwner = username;
+    return this.accountOwner;
   }
 
   /** Download bytes from a signed URL WITHOUT forwarding API credentials. */
