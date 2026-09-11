@@ -69,14 +69,16 @@ Metadata: read-only, external/live
 
 ### projects_create
 
-Create a project in your Ultralytics workspace.
+Create a project in your Ultralytics workspace. Defaults to private visibility (the platform defaults to public when visibility is omitted).
 
 Metadata: state-changing, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | string | Yes |  |
-| `slug` | string | No |  |
+| `project` | string | Yes | URL slug for the new project (distinct from the display name given by name). |
+| `owner` | string | No | Workspace owner; defaults to the account owner. |
+| `visibility` | string | No | Visibility "private" (default) or "public". |
 | `description` | string | No |  |
 
 ### projects_delete

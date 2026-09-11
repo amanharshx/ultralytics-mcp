@@ -6,11 +6,6 @@ import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
 
-function resourceId(item: Record<string, unknown>, fallback?: string): string {
-  const value = item._id ?? item.id ?? item.projectId ?? item.datasetId;
-  return String(value ?? fallback ?? "None");
-}
-
 /** List projects in the workspace, optionally filtered by username.
  *
  * Reads the live owner-scoped endpoint. When no owner is given, the owner is
@@ -113,31 +108,44 @@ export async function projectsGet(
 
 export interface ProjectsCreateOptions {
   name: string;
-  slug?: string;
+  project: string;
+  owner?: string;
+  visibility?: string;
   description?: string;
 }
 
-/** Create a project. */
+/** Create a project safely without publishing by accident.
+ *
+ * Sends the URL slug as `project` (the API rejects `slug`), defaults
+ * visibility to private, accepts an optional owner defaulting to the
+ * account owner, and reads the flat create response. The summary names
+ * the id, owner, and slug so the caller can tell what was created where.
+ */
 export async function projectsCreate(
   client: UltralyticsClient,
   options: ProjectsCreateOptions,
 ): Promise<NormalizedToolResult> {
-  const payload: Record<string, unknown> = { name: options.name };
-  if (options.slug !== undefined) {
-    payload.slug = options.slug;
-  }
+  const explicitOwner = options.owner?.trim() || undefined;
+  const resolvedOwner = explicitOwner ?? (await client.getAccountOwner());
+  const visibility = options.visibility ?? "private";
+  const payload: Record<string, unknown> = {
+    project: options.project,
+    name: options.name,
+    visibility,
+    owner: resolvedOwner,
+  };
   if (options.description !== undefined) {
     payload.description = options.description;
   }
 
   const data = await client.postJson("/projects", payload);
   const record = asRecord(data);
-  const item = asRecord("project" in record ? record.project : data);
-  const id = resourceId(item);
-  const slug = item.slug ?? options.slug ?? "None";
   return {
-    summary: `Created project ${id} slug=${String(slug)}.`,
-    data: item,
+    summary:
+      `Created project '${pyField(record.project ?? options.project)}' ` +
+      `for owner '${pyField(record.owner ?? resolvedOwner)}' ` +
+      `with id '${pyField(record.id)}' (${pyField(visibility)}).`,
+    data: record,
   };
 }
 

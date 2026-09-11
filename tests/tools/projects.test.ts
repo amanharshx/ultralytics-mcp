@@ -365,27 +365,182 @@ describe("projectsGet", () => {
 });
 
 describe("projectsCreate", () => {
-  test("posts the project payload and summarizes created project", async () => {
-    const { client, calls } = captureClient(() =>
-      jsonResponse({
-        project: { _id: "p".repeat(24), slug: "road", name: "Road Safety" },
-      }),
-    );
+  function clientForCreate(
+    createResponse: unknown,
+    options: { accountOwner?: string; status?: number } = {},
+  ) {
+    const calls: { path: string; method: string; body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (
+        parsed.pathname === "/api/projects" &&
+        (init.method ?? "GET").toUpperCase() === "POST"
+      ) {
+        return jsonResponse(createResponse, options.status ?? 200);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+    return { client, calls };
+  }
+
+  const flatCreate = {
+    id: "a".repeat(24),
+    owner: "alice",
+    project: "road",
+    region: "eu",
+  };
+
+  test("sends the slug as project, defaults to private, and fills the owner", async () => {
+    const { client, calls } = clientForCreate(flatCreate, {
+      accountOwner: "alice",
+    });
     const result = await projectsCreate(client, {
       name: "Road Safety",
-      slug: "road",
+      project: "road",
+    });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/account/summary",
+      "POST /api/projects",
+    ]);
+    expect(calls[1].body).toEqual({
+      project: "road",
+      name: "Road Safety",
+      visibility: "private",
+      owner: "alice",
+    });
+    expect(result.summary).toBe(
+      `Created project 'road' for owner 'alice' with id '${"a".repeat(24)}' (private).`,
+    );
+    expect(result.data).toEqual(flatCreate);
+  });
+
+  test("sends public visibility and description when requested", async () => {
+    const { client, calls } = clientForCreate(flatCreate, {
+      accountOwner: "alice",
+    });
+    const result = await projectsCreate(client, {
+      name: "Road Safety",
+      project: "road",
+      visibility: "public",
       description: "Detection experiments",
     });
-    expect(calls[0]).toEqual({
-      url: `${BASE}/projects`,
-      method: "POST",
-      body: {
-        name: "Road Safety",
-        slug: "road",
-        description: "Detection experiments",
-      },
+    expect(calls[1].body).toEqual({
+      project: "road",
+      name: "Road Safety",
+      visibility: "public",
+      owner: "alice",
+      description: "Detection experiments",
     });
-    expect(result.summary).toBe(`Created project ${"p".repeat(24)} slug=road.`);
+    expect(result.summary).toContain("(public)");
+    expect(result.data).toEqual(flatCreate);
+  });
+
+  test("prefers an explicit owner and skips the account summary", async () => {
+    const { client, calls } = clientForCreate(flatCreate);
+    const result = await projectsCreate(client, {
+      name: "Road Safety",
+      project: "road",
+      owner: "bob",
+    });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "POST /api/projects",
+    ]);
+    expect(calls[0].body).toMatchObject({ owner: "bob" });
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("treats a blank owner as omitted", async () => {
+    const { client, calls } = clientForCreate(flatCreate, {
+      accountOwner: "alice",
+    });
+    await projectsCreate(client, {
+      name: "Road Safety",
+      project: "road",
+      owner: "   ",
+    });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/account/summary",
+      "POST /api/projects",
+    ]);
+    expect(calls[1].body).toMatchObject({ owner: "alice" });
+  });
+
+  test("reports id, owner, and slug from the flat response", async () => {
+    const { client } = clientForCreate(
+      { id: "c".repeat(24), owner: "bob", project: "track", region: "us" },
+      { accountOwner: "bob" },
+    );
+    const result = await projectsCreate(client, {
+      name: "Track",
+      project: "track",
+    });
+    expect(result.summary).toContain(`'track'`);
+    expect(result.summary).toContain(`'bob'`);
+    expect(result.summary).toContain("c".repeat(24));
+    expect(result.data).toEqual({
+      id: "c".repeat(24),
+      owner: "bob",
+      project: "track",
+      region: "us",
+    });
+  });
+
+  test("surfaces the API message for invalid visibility", async () => {
+    const { client } = clientForCreate(
+      { error: 'Invalid option: expected one of "public"|"private"' },
+      { accountOwner: "alice", status: 400 },
+    );
+    await expect(
+      projectsCreate(client, {
+        name: "Road Safety",
+        project: "road",
+        visibility: "secret",
+      }),
+    ).rejects.toThrow(/Invalid option/);
+  });
+
+  test("surfaces the API message for an owner without access", async () => {
+    const { client } = clientForCreate(
+      { error: "Access denied" },
+      { status: 403 },
+    );
+    await expect(
+      projectsCreate(client, {
+        name: "Road Safety",
+        project: "road",
+        owner: "ghost-owner",
+      }),
+    ).rejects.toThrow(/Access denied/);
+  });
+
+  test("surfaces the API message when the slug field is missing", async () => {
+    const { client } = clientForCreate(
+      { error: "Invalid input: expected string, received undefined" },
+      { accountOwner: "alice", status: 400 },
+    );
+    await expect(
+      projectsCreate(client, { name: "Road Safety", project: "" }),
+    ).rejects.toThrow(/Invalid input/);
   });
 });
 
