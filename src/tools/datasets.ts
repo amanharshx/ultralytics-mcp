@@ -10,7 +10,7 @@ import { strFromU8, unzipSync, zipSync } from "fflate";
 import { parse } from "yaml";
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyDatasetId } from "../resolve.js";
+import { resolveDataset, resolveLegacyDatasetId } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch, validateExploreTasks } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -432,21 +432,31 @@ export async function exploreDatasets(
   };
 }
 
-/** Get one dataset by id, slug, username/slug, or dataset ul:// URI. */
+/** Get one dataset by slug, owner/slug, or dataset ul:// URI.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and reads the live
+ * owner-scoped endpoint. The API nests the dataset under `dataset` with no
+ * additional data beside it; the full dataset record (including task,
+ * visibility, counts, class names, and ingest status fields) is surfaced.
+ */
 export async function datasetsGet(
   client: UltralyticsClient,
   dataset: string,
 ): Promise<NormalizedToolResult> {
-  const datasetId = await resolveLegacyDatasetId(client, dataset);
-  const data = await client.get(`/datasets/${datasetId}`);
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`,
+  );
   const record = asRecord(data);
-  const item = "dataset" in record ? record.dataset : data;
-  const fields = asRecord(item);
+  const fields = asRecord(record.dataset);
   return {
     summary:
-      `Dataset '${pyField(fields.name)}' [${pyField(fields.task)}], ` +
+      `Dataset '${pyField(fields.dataset)}' for owner '${resolvedOwner}': ` +
+      `'${pyField(fields.name)}' (${pyField(fields.visibility)}) [${pyField(fields.task)}], ` +
       `${pyCount(fields, "imageCount")} images, ${pyCount(fields, "classCount")} classes.`,
-    data: item,
+    data: fields,
   };
 }
 

@@ -282,45 +282,127 @@ describe("exploreDatasets", () => {
 });
 
 describe("datasetsGet", () => {
-  test("returns the dataset record and a summary", async () => {
-    const id = "d".repeat(24);
-    const { client } = routeClient((path) => {
-      if (path === `/api/datasets/${id}`) {
-        return jsonResponse({
-          dataset: {
-            _id: id,
-            name: "Cars",
-            task: "detect",
-            imageCount: 100,
-            classCount: 5,
-          },
-        });
+  const baseDataset = {
+    id: "a".repeat(24),
+    owner: "alice",
+    dataset: "cars",
+    name: "Cars",
+    visibility: "private",
+    task: "detect",
+    imageCount: 100,
+    classCount: 5,
+    classNames: ["car", "person"],
+    status: "ready",
+    errorCount: 0,
+  };
+
+  function clientForDatasetGet(
+    response: unknown,
+    options: { accountOwner?: string } = {},
+  ) {
+    return routeClient((path) => {
+      if (options.accountOwner && path === "/api/account/summary") {
+        return jsonResponse({ username: options.accountOwner });
       }
-      return jsonResponse({}, 404);
+      return path === "/api/datasets/alice/cars"
+        ? jsonResponse(response)
+        : jsonResponse({}, 404);
+    });
+  }
+
+  test("fetches through the owner-scoped path and reads the nested dataset", async () => {
+    const { client, calls } = clientForDatasetGet({
+      dataset: { ...baseDataset },
     });
 
-    const result = await datasetsGet(client, id);
+    const result = await datasetsGet(client, "alice/cars");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars",
+    ]);
     expect(result.summary).toBe(
-      "Dataset 'Cars' [detect], 100 images, 5 classes.",
+      "Dataset 'cars' for owner 'alice': 'Cars' (private) [detect], 100 images, 5 classes.",
     );
-    expect(result.data).toEqual({
-      _id: id,
-      name: "Cars",
-      task: "detect",
-      imageCount: 100,
-      classCount: 5,
+    expect(result.data).toEqual({ ...baseDataset });
+  });
+
+  test("preserves class names and ingest status fields", async () => {
+    const { client } = clientForDatasetGet({
+      dataset: {
+        ...baseDataset,
+        lastIngestJobId: "job_123",
+        lastIngestSummary: { added: 2, errors: 0, skippedCounts: {} },
+        processingError: null,
+      },
+    });
+    const result = await datasetsGet(client, "alice/cars");
+    expect(result.data).toMatchObject({
+      classNames: ["car", "person"],
+      status: "ready",
+      errorCount: 0,
+      lastIngestJobId: "job_123",
+      lastIngestSummary: { added: 2, errors: 0, skippedCounts: {} },
     });
   });
 
   test("renders missing fields like Python (None / ?) for sparse payloads", async () => {
-    const id = "d".repeat(24);
-    const { client } = routeClient((path) =>
-      path === `/api/datasets/${id}`
-        ? jsonResponse({ dataset: {} })
-        : jsonResponse({}, 404),
+    const { client } = clientForDatasetGet({ dataset: {} });
+    const result = await datasetsGet(client, "alice/cars");
+    expect(result.summary).toBe(
+      "Dataset 'None' for owner 'alice': 'None' (None) [None], ? images, ? classes.",
     );
-    const result = await datasetsGet(client, id);
-    expect(result.summary).toBe("Dataset 'None' [None], ? images, ? classes.");
+    expect(result.data).toEqual({});
+  });
+
+  test("succeeds for a ul:// dataset URI without an account lookup", async () => {
+    const { client, calls } = clientForDatasetGet({
+      dataset: { ...baseDataset, visibility: "public" },
+    });
+    const result = await datasetsGet(client, "ul://alice/cars");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+    expect(result.data).toMatchObject({
+      dataset: "cars",
+      owner: "alice",
+    });
+  });
+
+  test("falls back to the account owner for a bare slug", async () => {
+    const { client, calls } = clientForDatasetGet(
+      { dataset: { ...baseDataset } },
+      { accountOwner: "alice" },
+    );
+    const result = await datasetsGet(client, "cars");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/datasets/alice/cars",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+    expect(result.data).toMatchObject({
+      dataset: "cars",
+      owner: "alice",
+    });
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = routeClient(() => jsonResponse({}, 500));
+    await expect(datasetsGet(client, "a".repeat(24))).rejects.toThrow(
+      /not addressable.*slug.*owner\/slug.*ul:\/\//s,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("surfaces the API message for a dataset that does not exist", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/datasets/alice/missing") {
+        return jsonResponse({ error: "Dataset not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(datasetsGet(client, "alice/missing")).rejects.toThrow(
+      /Dataset not found/,
+    );
   });
 });
 

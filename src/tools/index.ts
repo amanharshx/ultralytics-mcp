@@ -250,11 +250,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Get details for one dataset by id, slug, username/slug, or dataset ul:// URI.",
+      "Get details for one dataset by slug, owner/slug, or dataset ul:// URI.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
