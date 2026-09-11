@@ -306,3 +306,14 @@ npm test
 npm run build
 npm run generate:tools
 ```
+
+Live smoke test (requires a platform key):
+
+```bash
+export ULTRALYTICS_API_KEY=ul_...
+npm run test:live
+```
+
+Reads the key from `ULTRALYTICS_API_KEY` (same as the server). Skipped
+silently when unset and excluded from `npm test`. Creates one disposable
+`mcp-smoke-*` project and deletes it again, even on failure.
