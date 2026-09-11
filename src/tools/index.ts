@@ -208,11 +208,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Soft-delete a project by id, slug, username/slug, or project ul:// URI.",
+      "Soft-delete a project by slug, owner/slug, or project ul:// URI. Deleted projects land in trash and remain restorable for a bounded window.",
     inputSchema: {
       project: z
         .string()
-        .describe("Project ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Project ref by slug, owner/slug, or ul:// URI."),
     },
     annotations: {
       readOnlyHint: false,

@@ -1,7 +1,7 @@
 /** Read-only project tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyProjectId, resolveProject } from "../resolve.js";
+import { resolveProject } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -149,15 +149,33 @@ export async function projectsCreate(
   };
 }
 
-/** Soft-delete a project by id, slug, username/slug, or project ul:// URI. */
+/** Delete a project by slug, owner/slug, or project ul:// URI.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and deletes through the
+ * live owner-scoped endpoint. The API soft-deletes into trash (restorable
+ * for a bounded window) and reports how many models cascaded; both are
+ * surfaced so the caller can tell what was removed and where it went.
+ */
 export async function projectsDelete(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveLegacyProjectId(client, project);
-  const data = await client.delete(`/projects/${projectId}`);
+  const { owner: refOwner, project: refSlug } = resolveProject(project);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = await client.delete(
+    `/projects/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`,
+  );
+  const record = asRecord(data);
   return {
-    summary: `Deleted project ${projectId} (soft delete).`,
-    data: { id: projectId, response: data },
+    summary:
+      `Deleted project '${refSlug}' for owner '${resolvedOwner}' ` +
+      `(soft delete; ${pyCount(record, "cascadedModels")} model(s) removed; ` +
+      `restorable from trash).`,
+    data: {
+      owner: resolvedOwner,
+      project: refSlug,
+      ...record,
+    },
   };
 }

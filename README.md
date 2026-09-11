@@ -229,6 +229,7 @@ You should see `ultralytics` in configured MCP servers.
 - Resolve project refs by slug, `owner/slug`, or `ul://` (project ids are not addressable); dataset refs by id, slug, `username/slug`, or `ul://`
 - Search public projects and datasets on Ultralytics Explore
 - Create projects private by default (the platform defaults to public)
+- Soft-delete projects to trash, restorable for 30 days, with the cascade count reported
 - Start dataset ingest jobs and upload archive files, folders, or videos
 - Monitor training progress and inspect latest metrics or recent metric history
 - Run model prediction from image URL or base64 input

@@ -83,13 +83,13 @@ Metadata: state-changing, non-idempotent
 
 ### projects_delete
 
-Soft-delete a project by id, slug, username/slug, or project ul:// URI.
+Soft-delete a project by slug, owner/slug, or project ul:// URI. Deleted projects land in trash and remain restorable for a bounded window.
 
 Metadata: state-changing, destructive, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `project` | string | Yes | Project ref by id, slug, username/slug, or ul:// URI. |
+| `project` | string | Yes | Project ref by slug, owner/slug, or ul:// URI. |
 
 ## Datasets
 

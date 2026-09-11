@@ -545,23 +545,126 @@ describe("projectsCreate", () => {
 });
 
 describe("projectsDelete", () => {
-  test("resolves a reference and deletes the project", async () => {
-    const { client, calls } = captureClient((url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === "/api/projects") {
-        return jsonResponse({
-          projects: [{ _id: "p".repeat(24), slug: "road", username: "user" }],
-        });
+  function clientForDelete(
+    deleteResponse: unknown,
+    options: { accountOwner?: string } = {},
+  ) {
+    const calls: { path: string; method: string }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+      });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
       }
-      return jsonResponse({ deleted: true });
+      if (
+        parsed.pathname === "/api/projects/alice/road" &&
+        (init.method ?? "GET").toUpperCase() === "DELETE"
+      ) {
+        return jsonResponse(deleteResponse);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
     });
-    const result = await projectsDelete(client, "user/road");
-    expect(calls.at(-1)).toMatchObject({
-      url: `${BASE}/projects/${"p".repeat(24)}`,
-      method: "DELETE",
+    return { client, calls };
+  }
+
+  test("deletes through the owner-scoped path and reports the cascade count", async () => {
+    const { client, calls } = clientForDelete({
+      success: true,
+      cascadedModels: 0,
     });
+    const result = await projectsDelete(client, "alice/road");
+    expect(calls).toEqual([
+      { path: "/api/projects/alice/road", method: "DELETE" },
+    ]);
     expect(result.summary).toBe(
-      `Deleted project ${"p".repeat(24)} (soft delete).`,
+      "Deleted project 'road' for owner 'alice' (soft delete; 0 model(s) removed; restorable from trash).",
+    );
+    expect(result.data).toEqual({
+      owner: "alice",
+      project: "road",
+      success: true,
+      cascadedModels: 0,
+    });
+  });
+
+  test("reports a nonzero cascade count", async () => {
+    const { client } = clientForDelete({
+      success: true,
+      cascadedModels: 2,
+    });
+    const result = await projectsDelete(client, "alice/road");
+    expect(result.summary).toContain("2 model(s) removed");
+    expect(result.data).toMatchObject({ cascadedModels: 2, success: true });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForDelete(
+      { success: true, cascadedModels: 0 },
+      { accountOwner: "alice" },
+    );
+    const result = await projectsDelete(client, "road");
+    expect(calls).toEqual([
+      { path: "/api/account/summary", method: "GET" },
+      { path: "/api/projects/alice/road", method: "DELETE" },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("accepts a ul:// project URI without an account lookup", async () => {
+    const { client, calls } = clientForDelete({
+      success: true,
+      cascadedModels: 0,
+    });
+    const result = await projectsDelete(client, "ul://alice/road");
+    expect(calls).toEqual([
+      { path: "/api/projects/alice/road", method: "DELETE" },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    await expect(projectsDelete(client, "a".repeat(24))).rejects.toThrow(
+      /not addressable.*slug.*owner\/slug.*ul:\/\//s,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("surfaces the API message for a project that does not exist", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/projects/alice/missing") {
+        return jsonResponse({ error: "Project not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(projectsDelete(client, "alice/missing")).rejects.toThrow(
+      /Project not found/,
+    );
+  });
+
+  // Observed live: unlike the list path (which answers `Owner not found`),
+  // the delete path answers `Project not found` even for an unknown owner.
+  // The tool surfaces the API message verbatim either way.
+  test("surfaces the API message verbatim for an owner that does not exist", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/projects/ghost/road") {
+        return jsonResponse({ error: "Project not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(projectsDelete(client, "ghost/road")).rejects.toThrow(
+      /Project not found/,
     );
   });
 });
