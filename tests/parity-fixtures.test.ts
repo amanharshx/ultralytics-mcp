@@ -16,6 +16,7 @@ import {
   datasetsCreate,
   datasetsDelete,
   datasetsIngest,
+  datasetsList,
   datasetUploadFile,
   datasetUploadFolder,
   datasetUploadVideo,
@@ -187,6 +188,12 @@ const TOOL_RUNNERS: Record<
       visibility: args.visibility as string | undefined,
       classNames: args.classNames as string[] | undefined,
     }),
+  datasets_list: (client, args) =>
+    datasetsList(
+      client,
+      args.owner as string | undefined,
+      args.username as string | undefined,
+    ),
   dataset_images_list: (client, args) =>
     datasetImagesList(client, {
       dataset: args.dataset as string,
@@ -318,6 +325,7 @@ describe("parity fixtures", () => {
         "model_download_signed_url.json",
         "datasets_create.json",
         "datasets_delete.json",
+        "datasets_list.json",
         "dataset_export.json",
         "dataset_images_list.json",
         "dataset_ingest.json",
