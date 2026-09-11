@@ -124,11 +124,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Get details for one project by id, slug, username/slug, or project ul:// URI.",
+      "Get details for one project by slug, owner/slug, or project ul:// URI.",
     inputSchema: {
       project: z
         .string()
-        .describe("Project ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Project ref by slug, owner/slug, or ul:// URI."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:

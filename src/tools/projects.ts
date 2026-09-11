@@ -1,7 +1,7 @@
 /** Read-only project tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyProjectId } from "../resolve.js";
+import { resolveLegacyProjectId, resolveProject } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -76,21 +76,38 @@ export async function exploreProjects(
   };
 }
 
-/** Get one project by id, slug, username/slug, or project ul:// URI. */
+/** Get one project by slug, owner/slug, or project ul:// URI.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and reads the live
+ * owner-scoped endpoint. The API nests the project under `project` with
+ * `models` and `isOwner` beside it; all three are surfaced.
+ */
 export async function projectsGet(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveLegacyProjectId(client, project);
-  const data = await client.get(`/projects/${projectId}`);
+  const { owner: refOwner, project: refSlug } = resolveProject(project);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/projects/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`,
+  );
   const record = asRecord(data);
-  const item = "project" in record ? record.project : data;
-  const fields = asRecord(item);
+  const projectFields = asRecord(record.project);
+  const models = Array.isArray(record.models)
+    ? (record.models as unknown[])
+    : [];
+  const isOwner = typeof record.isOwner === "boolean" ? record.isOwner : null;
   return {
     summary:
-      `Project '${pyField(fields.name)}' (${pyField(fields.visibility)}), ` +
-      `${pyCount(fields, "modelCount")} model(s).`,
-    data: item,
+      `Project '${pyField(projectFields.project)}' for owner '${resolvedOwner}': ` +
+      `'${pyField(projectFields.name)}' (${pyField(projectFields.visibility)}), ` +
+      `${pyCount(projectFields, "modelCount")} model(s).`,
+    data: {
+      project: projectFields,
+      models,
+      isOwner,
+    },
   };
 }
 
