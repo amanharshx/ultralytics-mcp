@@ -5,9 +5,9 @@ import {
   looksLikeId,
   parseRef,
   resolveDataset,
+  resolveLegacyProjectId,
   resolveModel,
   resolveProject,
-  resolveProjectId,
 } from "../src/resolve.js";
 
 const KEY = `ul_${"0".repeat(40)}`;
@@ -92,6 +92,10 @@ describe("resolveProject", () => {
     expect(() => resolveProject("   ")).toThrow(/Cannot parse project/);
   });
 
+  test("rejects a slash-only reference", () => {
+    expect(() => resolveProject("///")).toThrow(/Cannot parse project/);
+  });
+
   test("rejects a three-segment reference", () => {
     expect(() => resolveProject("a/b/c")).toThrow(/Cannot parse project/);
   });
@@ -115,13 +119,13 @@ describe("resolveProject", () => {
   });
 });
 
-describe("resolveProjectId (legacy id lookup for unmigrated tools)", () => {
+describe("resolveLegacyProjectId (legacy id lookup for unmigrated tools)", () => {
   test("id passthrough makes no request", async () => {
     const id = "6a15700a49a694644aeb62aa";
     const { client, calls } = clientWith(
       () => new Response(null, { status: 500 }),
     );
-    expect(await resolveProjectId(client, id)).toBe(id);
+    expect(await resolveLegacyProjectId(client, id)).toBe(id);
     expect(calls).toHaveLength(0);
   });
 
@@ -137,7 +141,7 @@ describe("resolveProjectId (legacy id lookup for unmigrated tools)", () => {
           },
         ),
     );
-    expect(await resolveProjectId(client, "u/p")).toBe("a".repeat(24));
+    expect(await resolveLegacyProjectId(client, "u/p")).toBe("a".repeat(24));
     expect(calls[0].path).toBe("/api/projects");
     expect(calls[0].params.get("username")).toBe("u");
   });
@@ -155,7 +159,7 @@ describe("resolveProjectId (legacy id lookup for unmigrated tools)", () => {
           { status: 200 },
         ),
     );
-    await expect(resolveProjectId(client, "dup")).rejects.toThrow(
+    await expect(resolveLegacyProjectId(client, "dup")).rejects.toThrow(
       /Ambiguous project/,
     );
   });
@@ -164,7 +168,7 @@ describe("resolveProjectId (legacy id lookup for unmigrated tools)", () => {
     const { client } = clientWith(
       () => new Response(JSON.stringify({ projects: [] }), { status: 200 }),
     );
-    await expect(resolveProjectId(client, "missing")).rejects.toThrow(
+    await expect(resolveLegacyProjectId(client, "missing")).rejects.toThrow(
       /No project found/,
     );
   });
@@ -172,7 +176,7 @@ describe("resolveProjectId (legacy id lookup for unmigrated tools)", () => {
   test("a dataset URI is rejected by the legacy project lookup", async () => {
     const { client } = clientWith(() => new Response(null, { status: 500 }));
     await expect(
-      resolveProjectId(client, "ul://u/datasets/data"),
+      resolveLegacyProjectId(client, "ul://u/datasets/data"),
     ).rejects.toThrow(/dataset URI, not a project/);
   });
 });

@@ -1,7 +1,7 @@
 /** Model tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveModel, resolveProjectId } from "../resolve.js";
+import { resolveLegacyProjectId, resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
 
@@ -10,7 +10,7 @@ export async function modelsList(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveProjectId(client, project);
+  const projectId = await resolveLegacyProjectId(client, project);
   const data = await client.get("/models", { projectId });
   const items = listField(data, "models").map((model) => ({
     id: model._id ?? null,

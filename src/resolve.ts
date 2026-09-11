@@ -43,6 +43,10 @@ export interface ResolvedProjectRef {
   project: string;
 }
 
+const PROJECT_REF_HELP =
+  "Use 'slug', 'owner/slug', or a 'ul://owner/project' URI.";
+const IDS_NOT_ADDRESSABLE = "Project ids are not addressable.";
+
 /** Parse a project ref into an `{owner, project}` pair with no network call.
  *
  * Accepts `owner/slug`, `ul://owner/project`, and a bare `slug`. Rejects
@@ -53,15 +57,13 @@ export function resolveProject(ref: string): ResolvedProjectRef {
   const trimmed = ref.trim();
   if (!trimmed) {
     throw new ResolutionError(
-      "Cannot parse project reference ''. Use 'slug', 'owner/slug', or a " +
-        "'ul://owner/project' URI. Project ids are not addressable.",
+      `Cannot parse project reference ''. ${PROJECT_REF_HELP} ${IDS_NOT_ADDRESSABLE}`,
     );
   }
   if (looksLikeId(trimmed)) {
     throw new ResolutionError(
-      "Project ids are not addressable. Use 'slug', 'owner/slug', or a " +
-        `'ul://owner/project' URI instead of '${trimmed}'. ` +
-        "Bare ids are no longer accepted.",
+      `${IDS_NOT_ADDRESSABLE} ${PROJECT_REF_HELP} '${trimmed}' is a bare id, ` +
+        "which is no longer accepted.",
     );
   }
 
@@ -85,16 +87,16 @@ export function resolveProject(ref: string): ResolvedProjectRef {
     }
     return { owner: parts[0], project: parts[1] };
   }
-  if (parts.length === 1) {
-    return { owner: null, project: parts[0] };
+  if (parts.length === 0 || parts.length > 2) {
+    throw new ResolutionError(
+      `Cannot parse project reference '${trimmed}'. ${PROJECT_REF_HELP} ` +
+        IDS_NOT_ADDRESSABLE,
+    );
   }
-  if (parts.length === 2) {
-    return { owner: parts[0], project: parts[1] };
-  }
-  throw new ResolutionError(
-    `Cannot parse project reference '${trimmed}'. Use 'slug', 'owner/slug', ` +
-      "or a 'ul://owner/project' URI. Project ids are not addressable.",
-  );
+  return {
+    owner: parts.length === 2 ? parts[0] : null,
+    project: parts[parts.length - 1],
+  };
 }
 
 /** Return true when `ref` is a 24-hex Platform object id. */
@@ -174,11 +176,14 @@ function select(matches: Resource[], kind: string, ref: string): Resource {
  *
  * Preserves the previous list-then-filter behavior (including id
  * passthrough) for consumers whose live contract has not been captured yet
- * (models, training, project get/delete). Migrated tools use the pure
- * {@link resolveProject} instead. Do not use for new code; this is deleted
- * once the model tools migrate off id-addressed paths.
+ * (models, training, project get/delete). Ticket 01 keeps their behavior by
+ * design ("adapting those call sites is in scope; migrating their behaviour
+ * is not") and replaces only the project list fixture, so this lookup stays
+ * until tickets 02/04 migrate the project consumers and the models epic
+ * migrates resolveModel. Migrated tools use the pure {@link resolveProject}
+ * instead. Do not use for new code.
  */
-export async function resolveProjectId(
+export async function resolveLegacyProjectId(
   client: UltralyticsClient,
   ref: string,
 ): Promise<string> {
@@ -307,7 +312,7 @@ export async function resolveModel(
     [, slug] = simpleUsernameSlug(parts, "model", ref);
   }
 
-  const projectId = await resolveProjectId(client, resolvedProjectRef);
+  const projectId = await resolveLegacyProjectId(client, resolvedProjectRef);
   const data = await client.get("/models", { projectId });
   const matches = listField(data, "models").filter(
     (model) => model.slug === slug,

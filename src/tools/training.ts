@@ -6,8 +6,8 @@ import {
   parseRef,
   resolveDataset,
   resolveDatasetDetails,
+  resolveLegacyProjectId,
   resolveModel,
-  resolveProjectId,
 } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, pyField } from "./shared.js";
@@ -315,7 +315,7 @@ export async function trainingStart(
     throw new Error("`batch` must be -1 for auto or greater than 0.");
   }
 
-  const projectId = await resolveProjectId(client, project);
+  const projectId = await resolveLegacyProjectId(client, project);
   const checkpoint = checkpointFromRef(model);
   const datasetDetails =
     checkpoint === null

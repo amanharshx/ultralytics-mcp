@@ -1,7 +1,7 @@
 /** Read-only project tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveProjectId } from "../resolve.js";
+import { resolveLegacyProjectId } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -79,7 +79,7 @@ export async function projectsGet(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveProjectId(client, project);
+  const projectId = await resolveLegacyProjectId(client, project);
   const data = await client.get(`/projects/${projectId}`);
   const record = asRecord(data);
   const item = "project" in record ? record.project : data;
@@ -127,7 +127,7 @@ export async function projectsDelete(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveProjectId(client, project);
+  const projectId = await resolveLegacyProjectId(client, project);
   const data = await client.delete(`/projects/${projectId}`);
   return {
     summary: `Deleted project ${projectId} (soft delete).`,
