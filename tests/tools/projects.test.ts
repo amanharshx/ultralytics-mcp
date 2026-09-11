@@ -35,35 +35,54 @@ function captureClient(responder: (url: string) => Response) {
 }
 
 describe("projectsList", () => {
-  test("normalizes items and drops unknown fields", async () => {
+  test("fills the owner from the account summary and reads live field names", async () => {
     const { client, calls } = routeClient((path) => {
-      if (path === "/api/projects") {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/projects/alice") {
         return jsonResponse({
           projects: [
             {
-              _id: "a".repeat(24),
+              id: "a".repeat(24),
+              owner: "alice",
+              project: "road",
               name: "Road",
-              slug: "road",
-              username: "u",
               visibility: "private",
+              iconColor: "#fff",
               modelCount: 2,
+              modelNames: ["exp"],
+              totalBytes: 10,
+              starCount: 0,
+              isStarred: false,
+              viewPreferences: {},
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-02T00:00:00Z",
               extra: "omitted",
             },
-            { _id: "b".repeat(24), name: "Bare", slug: "bare", username: "u" },
+            {
+              id: "b".repeat(24),
+              owner: "alice",
+              project: "bare",
+              name: "Bare",
+              visibility: "public",
+            },
           ],
+          total: 2,
+          region: "us",
         });
       }
       return jsonResponse({}, 404);
     });
 
     const result = await projectsList(client);
-    expect(result.summary).toBe("2 project(s).");
+    expect(result.summary).toBe("2 project(s) for owner 'alice'.");
     expect(result.data).toEqual([
       {
         id: "a".repeat(24),
         name: "Road",
         slug: "road",
-        username: "u",
+        username: "alice",
         visibility: "private",
         modelCount: 2,
       },
@@ -71,19 +90,84 @@ describe("projectsList", () => {
         id: "b".repeat(24),
         name: "Bare",
         slug: "bare",
-        username: "u",
-        visibility: null,
+        username: "alice",
+        visibility: "public",
         modelCount: null,
       },
     ]);
-    expect(calls[0].params.has("username")).toBe(false);
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/projects/alice",
+    ]);
   });
 
-  test("passes a username filter when provided", async () => {
-    const { client, calls } = routeClient(() => jsonResponse({ projects: [] }));
-    const result = await projectsList(client, "alice");
-    expect(result.summary).toBe("0 project(s).");
-    expect(calls[0].params.get("username")).toBe("alice");
+  test("prefers an explicit owner and skips the account summary", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/projects/bob") {
+        return jsonResponse({ projects: [], total: 0, region: "us" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await projectsList(client, "bob");
+    expect(result.summary).toBe("0 project(s) for owner 'bob'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/projects/bob"]);
+  });
+
+  test("accepts the owner through the username alias", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/projects/bob") {
+        return jsonResponse({ projects: [], total: 0, region: "us" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await projectsList(client, undefined, "bob");
+    expect(result.summary).toBe("0 project(s) for owner 'bob'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/projects/bob"]);
+  });
+
+  test("prefers owner over the username alias when both are given", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/projects/alice") {
+        return jsonResponse({ projects: [], total: 0, region: "us" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await projectsList(client, "alice", "bob");
+    expect(result.summary).toBe("0 project(s) for owner 'alice'.");
+    expect(calls.map((call) => call.path)).toEqual(["/api/projects/alice"]);
+  });
+
+  test("treats a blank owner as omitted", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/projects/alice") {
+        return jsonResponse({ projects: [], total: 0, region: "us" });
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await projectsList(client, "   ");
+    expect(result.summary).toBe("0 project(s) for owner 'alice'.");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/projects/alice",
+    ]);
+  });
+
+  test("surfaces the API message for an owner that does not exist", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/projects/ghost") {
+        return jsonResponse({ error: "Owner not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(projectsList(client, "ghost")).rejects.toThrow(
+      /Owner not found/,
+    );
   });
 });
 

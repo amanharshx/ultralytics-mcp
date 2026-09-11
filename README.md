@@ -226,7 +226,7 @@ You should see `ultralytics` in configured MCP servers.
 ## What You Can Do
 
 - Browse projects, datasets, models, exports, GPU availability
-- Resolve project and dataset refs by id, slug, `username/slug`, or `ul://`
+- Resolve project refs by slug, `owner/slug`, or `ul://` (project ids are not addressable); dataset refs by id, slug, `username/slug`, or `ul://`
 - Search public projects and datasets on Ultralytics Explore
 - Start dataset ingest jobs and upload archive files, folders, or videos
 - Monitor training progress and inspect latest metrics or recent metric history

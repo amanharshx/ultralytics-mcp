@@ -5,6 +5,7 @@ import {
   looksLikeId,
   parseRef,
   resolveDataset,
+  resolveLegacyProjectId,
   resolveModel,
   resolveProject,
 } from "../src/resolve.js";
@@ -59,12 +60,72 @@ describe("looksLikeId / parseRef", () => {
 });
 
 describe("resolveProject", () => {
+  test("parses owner/slug into a pair with no network call", () => {
+    expect(resolveProject("u/p")).toEqual({ owner: "u", project: "p" });
+  });
+
+  test("parses a ul:// project URI into a pair with no network call", () => {
+    expect(resolveProject("ul://u/p")).toEqual({ owner: "u", project: "p" });
+  });
+
+  test("parses a bare slug with a null owner and no network call", () => {
+    expect(resolveProject("p")).toEqual({ owner: null, project: "p" });
+  });
+
+  test("trims surrounding whitespace", () => {
+    expect(resolveProject("  u/p  ")).toEqual({ owner: "u", project: "p" });
+  });
+
+  test("rejects a bare 24-hex id and names the accepted ref forms", () => {
+    expect(() => resolveProject("6a15700a49a694644aeb62aa")).toThrow(
+      /not addressable.*slug.*owner\/slug.*ul:\/\//s,
+    );
+  });
+
+  test("rejects an uppercase 24-hex id", () => {
+    expect(() => resolveProject("6A15700A49A694644AEB62AA")).toThrow(
+      /not addressable/,
+    );
+  });
+
+  test("rejects a blank reference", () => {
+    expect(() => resolveProject("   ")).toThrow(/Cannot parse project/);
+  });
+
+  test("rejects a slash-only reference", () => {
+    expect(() => resolveProject("///")).toThrow(/Cannot parse project/);
+  });
+
+  test("rejects a three-segment reference", () => {
+    expect(() => resolveProject("a/b/c")).toThrow(/Cannot parse project/);
+  });
+
+  test("a dataset URI is rejected and points at the project form", () => {
+    expect(() => resolveProject("ul://u/datasets/data")).toThrow(
+      /dataset URI, not a project.*ul:\/\/owner\/project/s,
+    );
+  });
+
+  test("a model URI is rejected and points at the project form", () => {
+    expect(() => resolveProject("ul://u/p/m")).toThrow(
+      /model URI.*ul:\/\/u\/p/s,
+    );
+  });
+
+  test("a malformed project ul:// URI names the expected form", () => {
+    expect(() => resolveProject("ul://only-one-part")).toThrow(
+      /Unsupported project ul:\/\/ URI.*ul:\/\/owner\/project/s,
+    );
+  });
+});
+
+describe("resolveLegacyProjectId (legacy id lookup for unmigrated tools)", () => {
   test("id passthrough makes no request", async () => {
     const id = "6a15700a49a694644aeb62aa";
     const { client, calls } = clientWith(
       () => new Response(null, { status: 500 }),
     );
-    expect(await resolveProject(client, id)).toBe(id);
+    expect(await resolveLegacyProjectId(client, id)).toBe(id);
     expect(calls).toHaveLength(0);
   });
 
@@ -80,7 +141,7 @@ describe("resolveProject", () => {
           },
         ),
     );
-    expect(await resolveProject(client, "u/p")).toBe("a".repeat(24));
+    expect(await resolveLegacyProjectId(client, "u/p")).toBe("a".repeat(24));
     expect(calls[0].path).toBe("/api/projects");
     expect(calls[0].params.get("username")).toBe("u");
   });
@@ -98,7 +159,7 @@ describe("resolveProject", () => {
           { status: 200 },
         ),
     );
-    await expect(resolveProject(client, "dup")).rejects.toThrow(
+    await expect(resolveLegacyProjectId(client, "dup")).rejects.toThrow(
       /Ambiguous project/,
     );
   });
@@ -107,15 +168,15 @@ describe("resolveProject", () => {
     const { client } = clientWith(
       () => new Response(JSON.stringify({ projects: [] }), { status: 200 }),
     );
-    await expect(resolveProject(client, "missing")).rejects.toThrow(
+    await expect(resolveLegacyProjectId(client, "missing")).rejects.toThrow(
       /No project found/,
     );
   });
 
-  test("a dataset URI is rejected by the project resolver", async () => {
+  test("a dataset URI is rejected by the legacy project lookup", async () => {
     const { client } = clientWith(() => new Response(null, { status: 500 }));
     await expect(
-      resolveProject(client, "ul://u/datasets/data"),
+      resolveLegacyProjectId(client, "ul://u/datasets/data"),
     ).rejects.toThrow(/dataset URI, not a project/);
   });
 });

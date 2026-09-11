@@ -1,8 +1,13 @@
-/** Resolve friendly Platform references to opaque resource IDs.
+/** Resolve Platform references to owner-scoped paths.
  *
- * Mirrors the Python `resolve` module exactly, including the resource-aware
- * `ul://` URI shapes and the hard rule that ambiguous/missing references fail
- * loudly (never silently pick the first match).
+ * Project references resolve by pure string parsing with no network calls:
+ * `owner/slug`, `ul://owner/project`, and bare `slug` all parse directly
+ * into an `{owner, project}` pair. Ids are not addressable on any endpoint,
+ * so a bare 24-character hex id is rejected with an actionable error.
+ *
+ * Dataset and model lookups below are unmigrated legacy: they still resolve
+ * to ids for endpoints whose live contract has not been captured yet. They
+ * keep their previous behavior until their own migration; do not extend them.
  */
 
 import type { UltralyticsClient } from "./client.js";
@@ -29,6 +34,69 @@ export interface ResolvedDatasetDetails {
   task: string | null;
   name: string | null;
   slug: string | null;
+}
+
+/** Owner-scoped project reference. `owner` is null for a bare slug; the
+ * caller fills it from the account summary (see `getAccountOwner`). */
+export interface ResolvedProjectRef {
+  owner: string | null;
+  project: string;
+}
+
+const PROJECT_REF_HELP =
+  "Use 'slug', 'owner/slug', or a 'ul://owner/project' URI.";
+const IDS_NOT_ADDRESSABLE = "Project ids are not addressable.";
+
+/** Parse a project ref into an `{owner, project}` pair with no network call.
+ *
+ * Accepts `owner/slug`, `ul://owner/project`, and a bare `slug`. Rejects
+ * bare 24-character hex ids (not addressable) and non-project `ul://` URIs
+ * with errors that point at the correct form.
+ */
+export function resolveProject(ref: string): ResolvedProjectRef {
+  const trimmed = ref.trim();
+  if (!trimmed) {
+    throw new ResolutionError(
+      `Cannot parse project reference ''. ${PROJECT_REF_HELP} ${IDS_NOT_ADDRESSABLE}`,
+    );
+  }
+  if (looksLikeId(trimmed)) {
+    throw new ResolutionError(
+      `${IDS_NOT_ADDRESSABLE} ${PROJECT_REF_HELP} '${trimmed}' is a bare id, ` +
+        "which is no longer accepted.",
+    );
+  }
+
+  const { isUlUri, parts } = parseRef(trimmed);
+  if (isUlUri) {
+    if (parts.length === 3 && parts[1] === "datasets") {
+      throw new ResolutionError(
+        `'${trimmed}' is a dataset URI, not a project. Use 'owner/slug' or ` +
+          "'ul://owner/project' for the project.",
+      );
+    }
+    if (parts.length === 3) {
+      throw new ResolutionError(
+        `'${trimmed}' is a model URI; use 'ul://${parts[0]}/${parts[1]}' for the project.`,
+      );
+    }
+    if (parts.length !== 2) {
+      throw new ResolutionError(
+        `Unsupported project ul:// URI '${trimmed}'. Expected 'ul://owner/project'.`,
+      );
+    }
+    return { owner: parts[0], project: parts[1] };
+  }
+  if (parts.length === 0 || parts.length > 2) {
+    throw new ResolutionError(
+      `Cannot parse project reference '${trimmed}'. ${PROJECT_REF_HELP} ` +
+        IDS_NOT_ADDRESSABLE,
+    );
+  }
+  return {
+    owner: parts.length === 2 ? parts[0] : null,
+    project: parts[parts.length - 1],
+  };
 }
 
 /** Return true when `ref` is a 24-hex Platform object id. */
@@ -104,8 +172,18 @@ function select(matches: Resource[], kind: string, ref: string): Resource {
   return matches[0];
 }
 
-/** Resolve a project id, slug, username/slug, or project ul:// URI. */
-export async function resolveProject(
+/** Legacy project-id lookup for unmigrated tools only.
+ *
+ * Preserves the previous list-then-filter behavior (including id
+ * passthrough) for consumers whose live contract has not been captured yet
+ * (models, training, project get/delete). Ticket 01 keeps their behavior by
+ * design ("adapting those call sites is in scope; migrating their behaviour
+ * is not") and replaces only the project list fixture, so this lookup stays
+ * until tickets 02/04 migrate the project consumers and the models epic
+ * migrates resolveModel. Migrated tools use the pure {@link resolveProject}
+ * instead. Do not use for new code.
+ */
+export async function resolveLegacyProjectId(
   client: UltralyticsClient,
   ref: string,
 ): Promise<string> {
@@ -234,7 +312,7 @@ export async function resolveModel(
     [, slug] = simpleUsernameSlug(parts, "model", ref);
   }
 
-  const projectId = await resolveProject(client, resolvedProjectRef);
+  const projectId = await resolveLegacyProjectId(client, resolvedProjectRef);
   const data = await client.get("/models", { projectId });
   const matches = listField(data, "models").filter(
     (model) => model.slug === slug,

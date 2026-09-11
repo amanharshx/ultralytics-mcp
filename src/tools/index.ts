@@ -103,13 +103,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description: "List computer-vision projects in your Ultralytics workspace.",
-    inputSchema: { username: z.string().optional() },
+    inputSchema: {
+      owner: z.string().optional(),
+      username: z.string().optional(),
+    },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
-      async ({ username }) =>
+      async ({ owner, username }) =>
         toMcpTextResult(
-          await projectsList(getClient(), username as string | undefined),
+          await projectsList(
+            getClient(),
+            owner as string | undefined,
+            username as string | undefined,
+          ),
         ),
   }),
   tool({

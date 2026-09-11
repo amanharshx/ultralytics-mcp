@@ -1,7 +1,7 @@
 /** Read-only project tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveProject } from "../resolve.js";
+import { resolveLegacyProjectId } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -11,24 +11,35 @@ function resourceId(item: Record<string, unknown>, fallback?: string): string {
   return String(value ?? fallback ?? "None");
 }
 
-/** List projects in the workspace, optionally filtered by username. */
+/** List projects in the workspace, optionally filtered by username.
+ *
+ * Reads the live owner-scoped endpoint. When no owner is given, the owner is
+ * filled from the account summary and named in the summary output so the
+ * caller can tell which workspace was read. An explicit `owner` always wins;
+ * `username` remains as a compatibility alias for it.
+ */
 export async function projectsList(
   client: UltralyticsClient,
+  owner?: string,
   username?: string,
 ): Promise<NormalizedToolResult> {
+  const explicit = owner?.trim() || username?.trim() || undefined;
+  const resolvedOwner = explicit ?? (await client.getAccountOwner());
   const data = await client.get(
-    "/projects",
-    username ? { username } : undefined,
+    `/projects/${encodeURIComponent(resolvedOwner)}`,
   );
   const items = listField(data, "projects").map((project) => ({
-    id: project._id ?? null,
+    id: project.id ?? null,
     name: project.name ?? null,
-    slug: project.slug ?? null,
-    username: project.username ?? null,
+    slug: project.project ?? null,
+    username: project.owner ?? null,
     visibility: project.visibility ?? null,
     modelCount: project.modelCount ?? null,
   }));
-  return { summary: `${items.length} project(s).`, data: items };
+  return {
+    summary: `${items.length} project(s) for owner '${resolvedOwner}'.`,
+    data: items,
+  };
 }
 
 export interface ExploreProjectsOptions {
@@ -70,7 +81,7 @@ export async function projectsGet(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveProject(client, project);
+  const projectId = await resolveLegacyProjectId(client, project);
   const data = await client.get(`/projects/${projectId}`);
   const record = asRecord(data);
   const item = "project" in record ? record.project : data;
@@ -118,7 +129,7 @@ export async function projectsDelete(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveProject(client, project);
+  const projectId = await resolveLegacyProjectId(client, project);
   const data = await client.delete(`/projects/${projectId}`);
   return {
     summary: `Deleted project ${projectId} (soft delete).`,

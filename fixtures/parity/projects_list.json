@@ -4,33 +4,254 @@
   "api": [
     {
       "method": "GET",
-      "path": "/api/projects",
+      "path": "/api/account/summary",
+      "response": {
+        "status": 200,
+        "json": {
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 8,
+            "datasets": 22,
+            "models": 14
+          },
+          "teams": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/example-owner",
       "response": {
         "status": 200,
         "json": {
           "projects": [
             {
-              "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
-              "name": "Road Safety",
-              "slug": "road",
-              "username": "user",
+              "id": "000000000000000000000001",
+              "owner": "example-owner",
+              "project": "example-project-1",
+              "name": "Example project 1",
               "visibility": "private",
+              "iconColor": "purple",
               "modelCount": 2,
-              "extra": "omitted"
+              "modelNames": [
+                "example-exp-1-1",
+                "example-exp-1-2"
+              ],
+              "totalBytes": 13141882,
+              "starCount": 0,
+              "isStarred": false,
+              "viewPreferences": {
+                "sortBy": "newest",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-06-28T02:01:00.971Z",
+              "updatedAt": "2026-07-09T00:58:39.474Z"
+            },
+            {
+              "id": "000000000000000000000002",
+              "owner": "example-owner",
+              "project": "example-project-2",
+              "name": "Example project 2",
+              "visibility": "private",
+              "iconColor": "orange",
+              "modelCount": 2,
+              "modelNames": [
+                "example-exp-2-1",
+                "example-exp-2-2"
+              ],
+              "totalBytes": 236680394,
+              "starCount": 0,
+              "isStarred": false,
+              "viewPreferences": {
+                "sortBy": "newest",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-07-04T21:59:37.052Z",
+              "updatedAt": "2026-07-05T00:01:55.189Z"
+            },
+            {
+              "id": "000000000000000000000003",
+              "owner": "example-owner",
+              "project": "example-project-3",
+              "name": "Example project 3",
+              "visibility": "private",
+              "iconColor": "blue",
+              "modelCount": 0,
+              "modelNames": [],
+              "totalBytes": 0,
+              "starCount": 0,
+              "isStarred": false,
+              "viewPreferences": {
+                "sortBy": "newest",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-03-18T02:18:13.769Z",
+              "updatedAt": "2026-06-28T02:01:24.259Z"
+            },
+            {
+              "id": "000000000000000000000004",
+              "owner": "example-owner",
+              "project": "example-project-4",
+              "name": "Example project 4",
+              "visibility": "private",
+              "iconColor": "green",
+              "modelCount": 2,
+              "modelNames": [
+                "example-exp-4-1",
+                "example-exp-4-2"
+              ],
+              "totalBytes": 260401514,
+              "starCount": 0,
+              "isStarred": false,
+              "viewPreferences": {
+                "sortBy": "newest",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-04-26T13:56:29.695Z",
+              "updatedAt": "2026-06-28T00:39:47.269Z"
+            },
+            {
+              "id": "000000000000000000000005",
+              "owner": "example-owner",
+              "project": "example-project-5",
+              "name": "Example project 5",
+              "visibility": "private",
+              "iconColor": "slate",
+              "modelCount": 3,
+              "modelNames": [
+                "example-exp-5-1",
+                "example-exp-5-2",
+                "example-exp-5-3"
+              ],
+              "totalBytes": 179444979,
+              "starCount": 0,
+              "isStarred": false,
+              "viewPreferences": {
+                "sortBy": "newest",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-05-26T10:03:54.540Z",
+              "updatedAt": "2026-06-24T17:30:34.879Z"
+            },
+            {
+              "id": "000000000000000000000006",
+              "owner": "example-owner",
+              "project": "example-project-6",
+              "name": "Example project 6",
+              "visibility": "private",
+              "iconColor": "slate",
+              "modelCount": 3,
+              "modelNames": [
+                "example-exp-6-1",
+                "example-exp-6-2",
+                "example-exp-6-3"
+              ],
+              "totalBytes": 280454639,
+              "starCount": 0,
+              "isStarred": false,
+              "viewPreferences": {
+                "sortBy": "newest",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-04-17T21:06:08.333Z",
+              "updatedAt": "2026-04-22T17:25:07.042Z"
+            },
+            {
+              "id": "000000000000000000000007",
+              "owner": "example-owner",
+              "project": "example-project-7",
+              "name": "Example project 7",
+              "visibility": "private",
+              "iconColor": "pink",
+              "modelCount": 2,
+              "modelNames": [
+                "example-exp-7-1",
+                "example-exp-7-2"
+              ],
+              "totalBytes": 236625738,
+              "starCount": 0,
+              "isStarred": false,
+              "viewPreferences": {
+                "sortBy": "newest",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-04-12T20:57:25.406Z",
+              "updatedAt": "2026-04-13T01:53:22.061Z"
             }
-          ]
+          ],
+          "total": 7,
+          "region": "eu"
         }
       }
     }
   ],
   "expected": {
-    "summary": "1 project(s).",
+    "summary": "7 project(s) for owner 'example-owner'.",
     "data": [
       {
-        "id": "aaaaaaaaaaaaaaaaaaaaaaaa",
-        "name": "Road Safety",
-        "slug": "road",
-        "username": "user",
+        "id": "000000000000000000000001",
+        "name": "Example project 1",
+        "slug": "example-project-1",
+        "username": "example-owner",
+        "visibility": "private",
+        "modelCount": 2
+      },
+      {
+        "id": "000000000000000000000002",
+        "name": "Example project 2",
+        "slug": "example-project-2",
+        "username": "example-owner",
+        "visibility": "private",
+        "modelCount": 2
+      },
+      {
+        "id": "000000000000000000000003",
+        "name": "Example project 3",
+        "slug": "example-project-3",
+        "username": "example-owner",
+        "visibility": "private",
+        "modelCount": 0
+      },
+      {
+        "id": "000000000000000000000004",
+        "name": "Example project 4",
+        "slug": "example-project-4",
+        "username": "example-owner",
+        "visibility": "private",
+        "modelCount": 2
+      },
+      {
+        "id": "000000000000000000000005",
+        "name": "Example project 5",
+        "slug": "example-project-5",
+        "username": "example-owner",
+        "visibility": "private",
+        "modelCount": 3
+      },
+      {
+        "id": "000000000000000000000006",
+        "name": "Example project 6",
+        "slug": "example-project-6",
+        "username": "example-owner",
+        "visibility": "private",
+        "modelCount": 3
+      },
+      {
+        "id": "000000000000000000000007",
+        "name": "Example project 7",
+        "slug": "example-project-7",
+        "username": "example-owner",
         "visibility": "private",
         "modelCount": 2
       }
