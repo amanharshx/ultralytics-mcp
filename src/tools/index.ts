@@ -166,10 +166,23 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "projects_create",
     registrationGroup: "write",
     stateChanging: true,
-    description: "Create a project in your Ultralytics workspace.",
+    description:
+      "Create a project in your Ultralytics workspace. Defaults to private visibility (the platform defaults to public when visibility is omitted).",
     inputSchema: {
       name: z.string(),
-      slug: z.string().optional(),
+      project: z
+        .string()
+        .describe(
+          "URL slug for the new project (distinct from the display name given by name).",
+        ),
+      owner: z
+        .string()
+        .optional()
+        .describe("Workspace owner; defaults to the account owner."),
+      visibility: z
+        .string()
+        .optional()
+        .describe('Visibility "private" (default) or "public".'),
       description: z.string().optional(),
     },
     annotations: {
@@ -179,11 +192,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     },
     createHandler:
       (getClient) =>
-      async ({ name, slug, description }) =>
+      async ({ name, project, owner, visibility, description }) =>
         toMcpTextResult(
           await projectsCreate(getClient(), {
             name: name as string,
-            slug: slug as string | undefined,
+            project: project as string,
+            owner: owner as string | undefined,
+            visibility: visibility as string | undefined,
             description: description as string | undefined,
           }),
         ),

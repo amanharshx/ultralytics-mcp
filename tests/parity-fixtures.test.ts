@@ -173,7 +173,9 @@ const TOOL_RUNNERS: Record<
   projects_create: (client, args) =>
     projectsCreate(client, {
       name: args.name as string,
-      slug: args.slug as string | undefined,
+      project: args.project as string,
+      owner: args.owner as string | undefined,
+      visibility: args.visibility as string | undefined,
       description: args.description as string | undefined,
     }),
   datasets_create: (client, args) =>

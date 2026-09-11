@@ -1,37 +1,57 @@
 {
   "tool": "projects_create",
   "args": {
-    "name": "Road Safety",
-    "slug": "road",
-    "description": "Detection experiments"
+    "name": "Example project",
+    "project": "example-project-create"
   },
   "api": [
+    {
+      "method": "GET",
+      "path": "/api/account/summary",
+      "response": {
+        "status": 200,
+        "json": {
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 8,
+            "datasets": 22,
+            "models": 14
+          },
+          "teams": []
+        }
+      }
+    },
     {
       "method": "POST",
       "path": "/api/projects",
       "json": {
-        "name": "Road Safety",
-        "slug": "road",
-        "description": "Detection experiments"
+        "project": "example-project-create",
+        "name": "Example project",
+        "visibility": "private",
+        "owner": "example-owner"
       },
       "response": {
-        "status": 200,
+        "status": 201,
         "json": {
-          "project": {
-            "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
-            "name": "Road Safety",
-            "slug": "road"
-          }
+          "id": "000000000000000000000008",
+          "owner": "example-owner",
+          "project": "example-project-create",
+          "region": "eu"
         }
       }
     }
   ],
   "expected": {
-    "summary": "Created project aaaaaaaaaaaaaaaaaaaaaaaa slug=road.",
+    "summary": "Created project 'example-project-create' for owner 'example-owner' with id '000000000000000000000008' (private).",
     "data": {
-      "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
-      "name": "Road Safety",
-      "slug": "road"
+      "id": "000000000000000000000008",
+      "owner": "example-owner",
+      "project": "example-project-create",
+      "region": "eu"
     }
   }
 }

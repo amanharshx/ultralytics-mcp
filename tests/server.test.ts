@@ -97,7 +97,7 @@ test("server registers all available tools over the protocol", async () => {
   expect(exploreProjects?.inputSchema?.required).toEqual(["q"]);
 
   const projectsCreate = tools.find((tool) => tool.name === "projects_create");
-  expect(projectsCreate?.inputSchema?.required).toEqual(["name"]);
+  expect(projectsCreate?.inputSchema?.required).toEqual(["name", "project"]);
 
   const projectsDelete = tools.find((tool) => tool.name === "projects_delete");
   expect(projectsDelete?.inputSchema?.required).toEqual(["project"]);
