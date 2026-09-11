@@ -27,6 +27,7 @@ import {
   modelsGet,
   projectsCreate,
   projectsDelete,
+  projectsGet,
   projectsList,
   trainingMonitor,
 } from "../src/tools/index.js";
@@ -168,6 +169,7 @@ const TOOL_RUNNERS: Record<
       args.owner as string | undefined,
       args.username as string | undefined,
     ),
+  projects_get: (client, args) => projectsGet(client, args.project as string),
   projects_create: (client, args) =>
     projectsCreate(client, {
       name: args.name as string,
@@ -327,6 +329,7 @@ describe("parity fixtures", () => {
         "models_delete.json",
         "projects_create.json",
         "projects_delete.json",
+        "projects_get.json",
         "projects_list.json",
         "training_monitor_history.json",
         "training_monitor_metrics.json",

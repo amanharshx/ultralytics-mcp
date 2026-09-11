@@ -1,7 +1,7 @@
 /** Read-only project tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyProjectId } from "../resolve.js";
+import { resolveLegacyProjectId, resolveProject } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -76,21 +76,46 @@ export async function exploreProjects(
   };
 }
 
-/** Get one project by id, slug, username/slug, or project ul:// URI. */
+/** Get one project by slug, owner/slug, or project ul:// URI.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and reads the live
+ * owner-scoped endpoint. The API nests the project under `project` with
+ * `models` and `isOwner` beside it; all three are surfaced.
+ */
 export async function projectsGet(
   client: UltralyticsClient,
   project: string,
 ): Promise<NormalizedToolResult> {
-  const projectId = await resolveLegacyProjectId(client, project);
-  const data = await client.get(`/projects/${projectId}`);
+  const ref = resolveProject(project);
+  const resolvedOwner = ref.owner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/projects/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(ref.project)}`,
+  );
   const record = asRecord(data);
-  const item = "project" in record ? record.project : data;
-  const fields = asRecord(item);
+  const fields = asRecord(record.project);
+  const models = Array.isArray(record.models)
+    ? (record.models as unknown[])
+    : [];
+  const isOwner = typeof record.isOwner === "boolean" ? record.isOwner : null;
+  const normalized = {
+    id: fields.id ?? null,
+    name: fields.name ?? null,
+    slug: fields.project ?? null,
+    username: fields.owner ?? null,
+    visibility: fields.visibility ?? null,
+    modelCount: fields.modelCount ?? null,
+  };
   return {
     summary:
-      `Project '${pyField(fields.name)}' (${pyField(fields.visibility)}), ` +
+      `Project '${pyField(normalized.slug)}' for owner '${resolvedOwner}': ` +
+      `'${pyField(normalized.name)}' (${pyField(normalized.visibility)}), ` +
       `${pyCount(fields, "modelCount")} model(s).`,
-    data: item,
+    data: {
+      ...normalized,
+      models,
+      isOwner,
+    },
   };
 }
 

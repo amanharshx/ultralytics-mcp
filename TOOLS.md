@@ -47,13 +47,13 @@ Metadata: read-only
 
 ### projects_get
 
-Get details for one project by id, slug, username/slug, or project ul:// URI.
+Get details for one project by slug, owner/slug, or project ul:// URI.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `project` | string | Yes | Project ref by id, slug, username/slug, or ul:// URI. |
+| `project` | string | Yes | Project ref by slug, owner/slug, or ul:// URI. |
 
 ### explore_projects
 

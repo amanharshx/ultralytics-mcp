@@ -1,0 +1,71 @@
+{
+  "tool": "projects_get",
+  "args": {
+    "project": "example-project-3"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/account/summary",
+      "response": {
+        "status": 200,
+        "json": {
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 8,
+            "datasets": 22,
+            "models": 14
+          },
+          "teams": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/example-owner/example-project-3",
+      "response": {
+        "status": 200,
+        "json": {
+          "project": {
+            "id": "000000000000000000000003",
+            "owner": "example-owner",
+            "project": "example-project-3",
+            "name": "Example project 3",
+            "visibility": "private",
+            "iconColor": "blue",
+            "modelCount": 0,
+            "starCount": 0,
+            "isStarred": false,
+            "viewPreferences": {
+              "sortBy": "newest",
+              "groupBy": "task",
+              "statusFilter": "all"
+            },
+            "createdAt": "2026-03-18T02:18:13.769Z",
+            "updatedAt": "2026-06-28T02:01:24.259Z",
+            "metadata": {}
+          },
+          "models": [],
+          "isOwner": true
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Project 'example-project-3' for owner 'example-owner': 'Example project 3' (private), 0 model(s).",
+    "data": {
+      "id": "000000000000000000000003",
+      "name": "Example project 3",
+      "slug": "example-project-3",
+      "username": "example-owner",
+      "visibility": "private",
+      "modelCount": 0,
+      "models": [],
+      "isOwner": true
+    }
+  }
+}
