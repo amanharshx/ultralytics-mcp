@@ -1,46 +1,48 @@
 {
   "tool": "projects_delete",
   "args": {
-    "project": "user/road"
+    "project": "example-project-delete"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/projects",
-      "query": {
-        "username": "user"
-      },
+      "path": "/api/account/summary",
       "response": {
         "status": 200,
         "json": {
-          "projects": [
-            {
-              "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
-              "slug": "road",
-              "username": "user"
-            }
-          ]
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 8,
+            "datasets": 22,
+            "models": 14
+          },
+          "teams": []
         }
       }
     },
     {
       "method": "DELETE",
-      "path": "/api/projects/aaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "/api/projects/example-owner/example-project-delete",
       "response": {
         "status": 200,
         "json": {
-          "deleted": true
+          "success": true,
+          "cascadedModels": 0
         }
       }
     }
   ],
   "expected": {
-    "summary": "Deleted project aaaaaaaaaaaaaaaaaaaaaaaa (soft delete).",
+    "summary": "Deleted project 'example-project-delete' for owner 'example-owner' (soft delete; 0 model(s) removed; restorable from trash).",
     "data": {
-      "id": "aaaaaaaaaaaaaaaaaaaaaaaa",
-      "response": {
-        "deleted": true
-      }
+      "owner": "example-owner",
+      "project": "example-project-delete",
+      "success": true,
+      "cascadedModels": 0
     }
   }
 }
