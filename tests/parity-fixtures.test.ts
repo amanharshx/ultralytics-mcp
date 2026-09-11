@@ -15,6 +15,7 @@ import {
   datasetImagesList,
   datasetsCreate,
   datasetsDelete,
+  datasetsGet,
   datasetsIngest,
   datasetsList,
   datasetUploadFile,
@@ -194,6 +195,7 @@ const TOOL_RUNNERS: Record<
       args.owner as string | undefined,
       args.username as string | undefined,
     ),
+  datasets_get: (client, args) => datasetsGet(client, args.dataset as string),
   dataset_images_list: (client, args) =>
     datasetImagesList(client, {
       dataset: args.dataset as string,
@@ -325,6 +327,7 @@ describe("parity fixtures", () => {
         "model_download_signed_url.json",
         "datasets_create.json",
         "datasets_delete.json",
+        "datasets_get.json",
         "datasets_list.json",
         "dataset_export.json",
         "dataset_images_list.json",

@@ -1,0 +1,312 @@
+{
+  "tool": "datasets_get",
+  "args": {
+    "dataset": "example-dataset-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/account/summary",
+      "response": {
+        "status": 200,
+        "json": {
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "dataset": {
+            "id": "000000000000000000000001",
+            "owner": "example-owner",
+            "dataset": "example-dataset-1",
+            "name": "Example dataset 1",
+            "description": "Example dataset 1 description.",
+            "visibility": "public",
+            "task": "detect",
+            "imageCount": 4,
+            "classCount": 6,
+            "classNames": [
+              "example-class-1",
+              "example-class-2",
+              "example-class-3",
+              "example-class-4",
+              "example-class-5",
+              "example-class-6"
+            ],
+            "classColors": {},
+            "format": "raw",
+            "splits": {
+              "train": 3,
+              "val": 1,
+              "test": 0,
+              "labeled": 4
+            },
+            "annotationCount": 7,
+            "totalBytes": 411317,
+            "starCount": 0,
+            "isStarred": false,
+            "status": "ready",
+            "processingTimeMs": 2541,
+            "errorCount": 0,
+            "sampleImages": [
+              {
+                "url": "https://cdn.example.com/sample-1-thumb.webp",
+                "imageUrl": "https://cdn.example.com/sample-1.jpg",
+                "width": 640,
+                "height": 426,
+                "labels": [
+                  {
+                    "classId": 1,
+                    "bbox": [
+                      0.18123,
+                      0.90254,
+                      0.2,
+                      0.12909
+                    ]
+                  },
+                  {
+                    "classId": 1,
+                    "bbox": [
+                      0.76873,
+                      0.50117,
+                      0.33436,
+                      0.6737
+                    ]
+                  }
+                ]
+              },
+              {
+                "url": "https://cdn.example.com/sample-2-thumb.webp",
+                "imageUrl": "https://cdn.example.com/sample-2.jpg",
+                "width": 640,
+                "height": 480,
+                "labels": [
+                  {
+                    "classId": 2,
+                    "bbox": [
+                      0.64138,
+                      0.74269,
+                      0.48592,
+                      0.51458
+                    ]
+                  },
+                  {
+                    "classId": 3,
+                    "bbox": [
+                      0.17812,
+                      0.4677,
+                      0.35624,
+                      0.46871
+                    ]
+                  }
+                ]
+              },
+              {
+                "url": "https://cdn.example.com/sample-3-thumb.webp",
+                "imageUrl": "https://cdn.example.com/sample-3.jpg",
+                "width": 640,
+                "height": 425,
+                "labels": [
+                  {
+                    "classId": 0,
+                    "bbox": [
+                      0.3398,
+                      0.49645,
+                      0.67965,
+                      0.87997
+                    ]
+                  }
+                ]
+              },
+              {
+                "url": "https://cdn.example.com/sample-4-thumb.webp",
+                "imageUrl": "https://cdn.example.com/sample-4.jpg",
+                "width": 640,
+                "height": 428,
+                "labels": [
+                  {
+                    "classId": 4,
+                    "bbox": [
+                      0.50625,
+                      0.59345,
+                      0.25621,
+                      0.44857
+                    ]
+                  },
+                  {
+                    "classId": 5,
+                    "bbox": [
+                      0.52341,
+                      0.28153,
+                      0.38434,
+                      0.38082
+                    ]
+                  }
+                ]
+              }
+            ],
+            "region": "eu",
+            "createdAt": "2026-04-19T18:20:56.412Z",
+            "updatedAt": "2026-09-11T13:28:44.822Z",
+            "metadata": {}
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Dataset 'example-dataset-1' for owner 'example-owner': 'Example dataset 1' (public) [detect], 4 images, 6 classes.",
+    "data": {
+      "dataset": {
+        "id": "000000000000000000000001",
+        "owner": "example-owner",
+        "dataset": "example-dataset-1",
+        "name": "Example dataset 1",
+        "description": "Example dataset 1 description.",
+        "visibility": "public",
+        "task": "detect",
+        "imageCount": 4,
+        "classCount": 6,
+        "classNames": [
+          "example-class-1",
+          "example-class-2",
+          "example-class-3",
+          "example-class-4",
+          "example-class-5",
+          "example-class-6"
+        ],
+        "classColors": {},
+        "format": "raw",
+        "splits": {
+          "train": 3,
+          "val": 1,
+          "test": 0,
+          "labeled": 4
+        },
+        "annotationCount": 7,
+        "totalBytes": 411317,
+        "starCount": 0,
+        "isStarred": false,
+        "status": "ready",
+        "processingTimeMs": 2541,
+        "errorCount": 0,
+        "sampleImages": [
+          {
+            "url": "https://cdn.example.com/sample-1-thumb.webp",
+            "imageUrl": "https://cdn.example.com/sample-1.jpg",
+            "width": 640,
+            "height": 426,
+            "labels": [
+              {
+                "classId": 1,
+                "bbox": [
+                  0.18123,
+                  0.90254,
+                  0.2,
+                  0.12909
+                ]
+              },
+              {
+                "classId": 1,
+                "bbox": [
+                  0.76873,
+                  0.50117,
+                  0.33436,
+                  0.6737
+                ]
+              }
+            ]
+          },
+          {
+            "url": "https://cdn.example.com/sample-2-thumb.webp",
+            "imageUrl": "https://cdn.example.com/sample-2.jpg",
+            "width": 640,
+            "height": 480,
+            "labels": [
+              {
+                "classId": 2,
+                "bbox": [
+                  0.64138,
+                  0.74269,
+                  0.48592,
+                  0.51458
+                ]
+              },
+              {
+                "classId": 3,
+                "bbox": [
+                  0.17812,
+                  0.4677,
+                  0.35624,
+                  0.46871
+                ]
+              }
+            ]
+          },
+          {
+            "url": "https://cdn.example.com/sample-3-thumb.webp",
+            "imageUrl": "https://cdn.example.com/sample-3.jpg",
+            "width": 640,
+            "height": 425,
+            "labels": [
+              {
+                "classId": 0,
+                "bbox": [
+                  0.3398,
+                  0.49645,
+                  0.67965,
+                  0.87997
+                ]
+              }
+            ]
+          },
+          {
+            "url": "https://cdn.example.com/sample-4-thumb.webp",
+            "imageUrl": "https://cdn.example.com/sample-4.jpg",
+            "width": 640,
+            "height": 428,
+            "labels": [
+              {
+                "classId": 4,
+                "bbox": [
+                  0.50625,
+                  0.59345,
+                  0.25621,
+                  0.44857
+                ]
+              },
+              {
+                "classId": 5,
+                "bbox": [
+                  0.52341,
+                  0.28153,
+                  0.38434,
+                  0.38082
+                ]
+              }
+            ]
+          }
+        ],
+        "region": "eu",
+        "createdAt": "2026-04-19T18:20:56.412Z",
+        "updatedAt": "2026-09-11T13:28:44.822Z",
+        "metadata": {}
+      }
+    }
+  }
+}

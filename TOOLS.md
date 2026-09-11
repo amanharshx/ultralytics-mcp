@@ -108,13 +108,13 @@ Metadata: read-only
 
 ### datasets_get
 
-Get details for one dataset by id, slug, username/slug, or dataset ul:// URI.
+Get details for one dataset by slug, owner/slug, or dataset ul:// URI.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 
 ### explore_datasets
 
