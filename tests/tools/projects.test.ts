@@ -169,6 +169,22 @@ describe("projectsList", () => {
       /Owner not found/,
     );
   });
+
+  test("attaches the static not-found hint through the tool", async () => {
+    // Live capture: GET /api/projects/{bad-owner} -> 404 {"error":"Owner not found"}
+    const { client } = routeClient((path) => {
+      if (path === "/api/projects/ghost") {
+        return jsonResponse({ error: "Owner not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    const err = await projectsList(client, "ghost").catch((e) => e as Error);
+    expect(String(err)).toMatch(/HTTP 404/);
+    expect(String(err)).toMatch(/Owner not found/);
+    expect(String(err)).toMatch(/owner may not exist/);
+    expect(String(err)).toMatch(/resource may not exist/);
+    expect(String(err)).toMatch(/API key may lack access/);
+  });
 });
 
 describe("exploreProjects", () => {
