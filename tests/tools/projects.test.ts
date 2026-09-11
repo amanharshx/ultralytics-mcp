@@ -547,7 +547,7 @@ describe("projectsCreate", () => {
 describe("projectsDelete", () => {
   function clientForDelete(
     deleteResponse: unknown,
-    options: { accountOwner?: string; status?: number } = {},
+    options: { accountOwner?: string } = {},
   ) {
     const calls: { path: string; method: string }[] = [];
     const impl = (async (url: string | URL, init: RequestInit = {}) => {
@@ -566,7 +566,7 @@ describe("projectsDelete", () => {
         parsed.pathname === "/api/projects/alice/road" &&
         (init.method ?? "GET").toUpperCase() === "DELETE"
       ) {
-        return jsonResponse(deleteResponse, options.status ?? 200);
+        return jsonResponse(deleteResponse);
       }
       return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
