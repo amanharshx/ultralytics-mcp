@@ -1,0 +1,23 @@
+name: Labeler
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read # Read .github/labeler.yml via the API
+  pull-requests: write # Labels must pre-exist; issues: write intentionally omitted.
+
+jobs:
+  label:
+    name: Apply PR labels
+    # pull_request_target runs this workflow from the base branch, so fork PRs
+    # (whose tokens are read-only under pull_request) still get labeled.
+    # Safe only because nothing is checked out or executed here — just
+    # actions/labeler. Do not add checkout/run steps without re-evaluating.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/labeler@v7
+        with:
+          sync-labels: false

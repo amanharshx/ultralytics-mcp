@@ -1,0 +1,53 @@
+# Automated PR labels. Branch rules reproduce the manual convention
+# (feat->enhancement, fix->bug, docs->documentation, chore/refactor->maintenance,
+# ci->ci, release->ci+release); path rules cover the rest.
+# sync-labels is false, so stale labels are kept, never auto-removed.
+enhancement:
+  - head-branch:
+      - "^feat/"
+
+bug:
+  - head-branch:
+      - "^fix/"
+
+documentation:
+  - head-branch:
+      - "^docs/"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "assets/**"
+
+maintenance:
+  - head-branch:
+      - "^refactor/"
+      - "^chore/"
+
+ci:
+  - head-branch:
+      - "^ci/"
+      - "^release/"
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "biome.json"
+          - "tsconfig.json"
+
+release:
+  - head-branch:
+      - "^release/"
+
+core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**"
+          - "server.json"
+          - "scripts/generate-tools.mjs"
+          - "TOOLS.md"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package.json"
+          - "package-lock.json"
