@@ -456,7 +456,7 @@ export async function datasetsGet(
       `Dataset '${pyField(fields.dataset)}' for owner '${resolvedOwner}': ` +
       `'${pyField(fields.name)}' (${pyField(fields.visibility)}) [${pyField(fields.task)}], ` +
       `${pyCount(fields, "imageCount")} images, ${pyCount(fields, "classCount")} classes.`,
-    data: { dataset: fields },
+    data: fields,
   };
 }
 

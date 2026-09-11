@@ -322,9 +322,7 @@ describe("datasetsGet", () => {
     expect(result.summary).toBe(
       "Dataset 'cars' for owner 'alice': 'Cars' (private) [detect], 100 images, 5 classes.",
     );
-    expect(result.data).toEqual({
-      dataset: { ...baseDataset },
-    });
+    expect(result.data).toEqual({ ...baseDataset });
   });
 
   test("preserves class names and ingest status fields", async () => {
@@ -338,13 +336,11 @@ describe("datasetsGet", () => {
     });
     const result = await datasetsGet(client, "alice/cars");
     expect(result.data).toMatchObject({
-      dataset: {
-        classNames: ["car", "person"],
-        status: "ready",
-        errorCount: 0,
-        lastIngestJobId: "job_123",
-        lastIngestSummary: { added: 2, errors: 0, skippedCounts: {} },
-      },
+      classNames: ["car", "person"],
+      status: "ready",
+      errorCount: 0,
+      lastIngestJobId: "job_123",
+      lastIngestSummary: { added: 2, errors: 0, skippedCounts: {} },
     });
   });
 
@@ -354,7 +350,7 @@ describe("datasetsGet", () => {
     expect(result.summary).toBe(
       "Dataset 'None' for owner 'alice': 'None' (None) [None], ? images, ? classes.",
     );
-    expect(result.data).toEqual({ dataset: {} });
+    expect(result.data).toEqual({});
   });
 
   test("succeeds for a ul:// dataset URI without an account lookup", async () => {
@@ -367,7 +363,8 @@ describe("datasetsGet", () => {
     ]);
     expect(result.summary).toContain("for owner 'alice'");
     expect(result.data).toMatchObject({
-      dataset: { dataset: "cars", owner: "alice" },
+      dataset: "cars",
+      owner: "alice",
     });
   });
 
@@ -383,7 +380,8 @@ describe("datasetsGet", () => {
     ]);
     expect(result.summary).toContain("for owner 'alice'");
     expect(result.data).toMatchObject({
-      dataset: { dataset: "cars", owner: "alice" },
+      dataset: "cars",
+      owner: "alice",
     });
   });
 
