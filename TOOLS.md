@@ -251,7 +251,7 @@ Notes: Uses a local image folder path, zips it client-side, and starts ingest in
 
 ```json
 {
-  "dataset": "team/datasets/warehouse-items",
+  "dataset": "team/warehouse-items",
   "folder_path": "/data/warehouse-items",
   "targetSplit": "train"
 }

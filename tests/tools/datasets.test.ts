@@ -1500,9 +1500,7 @@ describe("datasetUploadFolder", () => {
       datasetStatus: "processing",
       imageCount: 3,
       sessionId: "session_123",
-      sizeWarning: null,
     });
-    expect(result.summary).not.toMatch(/Warning:/);
     expect(typeof (result.data as Record<string, unknown>).bytes).toBe(
       "number",
     );

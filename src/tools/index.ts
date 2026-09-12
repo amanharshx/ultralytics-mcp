@@ -577,7 +577,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       {
         title: "Upload image folder",
         input: {
-          dataset: "team/datasets/warehouse-items",
+          dataset: "team/warehouse-items",
           folder_path: "/data/warehouse-items",
           targetSplit: "train",
         },
