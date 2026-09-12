@@ -649,33 +649,95 @@ export interface DatasetsIngestOptions {
   dataset: string;
   sourceUrl: string;
   targetSplit?: string;
+  conflictPolicy?: string;
 }
 
-/** Start a remote URL ingest job for an existing dataset. */
+const INGEST_CONFLICT_POLICIES: ReadonlySet<string> = new Set([
+  "skip",
+  "keep_both",
+  "replace",
+]);
+
+function validateIngestConflictPolicy(conflictPolicy?: string): string {
+  const effective = conflictPolicy ?? "skip";
+  if (!INGEST_CONFLICT_POLICIES.has(effective)) {
+    const allowed = Array.from(INGEST_CONFLICT_POLICIES).sort().join(", ");
+    throw new Error(
+      `Unsupported conflictPolicy '${effective}'. Expected one of: ${allowed}.`,
+    );
+  }
+  return effective;
+}
+
+/** Start a remote URL ingest job for an existing dataset.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and starts the ingest
+ * through the live owner-scoped endpoint. The conflict policy is always sent
+ * explicitly, defaulting to the non-destructive `skip` (the platform default
+ * is undocumented). The queued job id is returned with the dataset's current
+ * ingest status fields; use `datasets_get` to follow up, since ingest runs
+ * asynchronously and this tool does not poll to completion.
+ */
 export async function datasetsIngest(
   client: UltralyticsClient,
   options: DatasetsIngestOptions,
 ): Promise<NormalizedToolResult> {
-  if (!options.sourceUrl.trim()) {
+  if (!options.sourceUrl?.trim()) {
     throw new Error("`sourceUrl` is required.");
   }
   validateTargetSplit(options.targetSplit);
+  const conflictPolicy = validateIngestConflictPolicy(options.conflictPolicy);
 
-  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const encodedRef = `${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`;
   const payload: Record<string, unknown> = {
-    datasetId,
     sourceUrl: options.sourceUrl,
+    conflictPolicy,
   };
   if (options.targetSplit !== undefined) {
     payload.targetSplit = options.targetSplit;
   }
 
-  const data = await client.postJson("/datasets/ingest", payload);
-  const item = asRecord(data);
-  const jobId = item.jobId ?? item.id ?? "None";
+  const ingest = asRecord(
+    await client.postJson(`/datasets/${encodedRef}/ingest`, payload),
+  );
+  const jobId = ingest.jobId ?? ingest.id ?? null;
+  // The ingest job is already queued at this point, so a transient failure
+  // of the status lookup must not discard the issued job id and invite a
+  // duplicate retry. Report the submission with unknown status instead.
+  let fields: Record<string, unknown> = {};
+  let statusLookupFailed = false;
+  try {
+    const datasetRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
+    fields = asRecord(datasetRecord.dataset);
+  } catch {
+    statusLookupFailed = true;
+  }
+  const datasetStatus = fields.status ?? null;
+  const statusNote = statusLookupFailed
+    ? `(dataset status: ${String(datasetStatus ?? "None")}; status lookup failed)`
+    : `(dataset status: ${String(datasetStatus ?? "None")})`;
   return {
-    summary: `Started dataset ingest job ${String(jobId)} for dataset ${datasetId}.`,
-    data: item,
+    summary:
+      `Started dataset ingest job ${String(jobId ?? "None")} for dataset ` +
+      `'${refSlug}' for owner '${resolvedOwner}' ` +
+      `${statusNote}. ` +
+      `Use datasets_get to follow up; ingest completes when lastIngestJobId matches ${String(jobId ?? "None")}.`,
+    data: {
+      jobId,
+      status: ingest.status ?? null,
+      conflictPolicy,
+      targetSplit: options.targetSplit ?? null,
+      owner: resolvedOwner,
+      dataset: refSlug,
+      datasetStatus,
+      lastIngestJobId: fields.lastIngestJobId ?? null,
+      lastIngestSummary: fields.lastIngestSummary ?? null,
+      processingError: fields.processingError ?? null,
+      errorCount: fields.errorCount ?? null,
+    },
   };
 }
 

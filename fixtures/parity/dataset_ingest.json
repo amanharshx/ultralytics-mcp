@@ -1,54 +1,96 @@
 {
   "tool": "dataset_ingest",
   "args": {
-    "dataset": "user/data",
+    "dataset": "example-dataset-1",
     "sourceUrl": "https://example.com/dataset.zip",
     "targetSplit": "train"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/datasets",
-      "query": {
-        "username": "user"
-      },
+      "path": "/api/account/summary",
       "response": {
         "status": 200,
         "json": {
-          "datasets": [
-            {
-              "_id": "dddddddddddddddddddddddd",
-              "slug": "data",
-              "username": "user"
-            }
-          ]
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
         }
       }
     },
     {
       "method": "POST",
-      "path": "/api/datasets/ingest",
+      "path": "/api/datasets/example-owner/example-dataset-1/ingest",
       "json": {
-        "datasetId": "dddddddddddddddddddddddd",
         "sourceUrl": "https://example.com/dataset.zip",
+        "conflictPolicy": "skip",
         "targetSplit": "train"
       },
       "response": {
+        "status": 201,
+        "json": {
+          "jobId": "000000000000000000000009",
+          "status": "queued"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1",
+      "response": {
         "status": 200,
         "json": {
-          "jobId": "job_123",
-          "datasetId": "dddddddddddddddddddddddd",
-          "status": "queued"
+          "dataset": {
+            "id": "000000000000000000000001",
+            "owner": "example-owner",
+            "dataset": "example-dataset-1",
+            "name": "Example dataset 1",
+            "visibility": "private",
+            "task": "detect",
+            "imageCount": 0,
+            "format": "yolo",
+            "splits": {
+              "train": 0,
+              "val": 0,
+              "test": 0,
+              "labeled": 0
+            },
+            "annotationCount": 0,
+            "starCount": 0,
+            "isStarred": false,
+            "sampleImages": [],
+            "region": "eu",
+            "createdAt": "2026-09-12T03:52:00.000Z",
+            "updatedAt": "2026-09-12T03:52:10.000Z",
+            "metadata": {},
+            "status": "processing"
+          }
         }
       }
     }
   ],
   "expected": {
-    "summary": "Started dataset ingest job job_123 for dataset dddddddddddddddddddddddd.",
+    "summary": "Started dataset ingest job 000000000000000000000009 for dataset 'example-dataset-1' for owner 'example-owner' (dataset status: processing). Use datasets_get to follow up; ingest completes when lastIngestJobId matches 000000000000000000000009.",
     "data": {
-      "jobId": "job_123",
-      "datasetId": "dddddddddddddddddddddddd",
-      "status": "queued"
+      "jobId": "000000000000000000000009",
+      "status": "queued",
+      "conflictPolicy": "skip",
+      "targetSplit": "train",
+      "owner": "example-owner",
+      "dataset": "example-dataset-1",
+      "datasetStatus": "processing",
+      "lastIngestJobId": null,
+      "lastIngestSummary": null,
+      "processingError": null,
+      "errorCount": null
     }
   }
 }

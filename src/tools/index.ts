@@ -466,13 +466,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "dataset_ingest",
     registrationGroup: "write",
     stateChanging: true,
-    description: "Start a remote URL ingest job for an existing dataset.",
+    description:
+      "Start a remote URL ingest job for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       sourceUrl: z.string(),
       targetSplit: z.string().optional(),
+      conflictPolicy: z
+        .string()
+        .optional()
+        .describe(
+          'Conflict policy "skip" (default), "keep_both", or "replace".',
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -482,12 +489,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     },
     createHandler:
       (getClient) =>
-      async ({ dataset, sourceUrl, targetSplit }) =>
+      async ({ dataset, sourceUrl, targetSplit, conflictPolicy }) =>
         toMcpTextResult(
           await datasetsIngest(getClient(), {
             dataset: dataset as string,
             sourceUrl: sourceUrl as string,
             targetSplit: targetSplit as string | undefined,
+            conflictPolicy: conflictPolicy as string | undefined,
           }),
         ),
   }),
