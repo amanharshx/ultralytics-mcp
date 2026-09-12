@@ -7,18 +7,17 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyModelId } from "../resolve.js";
+import { type ResolvedModelRef, resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { asRecord } from "./shared.js";
+import { listField } from "./shared.js";
 
 function fileName(info: Record<string, unknown>): string | null {
-  const value = info.name ?? info.filename ?? info.fileName;
+  const value = info.name;
   return value ? String(value) : null;
 }
 
 function fileUrl(info: Record<string, unknown>): string | null {
-  const value =
-    info.url ?? info.downloadUrl ?? info.download_url ?? info.signedUrl;
+  const value = info.downloadUrl;
   return value ? String(value) : null;
 }
 
@@ -59,23 +58,20 @@ function availableFileNames(files: Record<string, unknown>[]): string {
 }
 
 function modelFiles(data: unknown): Record<string, unknown>[] {
-  const record = asRecord(data);
-  const files = record.files ?? record.modelFiles ?? record.models;
-  if (!Array.isArray(files)) {
-    return [];
-  }
-  return files.filter((item) => item && typeof item === "object") as Record<
-    string,
-    unknown
-  >[];
+  return listField(data, "files");
 }
 
 function selectModelFile(
   files: Record<string, unknown>[],
+  ref: ResolvedModelRef,
+  resolvedOwner: string,
   filename?: string,
 ): Record<string, unknown> {
   if (files.length === 0) {
-    throw new Error("No downloadable model files returned by the API.");
+    throw new Error(
+      `Model '${ref.model}' for owner '${resolvedOwner}' project '${ref.project}' ` +
+        `has no downloadable weight files yet; it may not be trained.`,
+    );
   }
   if (filename) {
     for (const file of files) {
@@ -187,7 +183,16 @@ async function downloadTarget(
   return target;
 }
 
-/** Download one model weight file to an explicit local path. */
+/** Download one model weight file to an explicit local path.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and lists
+ * the model's files through the live owner-scoped endpoint. The API returns
+ * `{files[]}` with each entry naming the file via `name`, `size`, and
+ * `downloadUrl`. An empty list means the model has no weights yet, which is
+ * reported distinctly from a failed download. The signed-URL fetch never
+ * forwards API credentials (handled by client.downloadBytes).
+ */
 export async function modelDownload(
   client: UltralyticsClient,
   model: string,
@@ -200,9 +205,17 @@ export async function modelDownload(
 ): Promise<NormalizedToolResult> {
   const { outputPath, project, filename, overwrite = false } = options;
   const target = await downloadTarget(outputPath, overwrite);
-  const modelId = await resolveLegacyModelId(client, model, project);
-  const data = await client.get(`/models/${modelId}/files`);
-  const fileInfo = selectModelFile(modelFiles(data), filename);
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/files`,
+  );
+  const fileInfo = selectModelFile(
+    modelFiles(data),
+    resolved,
+    resolvedOwner,
+    filename,
+  );
   const selectedName = fileName(fileInfo) ?? filename ?? "model file";
   const signedUrl = fileUrl(fileInfo);
   if (signedUrl === null) {
@@ -216,7 +229,9 @@ export async function modelDownload(
   return {
     summary: `Downloaded ${selectedName} to ${target} (${content.length} bytes).`,
     data: {
-      modelId,
+      owner: resolvedOwner,
+      project: resolved.project,
+      model: resolved.model,
       filename: selectedName,
       path: target,
       bytes: content.length,

@@ -6,9 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import { modelDownload } from "../../src/tools/downloads.js";
-import { BASE, KEY } from "../helpers.js";
-
-const ID = "a".repeat(24);
+import { BASE, jsonResponse, KEY } from "../helpers.js";
 
 let tmp: string;
 
@@ -20,14 +18,53 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
 });
 
-/** Client with a files endpoint and a recorded signed-URL download fetch. */
-function downloadClient(files: Array<Record<string, unknown>>, body: string) {
-  const downloadCalls: { url: string; auth: string | undefined }[] = [];
-  const fetchImpl = (async (url: string | URL) => {
-    if (String(url).endsWith(`/models/${ID}/files`)) {
-      return new Response(JSON.stringify({ files }), { status: 200 });
+interface DownloadCall {
+  url: string;
+  auth: string | undefined;
+}
+
+interface TestClientOptions {
+  /** Entries served as `{files}` on the owner-scoped files path. */
+  files?: Array<Record<string, unknown>>;
+  /** Raw body served on the files path instead of `{files}`. */
+  filesBody?: unknown;
+  /** Status served on the files path. */
+  filesStatus?: number;
+  /** Owner served by the account summary; unset makes the lookup fail. */
+  accountOwner?: string;
+  /** Bytes served by the signed-URL download. */
+  body?: string;
+}
+
+/** Client serving the owner-scoped files path with live field names. */
+function downloadClient(options: TestClientOptions = {}) {
+  const {
+    files = [
+      { name: "exp.pt", size: 7, downloadUrl: "https://signed.example/exp.pt" },
+    ],
+    filesBody,
+    filesStatus = 200,
+    accountOwner,
+    body = "weights",
+  } = options;
+  const calls: { path: string; method: string }[] = [];
+  const downloadCalls: DownloadCall[] = [];
+  const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+    const parsed = new URL(String(url));
+    calls.push({
+      path: parsed.pathname,
+      method: (init.method ?? "GET").toUpperCase(),
+    });
+    if (parsed.pathname === "/api/account/summary") {
+      if (accountOwner === undefined) {
+        return jsonResponse({ error: "unexpected account lookup" }, 500);
+      }
+      return jsonResponse({ username: accountOwner });
     }
-    return new Response("{}", { status: 404 });
+    if (parsed.pathname === "/api/models/alice/road/exp/files") {
+      return jsonResponse(filesBody ?? { files }, filesStatus);
+    }
+    return jsonResponse({}, 404);
   }) as unknown as typeof fetch;
   const downloadFetchImpl = (async (
     url: string | URL,
@@ -43,21 +80,138 @@ function downloadClient(files: Array<Record<string, unknown>>, body: string) {
     fetchImpl,
     downloadFetchImpl,
   });
-  return { client, downloadCalls };
+  return { client, calls, downloadCalls };
 }
 
 describe("modelDownload", () => {
-  test("selects the requested filename and downloads without forwarding auth", async () => {
-    const { client, downloadCalls } = downloadClient(
-      [
-        { name: "last.pt", url: "https://signed.example/last.pt" },
-        { name: "best.pt", url: "https://signed.example/best.pt" },
-      ],
-      "weights",
+  test("downloads through the owner-scoped files path using live field names", async () => {
+    const { client, calls, downloadCalls } = downloadClient();
+    const outputPath = join(tmp, "exp.pt");
+
+    const result = await modelDownload(client, "alice/road/exp", {
+      outputPath,
+    });
+
+    expect(calls).toEqual([
+      { path: "/api/models/alice/road/exp/files", method: "GET" },
+    ]);
+    expect(result.summary).toBe(
+      `Downloaded exp.pt to ${outputPath} (7 bytes).`,
     );
+    expect(result.data).toEqual({
+      owner: "alice",
+      project: "road",
+      model: "exp",
+      filename: "exp.pt",
+      path: outputPath,
+      bytes: 7,
+    });
+    expect(downloadCalls[0].url).toBe("https://signed.example/exp.pt");
+    expect(downloadCalls[0].auth).toBeUndefined();
+    expect(await readFile(outputPath, "utf8")).toBe("weights");
+  });
+
+  test("accepts a ul:// model URI without an account lookup", async () => {
+    const { client, calls } = downloadClient();
+    const outputPath = join(tmp, "exp.pt");
+
+    const result = await modelDownload(client, "ul://alice/road/exp", {
+      outputPath,
+    });
+
+    expect(calls).toEqual([
+      { path: "/api/models/alice/road/exp/files", method: "GET" },
+    ]);
+    expect(result.data).toMatchObject({
+      owner: "alice",
+      project: "road",
+      model: "exp",
+    });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = downloadClient({ accountOwner: "alice" });
+    const outputPath = join(tmp, "exp.pt");
+
+    const result = await modelDownload(client, "exp", {
+      outputPath,
+      project: "road",
+    });
+
+    expect(calls).toEqual([
+      { path: "/api/account/summary", method: "GET" },
+      { path: "/api/models/alice/road/exp/files", method: "GET" },
+    ]);
+    expect(result.data).toMatchObject({
+      owner: "alice",
+      project: "road",
+      model: "exp",
+    });
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = downloadClient();
+
+    await expect(
+      modelDownload(client, "a".repeat(24), {
+        outputPath: join(tmp, "exp.pt"),
+      }),
+    ).rejects.toThrow(/not addressable.*owner\/project\/model.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("requires a project for a bare slug", async () => {
+    const { client, calls } = downloadClient();
+
+    await expect(
+      modelDownload(client, "exp", { outputPath: join(tmp, "exp.pt") }),
+    ).rejects.toThrow(/project is required/);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("names the model when it has no downloadable weight files", async () => {
+    const { client } = downloadClient({ files: [] });
+    const outputPath = join(tmp, "exp.pt");
+
+    await expect(
+      modelDownload(client, "alice/road/exp", { outputPath }),
+    ).rejects.toThrow(
+      /Model 'exp' for owner 'alice' project 'road' has no downloadable weight files.*may not be trained/s,
+    );
+  });
+
+  // Live capture: GET /api/models/{owner}/{project}/{bad-model}/files -> 404 {"error":"Model not found"}
+  test("surfaces the API message for a missing model", async () => {
+    const { client } = downloadClient({
+      filesBody: { error: "Model not found" },
+      filesStatus: 404,
+    });
+
+    await expect(
+      modelDownload(client, "alice/road/exp", {
+        outputPath: join(tmp, "exp.pt"),
+      }),
+    ).rejects.toThrow(/Model not found/);
+  });
+
+  test("selects the requested filename and downloads without forwarding auth", async () => {
+    const { client, downloadCalls } = downloadClient({
+      files: [
+        {
+          name: "last.pt",
+          size: 8,
+          downloadUrl: "https://signed.example/last.pt",
+        },
+        {
+          name: "best.pt",
+          size: 7,
+          downloadUrl: "https://signed.example/best.pt",
+        },
+      ],
+    });
     const outputPath = join(tmp, "best.pt");
 
-    const result = await modelDownload(client, ID, {
+    const result = await modelDownload(client, "alice/road/exp", {
       outputPath,
       filename: "best.pt",
     });
@@ -65,7 +219,9 @@ describe("modelDownload", () => {
       `Downloaded best.pt to ${outputPath} (7 bytes).`,
     );
     expect(result.data).toEqual({
-      modelId: ID,
+      owner: "alice",
+      project: "road",
+      model: "exp",
       filename: "best.pt",
       path: outputPath,
       bytes: 7,
@@ -75,19 +231,19 @@ describe("modelDownload", () => {
     expect(await readFile(outputPath, "utf8")).toBe("weights");
   });
 
-  test("matches requested filename against the signed URL path basename", async () => {
-    const { client, downloadCalls } = downloadClient(
-      [
+  test("matches requested filename against the download link path basename", async () => {
+    const { client, downloadCalls } = downloadClient({
+      files: [
         {
           name: "exp-4.pt",
+          size: 7,
           downloadUrl: "https://signed.example/models/abc/best.pt?x=1",
         },
       ],
-      "weights",
-    );
+    });
     const outputPath = join(tmp, "best.pt");
 
-    const result = await modelDownload(client, ID, {
+    const result = await modelDownload(client, "alice/road/exp", {
       outputPath,
       filename: "best.pt",
     });
@@ -96,7 +252,9 @@ describe("modelDownload", () => {
       `Downloaded exp-4.pt to ${outputPath} (7 bytes).`,
     );
     expect(result.data).toEqual({
-      modelId: ID,
+      owner: "alice",
+      project: "road",
+      model: "exp",
       filename: "exp-4.pt",
       path: outputPath,
       bytes: 7,
@@ -106,110 +264,83 @@ describe("modelDownload", () => {
     );
   });
 
-  test("selects by friendly model filename before signed URL path basename", async () => {
-    const { client, downloadCalls } = downloadClient(
-      [
-        {
-          name: "exp-4.pt",
-          downloadUrl: "https://signed.example/models/abc/best.pt",
-        },
-      ],
-      "weights",
-    );
-    const outputPath = join(tmp, "exp-4.pt");
-
-    await modelDownload(client, ID, {
-      outputPath,
-      filename: "exp-4.pt",
-    });
-
-    expect(downloadCalls[0].url).toBe(
-      "https://signed.example/models/abc/best.pt",
-    );
-  });
-
-  test("prefers best.pt from signed URL path when no filename is requested", async () => {
-    const { client, downloadCalls } = downloadClient(
-      [
+  test("prefers best.pt from the download link path when no filename is requested", async () => {
+    const { client, downloadCalls } = downloadClient({
+      files: [
         {
           name: "last.pt",
+          size: 8,
           downloadUrl: "https://signed.example/models/abc/last.pt",
         },
         {
           name: "exp-4.pt",
+          size: 7,
           downloadUrl: "https://signed.example/models/abc/best.pt",
         },
       ],
-      "weights",
-    );
+    });
     const outputPath = join(tmp, "best.pt");
 
-    await modelDownload(client, ID, { outputPath });
+    await modelDownload(client, "alice/road/exp", { outputPath });
 
     expect(downloadCalls[0].url).toBe(
       "https://signed.example/models/abc/best.pt",
     );
   });
 
-  test("lists file names and URL basenames when requested filename is missing", async () => {
-    const { client } = downloadClient(
-      [
+  test("lists file names and link basenames when requested filename is missing", async () => {
+    const { client } = downloadClient({
+      files: [
         {
           name: "exp-4.pt",
+          size: 7,
           downloadUrl: "https://signed.example/models/abc/best.pt",
         },
-        { name: "last.pt", downloadUrl: "not a url" },
+        { name: "last.pt", size: 8, downloadUrl: "not a url" },
       ],
-      "weights",
-    );
+    });
     const outputPath = join(tmp, "missing.pt");
 
     await expect(
-      modelDownload(client, ID, { outputPath, filename: "missing.pt" }),
+      modelDownload(client, "alice/road/exp", {
+        outputPath,
+        filename: "missing.pt",
+      }),
     ).rejects.toThrow(
       /No model file matching 'missing.pt'. Available: exp-4.pt \(url: best.pt\), last.pt/,
     );
   });
 
   test("refuses to overwrite an existing file by default", async () => {
-    const { client } = downloadClient(
-      [{ name: "best.pt", url: "https://x/best.pt" }],
-      "weights",
-    );
-    const outputPath = join(tmp, "best.pt");
+    const { client } = downloadClient();
+    const outputPath = join(tmp, "exp.pt");
     await writeFile(outputPath, "existing");
 
-    await expect(modelDownload(client, ID, { outputPath })).rejects.toThrow(
-      /Output path exists/,
-    );
+    await expect(
+      modelDownload(client, "alice/road/exp", { outputPath }),
+    ).rejects.toThrow(/Output path exists/);
     // Untouched.
     expect(await readFile(outputPath, "utf8")).toBe("existing");
   });
 
   test("rejects symlink targets even when overwrite is enabled", async () => {
-    const { client } = downloadClient(
-      [{ name: "best.pt", url: "https://x/best.pt" }],
-      "weights",
-    );
+    const { client } = downloadClient();
     const linkedPath = join(tmp, "linked.pt");
-    const outputPath = join(tmp, "best.pt");
+    const outputPath = join(tmp, "exp.pt");
     await writeFile(linkedPath, "existing");
     await symlink(linkedPath, outputPath);
 
     await expect(
-      modelDownload(client, ID, { outputPath, overwrite: true }),
+      modelDownload(client, "alice/road/exp", { outputPath, overwrite: true }),
     ).rejects.toThrow(/symbolic link/);
     expect(await readFile(linkedPath, "utf8")).toBe("existing");
   });
 
   test("requires an existing parent directory", async () => {
-    const { client } = downloadClient(
-      [{ name: "best.pt", url: "https://x/best.pt" }],
-      "weights",
-    );
-    const outputPath = join(tmp, "missing-dir", "best.pt");
-    await expect(modelDownload(client, ID, { outputPath })).rejects.toThrow(
-      /Output directory does not exist/,
-    );
+    const { client } = downloadClient();
+    const outputPath = join(tmp, "missing-dir", "exp.pt");
+    await expect(
+      modelDownload(client, "alice/road/exp", { outputPath }),
+    ).rejects.toThrow(/Output directory does not exist/);
   });
 });

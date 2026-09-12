@@ -1,25 +1,21 @@
 {
   "tool": "model_download",
   "args": {
-    "model": "aaaaaaaaaaaaaaaaaaaaaaaa",
-    "output_path": "__TMP__/best.pt",
-    "filename": "best.pt"
+    "model": "example-owner/example-project-1/example-model-1",
+    "output_path": "__TMP__/best.pt"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa/files",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/files",
       "response": {
         "status": 200,
         "json": {
           "files": [
             {
-              "name": "last.pt",
-              "url": "https://signed.example/last.pt"
-            },
-            {
-              "name": "exp-4.pt",
-              "downloadUrl": "https://signed.example/models/aaaaaaaaaaaaaaaaaaaaaaaa/best.pt?download=1"
+              "name": "example-model-1.pt",
+              "size": 6570909,
+              "downloadUrl": "https://storage.example/example-bucket/example-model-1/best.pt"
             }
           ]
         }
@@ -27,14 +23,16 @@
     }
   ],
   "download": {
-    "url": "https://signed.example/models/aaaaaaaaaaaaaaaaaaaaaaaa/best.pt?download=1",
+    "url": "https://storage.example/example-bucket/example-model-1/best.pt",
     "body_text": "weights"
   },
   "expected": {
-    "summary": "Downloaded exp-4.pt to __TMP__/best.pt (7 bytes).",
+    "summary": "Downloaded example-model-1.pt to __TMP__/best.pt (7 bytes).",
     "data": {
-      "modelId": "aaaaaaaaaaaaaaaaaaaaaaaa",
-      "filename": "exp-4.pt",
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-model-1",
+      "filename": "example-model-1.pt",
       "path": "__TMP__/best.pt",
       "bytes": 7
     }

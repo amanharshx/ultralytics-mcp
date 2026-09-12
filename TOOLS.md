@@ -358,13 +358,13 @@ Metadata: read-only, external/live
 
 ### model_download
 
-Download one trained model weight file to an explicit local path.
+Download a trained model's weight file to an explicit local path by owner/project/model, ul://owner/project/model, or slug with a project.
 
 Metadata: state-changing, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `model` | string | Yes | Model id, or slug when project is also provided. |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `output_path` | string | Yes | Local destination path for downloaded model weights. |
 | `project` | string | No |  |
 | `filename` | string | No |  |

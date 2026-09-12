@@ -851,11 +851,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "action",
     stateChanging: true,
     description:
-      "Download one trained model weight file to an explicit local path.",
+      "Download a trained model's weight file to an explicit local path by owner/project/model, ul://owner/project/model, or slug with a project.",
     inputSchema: {
       model: z
         .string()
-        .describe("Model id, or slug when project is also provided."),
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
       output_path: z
         .string()
         .describe("Local destination path for downloaded model weights."),
