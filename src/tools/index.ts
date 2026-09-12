@@ -800,13 +800,18 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     inputSchema: {
       model: z
         .string()
-        .describe("Model id, or slug when project is also provided."),
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
       source: z
         .string()
         .describe(
-          "Image URL or base64 input string. Local file paths are not supported.",
+          "Image URL, raw base64-encoded image, or base64 data: URI (data:<mime>;base64,<payload>). Local file paths are not supported.",
         ),
-      project: z.string().optional(),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
       conf: z.number().optional(),
       iou: z.number().optional(),
       imgsz: z.number().optional(),

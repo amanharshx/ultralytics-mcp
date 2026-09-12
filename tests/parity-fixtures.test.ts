@@ -25,6 +25,7 @@ import {
   exploreDatasets,
   exploreProjects,
   modelDownload,
+  modelPredict,
   modelsDelete,
   modelsGet,
   modelsList,
@@ -290,6 +291,14 @@ const TOOL_RUNNERS: Record<
       args.model as string,
       args.project as string | undefined,
     ),
+  model_predict: (client, args) =>
+    modelPredict(client, args.model as string, {
+      source: args.source as string,
+      project: args.project as string | undefined,
+      conf: args.conf as number | undefined,
+      iou: args.iou as number | undefined,
+      imgsz: args.imgsz as number | undefined,
+    }),
   training_monitor: (client, args) =>
     trainingMonitor(
       client,
@@ -346,6 +355,7 @@ describe("parity fixtures", () => {
         "dataset_upload_folder.json",
         "dataset_upload_video.json",
         "models_get.json",
+        "model_predict_base64.json",
         "models_delete.json",
         "models_list.json",
         "projects_create.json",
