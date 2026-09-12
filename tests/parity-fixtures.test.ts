@@ -183,8 +183,9 @@ const TOOL_RUNNERS: Record<
   datasets_create: (client, args) =>
     datasetsCreate(client, {
       name: args.name as string,
+      dataset: args.dataset as string,
       task: args.task as string,
-      slug: args.slug as string,
+      owner: args.owner as string | undefined,
       description: args.description as string | undefined,
       visibility: args.visibility as string | undefined,
       classNames: args.classNames as string[] | undefined,

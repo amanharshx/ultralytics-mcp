@@ -109,8 +109,8 @@ test("server registers all available tools over the protocol", async () => {
   const datasetsCreate = tools.find((tool) => tool.name === "datasets_create");
   expect(datasetsCreate?.inputSchema?.required).toEqual([
     "name",
+    "dataset",
     "task",
-    "slug",
   ]);
   expect(datasetsCreate?.inputSchema?.properties?.task).toMatchObject({
     description: expect.any(String),
