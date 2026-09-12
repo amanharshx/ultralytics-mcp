@@ -1,7 +1,17 @@
 {
   "tool": "dataset_images_list",
   "args": {
-    "dataset": "example-dataset-1"
+    "dataset": "example-dataset-1",
+    "split": "train",
+    "search": "000000000034",
+    "hasLabel": true,
+    "classIds": [
+      "0",
+      "1"
+    ],
+    "limit": 10,
+    "offset": 0,
+    "includeImageUrls": false
   },
   "api": [
     {
@@ -27,6 +37,15 @@
     {
       "method": "GET",
       "path": "/api/datasets/example-owner/example-dataset-1/images",
+      "query": {
+        "split": "train",
+        "search": "000000000034",
+        "hasLabel": "true",
+        "classIds": "0,1",
+        "limit": "10",
+        "offset": "0",
+        "includeImageUrls": "false"
+      },
       "response": {
         "status": 200,
         "json": {
@@ -35,52 +54,15 @@
               "id": "000000000000000000000001",
               "hash": "00000000000000000000000000000001",
               "ext": "jpg",
-              "thumbnailUrl": "https://cdn.example.com/sample-1-thumb.webp",
               "width": 640,
               "height": 425,
               "split": "train",
               "labelCount": 1,
               "name": "000000000034",
               "bytes": 147010
-            },
-            {
-              "id": "000000000000000000000002",
-              "hash": "00000000000000000000000000000002",
-              "ext": "jpg",
-              "thumbnailUrl": "https://cdn.example.com/sample-2-thumb.webp",
-              "width": 640,
-              "height": 426,
-              "split": "train",
-              "labelCount": 2,
-              "name": "000000000025",
-              "bytes": 132124
-            },
-            {
-              "id": "000000000000000000000003",
-              "hash": "00000000000000000000000000000003",
-              "ext": "jpg",
-              "thumbnailUrl": "https://cdn.example.com/sample-3-thumb.webp",
-              "width": 640,
-              "height": 480,
-              "split": "train",
-              "labelCount": 2,
-              "name": "000000000009",
-              "bytes": 88798
-            },
-            {
-              "id": "000000000000000000000004",
-              "hash": "00000000000000000000000000000004",
-              "ext": "jpg",
-              "thumbnailUrl": "https://cdn.example.com/sample-4-thumb.webp",
-              "width": 640,
-              "height": 428,
-              "split": "val",
-              "labelCount": 2,
-              "name": "000000000030",
-              "bytes": 43385
             }
           ],
-          "total": 4,
+          "total": 1,
           "hasMore": false,
           "classes": [
             "Zebra",
@@ -96,9 +78,9 @@
     }
   ],
   "expected": {
-    "summary": "4 image(s) (total 4)",
+    "summary": "1 image(s) (total 1)",
     "data": {
-      "total": 4,
+      "total": 1,
       "hasMore": false,
       "classes": [
         "Zebra",
@@ -119,41 +101,7 @@
           "width": 640,
           "height": 425,
           "labelCount": 1,
-          "bytes": 147010,
-          "thumbnailUrl": "https://cdn.example.com/sample-1-thumb.webp"
-        },
-        {
-          "id": "000000000000000000000002",
-          "name": "000000000025",
-          "ext": "jpg",
-          "split": "train",
-          "width": 640,
-          "height": 426,
-          "labelCount": 2,
-          "bytes": 132124,
-          "thumbnailUrl": "https://cdn.example.com/sample-2-thumb.webp"
-        },
-        {
-          "id": "000000000000000000000003",
-          "name": "000000000009",
-          "ext": "jpg",
-          "split": "train",
-          "width": 640,
-          "height": 480,
-          "labelCount": 2,
-          "bytes": 88798,
-          "thumbnailUrl": "https://cdn.example.com/sample-3-thumb.webp"
-        },
-        {
-          "id": "000000000000000000000004",
-          "name": "000000000030",
-          "ext": "jpg",
-          "split": "val",
-          "width": 640,
-          "height": 428,
-          "labelCount": 2,
-          "bytes": 43385,
-          "thumbnailUrl": "https://cdn.example.com/sample-4-thumb.webp"
+          "bytes": 147010
         }
       ]
     }

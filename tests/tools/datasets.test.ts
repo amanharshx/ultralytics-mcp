@@ -497,40 +497,13 @@ describe("datasetImagesList", () => {
     });
   });
 
-  test("carries every exposed filter through under the live parameter names", async () => {
-    const { client, calls } = clientForImagesList(liveImagesResponse);
-
-    const result = await datasetImagesList(client, {
-      dataset: "alice/cars",
-      split: "train",
-      search: "000000000034",
-      hasLabel: true,
-      classIds: ["0", "1"],
-      limit: 25,
-      offset: 50,
-      includeImageUrls: true,
-    });
-
-    expect(calls.map((call) => call.path)).toEqual([
-      "/api/datasets/alice/cars/images",
-    ]);
-    const params = calls[0].params;
-    expect(params.get("split")).toBe("train");
-    expect(params.get("search")).toBe("000000000034");
-    expect(params.get("hasLabel")).toBe("true");
-    expect(params.get("classIds")).toBe("0,1");
-    expect(params.get("limit")).toBe("25");
-    expect(params.get("offset")).toBe("50");
-    expect(params.get("includeImageUrls")).toBe("true");
-    expect(result.summary).toBe("1 image(s) (total 4)");
-  });
-
   test.each([
     [{ split: "train" }, "split", "train"],
     [{ search: "000000000034" }, "search", "000000000034"],
     [{ hasLabel: true }, "hasLabel", "true"],
     [{ hasLabel: false }, "hasLabel", "false"],
     [{ classIds: ["0"] }, "classIds", "0"],
+    [{ classIds: ["0", "1"] }, "classIds", "0,1"],
     [{ limit: 1 }, "limit", "1"],
     [{ offset: 1 }, "offset", "1"],
     [{ includeImageUrls: true }, "includeImageUrls", "true"],
