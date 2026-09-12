@@ -1,64 +1,122 @@
 {
   "tool": "training_monitor",
   "args": {
-    "model": "aaaaaaaaaaaaaaaaaaaaaaaa"
+    "model": "example-owner/example-project-1/example-model-1"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "/api/models/example-owner/example-project-1/example-model-1",
       "response": {
         "status": 200,
         "json": {
           "model": {
-            "status": "running",
+            "id": "000000000000000000000001",
+            "owner": "example-owner",
+            "project": "example-project-1",
+            "model": "example-model-1",
+            "name": "example-model-1",
+            "status": "completed",
+            "hasWeights": true,
             "epochs": 100,
-            "bestEpoch": 9,
-            "bestFitness": 0.75,
+            "bestEpoch": 78,
+            "bestFitness": 0.38792,
+            "computeCost": {
+              "gpuType": "rtx-pro-6000",
+              "gpuDisplayName": "RTX PRO 6000",
+              "pricePerHour": 2.09,
+              "totalCost": 0.09,
+              "durationMs": 139413
+            },
             "trainResults": [
               {
                 "epoch": 0,
                 "metrics": {
-                  "metrics/mAP50(B)": 0.5
+                  "train/box_loss": 2.01343,
+                  "train/cls_loss": 3.89538,
+                  "train/dfl_loss": 0.00299,
+                  "metrics/precision(B)": 0.04,
+                  "metrics/recall(B)": 0.11429,
+                  "metrics/mAP50(B)": 0.01037,
+                  "metrics/mAP50-95(B)": 0.00548,
+                  "val/box_loss": 1.36941,
+                  "val/cls_loss": 3.91731,
+                  "val/dfl_loss": 0.00318,
+                  "lr": 0
                 }
               },
               {
                 "epoch": 1,
                 "metrics": {
-                  "metrics/mAP50(B)": 0.6
+                  "train/box_loss": 1.82718,
+                  "train/cls_loss": 3.87334,
+                  "train/dfl_loss": 0.00285,
+                  "metrics/precision(B)": 0.04,
+                  "metrics/recall(B)": 0.11429,
+                  "metrics/mAP50(B)": 0.01108,
+                  "metrics/mAP50-95(B)": 0.00553,
+                  "val/box_loss": 1.35829,
+                  "val/cls_loss": 3.92495,
+                  "val/dfl_loss": 0.0032,
+                  "lr": 0.00002
                 }
               }
             ]
-          }
+          },
+          "isOwner": true
         }
       }
     },
     {
       "method": "GET",
-      "path": "/api/models/aaaaaaaaaaaaaaaaaaaaaaaa/training",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/training",
       "response": {
-        "status": 404,
+        "status": 200,
         "json": {
-          "error": "Project not found"
+          "job": {
+            "status": "completed",
+            "progress": {
+              "percentage": 101
+            },
+            "timing": {
+              "elapsedMs": 6050547803,
+              "timePerEpochMs": 1322.851485148515,
+              "etaMs": 0
+            },
+            "error": null
+          }
         }
       }
     }
   ],
   "expected": {
-    "summary": "Training status=running; epoch 2/100; ~2.0%",
+    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': training status=completed job=completed; epoch 2/100; ~101%",
     "data": {
-      "modelId": "aaaaaaaaaaaaaaaaaaaaaaaa",
-      "status": "running",
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-model-1",
+      "modelId": "000000000000000000000001",
+      "status": "completed",
+      "jobStatus": "completed",
       "epochsDone": 2,
       "totalEpochs": 100,
-      "progressPercentage": 2.0,
-      "etaMs": null,
-      "bestEpoch": 9,
-      "bestFitness": 0.75,
+      "progressPercentage": 101,
+      "etaMs": 0,
+      "bestEpoch": 78,
+      "bestFitness": 0.38792,
       "latestMetrics": {
-        "metrics/mAP50(B)": 0.6
+        "metrics/mAP50(B)": 0.01108,
+        "metrics/mAP50-95(B)": 0.00553
       },
-      "progressSource": "model.trainResults"
+      "computeCost": {
+        "gpuType": "rtx-pro-6000",
+        "gpuDisplayName": "RTX PRO 6000",
+        "pricePerHour": 2.09,
+        "totalCost": 0.09,
+        "durationMs": 139413
+      },
+      "trainingError": null,
+      "progressSource": "models/{owner}/{project}/{model}/training"
     }
   }
 }

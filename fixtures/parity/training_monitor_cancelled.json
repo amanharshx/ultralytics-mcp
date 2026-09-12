@@ -1,0 +1,140 @@
+{
+  "tool": "training_monitor",
+  "args": {
+    "model": "example-owner/example-project-1/example-cancelled-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-cancelled-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "id": "000000000000000000000002",
+            "owner": "example-owner",
+            "project": "example-project-1",
+            "model": "example-cancelled-1",
+            "name": "example-cancelled-1",
+            "status": "cancelled",
+            "hasWeights": true,
+            "epochs": 100,
+            "bestEpoch": 7,
+            "bestFitness": 0.97451,
+            "computeCost": {
+              "gpuType": "unknown",
+              "gpuDisplayName": "RTX PRO 6000",
+              "pricePerHour": 2.09,
+              "totalCost": 0.16,
+              "durationMs": 271194
+            },
+            "trainResults": [
+              {
+                "epoch": 0,
+                "metrics": {
+                  "train/box_loss": 1.08676,
+                  "train/seg_loss": 2.30461,
+                  "train/cls_loss": 4.15509,
+                  "train/dfl_loss": 0.01069,
+                  "train/sem_loss": 5.28054,
+                  "metrics/precision(B)": 0.41629,
+                  "metrics/recall(B)": 0.28547,
+                  "metrics/mAP50(B)": 0.22336,
+                  "metrics/mAP50-95(B)": 0.1693,
+                  "metrics/precision(M)": 0.41682,
+                  "metrics/recall(M)": 0.28827,
+                  "metrics/mAP50(M)": 0.22261,
+                  "metrics/mAP50-95(M)": 0.16544,
+                  "val/box_loss": 0.93328,
+                  "val/seg_loss": 1.69003,
+                  "val/cls_loss": 2.99009,
+                  "val/dfl_loss": 0.01172,
+                  "val/sem_loss": 0,
+                  "lr": 0.000122
+                }
+              },
+              {
+                "epoch": 1,
+                "metrics": {
+                  "train/box_loss": 0.9312,
+                  "train/seg_loss": 1.45904,
+                  "train/cls_loss": 1.85112,
+                  "train/dfl_loss": 0.00836,
+                  "train/sem_loss": 3.07974,
+                  "metrics/precision(B)": 0.47728,
+                  "metrics/recall(B)": 0.51872,
+                  "metrics/mAP50(B)": 0.46949,
+                  "metrics/mAP50-95(B)": 0.36027,
+                  "metrics/precision(M)": 0.48328,
+                  "metrics/recall(M)": 0.5254,
+                  "metrics/mAP50(M)": 0.47434,
+                  "metrics/mAP50-95(M)": 0.35132,
+                  "val/box_loss": 0.8874,
+                  "val/seg_loss": 1.28331,
+                  "val/cls_loss": 1.44871,
+                  "val/dfl_loss": 0.01084,
+                  "val/sem_loss": 0,
+                  "lr": 0.000243
+                }
+              }
+            ]
+          },
+          "isOwner": true
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-cancelled-1/training",
+      "response": {
+        "status": 200,
+        "json": {
+          "job": {
+            "status": "cancelled",
+            "progress": {
+              "percentage": 10
+            },
+            "timing": {
+              "elapsedMs": 6931971227,
+              "timePerEpochMs": 26700.9,
+              "etaMs": 2403081
+            },
+            "error": null
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Model 'example-cancelled-1' for owner 'example-owner' project 'example-project-1': training status=cancelled job=cancelled; epoch 2/100; ~10%; ETA 40min",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-cancelled-1",
+      "modelId": "000000000000000000000002",
+      "status": "cancelled",
+      "jobStatus": "cancelled",
+      "epochsDone": 2,
+      "totalEpochs": 100,
+      "progressPercentage": 10,
+      "etaMs": 2403081,
+      "bestEpoch": 7,
+      "bestFitness": 0.97451,
+      "latestMetrics": {
+        "metrics/mAP50(B)": 0.46949,
+        "metrics/mAP50-95(B)": 0.36027,
+        "metrics/mAP50(M)": 0.47434,
+        "metrics/mAP50-95(M)": 0.35132
+      },
+      "computeCost": {
+        "gpuType": "unknown",
+        "gpuDisplayName": "RTX PRO 6000",
+        "pricePerHour": 2.09,
+        "totalCost": 0.16,
+        "durationMs": 271194
+      },
+      "trainingError": null,
+      "progressSource": "models/{owner}/{project}/{model}/training"
+    }
+  }
+}

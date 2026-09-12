@@ -758,8 +758,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     inputSchema: {
       model: z
         .string()
-        .describe("Model id, or slug when project is also provided."),
-      project: z.string().optional(),
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
       include_metrics: z.boolean().optional(),
       include_history: z.boolean().optional(),
       history_last_n: z.number().int().positive().optional(),

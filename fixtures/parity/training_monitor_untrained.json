@@ -1,0 +1,69 @@
+{
+  "tool": "training_monitor",
+  "args": {
+    "model": "example-owner/example-project-1/example-untrained-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-untrained-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "id": "000000000000000000000003",
+            "owner": "example-owner",
+            "project": "example-project-1",
+            "model": "example-untrained-1",
+            "name": "example-untrained-1",
+            "status": "pending",
+            "hasWeights": false
+          },
+          "isOwner": true
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-untrained-1/training",
+      "response": {
+        "status": 200,
+        "json": {
+          "job": {
+            "status": "pending",
+            "progress": {
+              "percentage": 0
+            },
+            "timing": {
+              "elapsedMs": 0,
+              "timePerEpochMs": 0,
+              "etaMs": 0
+            },
+            "error": null
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Model 'example-untrained-1' for owner 'example-owner' project 'example-project-1': training status=pending job=pending; epoch 0/?; ~0%",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-untrained-1",
+      "modelId": "000000000000000000000003",
+      "status": "pending",
+      "jobStatus": "pending",
+      "epochsDone": 0,
+      "totalEpochs": null,
+      "progressPercentage": 0,
+      "etaMs": 0,
+      "bestEpoch": null,
+      "bestFitness": null,
+      "latestMetrics": {},
+      "computeCost": null,
+      "trainingError": null,
+      "progressSource": "models/{owner}/{project}/{model}/training"
+    }
+  }
+}
