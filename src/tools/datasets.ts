@@ -525,7 +525,15 @@ export interface DatasetImagesListOptions {
   includeImageUrls?: boolean;
 }
 
-/** List images in a dataset with optional filtering. */
+/** List images in a dataset by slug, owner/slug, or dataset ul:// URI.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and reads the live
+ * owner-scoped endpoint. Every filter the tool exposes is passed through
+ * under the parameter names the endpoint accepts; the response surfaces the
+ * total, whether more results remain, and the class information and error
+ * count that tell whether the dataset ingested cleanly.
+ */
 export async function datasetImagesList(
   client: UltralyticsClient,
   options: DatasetImagesListOptions,
@@ -548,7 +556,8 @@ export async function datasetImagesList(
     throw new Error("`offset` must be greater than or equal to 0.");
   }
 
-  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
   const params: Record<string, unknown> = {};
   if (options.split !== undefined) {
     params.split = options.split;
@@ -573,12 +582,12 @@ export async function datasetImagesList(
   }
 
   const data = await client.get(
-    `/datasets/${datasetId}/images`,
+    `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}/images`,
     Object.keys(params).length > 0 ? params : undefined,
   );
   const record = asRecord(data);
   const images = listField(data, "images").map((image) => ({
-    id: image._id ?? image.id ?? null,
+    id: image.id ?? image._id ?? null,
     name: image.name ?? null,
     ext: image.ext ?? null,
     split: image.split ?? null,
@@ -596,6 +605,8 @@ export async function datasetImagesList(
     data: {
       total: record.total ?? null,
       hasMore: record.hasMore ?? null,
+      classes: record.classes ?? null,
+      errorCount: record.errorCount ?? null,
       nextCursor: record.nextCursor ?? null,
       images,
     },

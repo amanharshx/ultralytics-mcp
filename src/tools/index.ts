@@ -351,11 +351,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "dataset_images_list",
     registrationGroup: "read",
     stateChanging: false,
-    description: "List images in a dataset with optional filtering.",
+    description:
+      "List images in a dataset by slug, owner/slug, or dataset ul:// URI with optional filtering.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       split: z.string().optional(),
       search: z.string().optional(),
       hasLabel: z.boolean().optional(),
