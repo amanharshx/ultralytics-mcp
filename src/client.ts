@@ -164,11 +164,18 @@ export class UltralyticsClient {
     }
   }
 
-  /** Upload bytes to a signed URL WITHOUT forwarding API credentials. */
+  /** Upload bytes to a signed URL WITHOUT forwarding API credentials.
+   *
+   * Sends the declared content type together with any runtime headers the
+   * signed-url response returned (for example GCS preconditions). Omitting
+   * either fails at the storage layer with an error that does not name the
+   * cause.
+   */
   async uploadBytes(
     url: string,
     content: Uint8Array,
     contentType: string,
+    extraHeaders?: Record<string, string>,
   ): Promise<void> {
     const bytes = new Uint8Array(content.byteLength);
     bytes.set(content);
@@ -176,6 +183,7 @@ export class UltralyticsClient {
       method: "PUT",
       headers: {
         Accept: "*/*",
+        ...extraHeaders,
         "Content-Type": contentType,
       },
       body: bytes,

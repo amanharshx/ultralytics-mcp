@@ -274,6 +274,7 @@ const TOOL_RUNNERS: Record<
       dataset: args.dataset as string,
       filePath: args.file_path as string,
       targetSplit: args.targetSplit as string | undefined,
+      conflictPolicy: args.conflictPolicy as string | undefined,
     }),
   projects_delete: (client, args) =>
     projectsDelete(client, args.project as string),
@@ -447,6 +448,13 @@ describe("parity fixtures", () => {
         fixture.upload?.body_text ?? "",
       );
 
+      const signedStep = fixture.api.find(
+        (step) => step.path === "/api/upload/signed-url",
+      );
+      const signedHeaders = (
+        (signedStep?.response.json ?? {}) as Record<string, unknown>
+      ).headers as Record<string, string> | undefined;
+
       let uploadAuth: string | null | undefined = "unset";
       const uploadFetch = (async (
         url: string | URL,
@@ -457,6 +465,11 @@ describe("parity fixtures", () => {
         expect(String(url)).toBe(fixture.upload?.url);
         expect((init.method ?? "GET").toUpperCase()).toBe("PUT");
         expect(headers.get("Content-Type")).toBe(fixture.upload?.content_type);
+        if (signedHeaders) {
+          for (const [key, value] of Object.entries(signedHeaders)) {
+            expect(headers.get(key)).toBe(value);
+          }
+        }
         expect(await new Response(init.body).text()).toBe(
           fixture.upload?.body_text ?? "",
         );
@@ -474,6 +487,7 @@ describe("parity fixtures", () => {
         dataset: args.dataset as string,
         filePath: args.file_path as string,
         targetSplit: args.targetSplit as string | undefined,
+        conflictPolicy: args.conflictPolicy as string | undefined,
       });
 
       expect(result).toEqual(expected);

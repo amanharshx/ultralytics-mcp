@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
@@ -2034,124 +2033,66 @@ describe("datasetsIngest", () => {
 });
 
 describe("datasetUploadFile", () => {
-  test("sends complete identity class mapping from indexed YOLO names", async () => {
+  const liveJobId = "c".repeat(24);
+  const liveDatasetId = "a".repeat(24);
+  const liveSignedHeaders = { "x-goog-if-generation-match": "0" };
+  const liveSignedResponse = {
+    sessionId: "session_123",
+    uploadUrl: "https://signed.example/upload",
+    expiresAt: "2026-09-12T04:00:00.000Z",
+    headers: liveSignedHeaders,
+  };
+  const liveCompleteResponse = {
+    success: true,
+    file: { size: 7, contentType: "application/zip" },
+  };
+  const liveIngestResponse = { jobId: liveJobId, status: "queued" };
+  const liveDatasetWithStatus = {
+    dataset: {
+      id: liveDatasetId,
+      owner: "alice",
+      dataset: "cars",
+      name: "Cars",
+      visibility: "private",
+      task: "detect",
+      imageCount: 0,
+      status: "processing",
+      lastIngestJobId: null,
+      lastIngestSummary: null,
+      processingError: null,
+      errorCount: 0,
+    },
+  };
+
+  async function writeArchive(name = "dataset.zip", body = "archive") {
     const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-upload-"));
-    const filePath = join(tmp, "coco8.zip");
-    await writeFile(
-      filePath,
-      zipSync({
-        "data.yaml": strToU8("names:\n  0: person\n  1: bicycle\n"),
-      }),
-    );
+    const filePath = join(tmp, name);
+    await writeFile(filePath, body);
+    return filePath;
+  }
 
-    const { calls, fetchImpl } = captureClient((url) => {
-      const path = new URL(url).pathname;
-      if (path === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
-      }
-      if (path === "/api/upload/signed-url") {
-        return jsonResponse({
-          sessionId: "session_123",
-          uploadUrl: "https://signed.example/upload",
-        });
-      }
-      return jsonResponse({ jobId: "job_123" });
-    });
-    const uploadClient = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl,
-      uploadFetchImpl: (async () =>
-        new Response("", { status: 200 })) as unknown as typeof fetch,
-    });
-
-    await datasetUploadFile(uploadClient, {
-      dataset: "user/data",
-      filePath,
-    });
-
-    expect(calls.at(-1)).toMatchObject({
-      body: {
-        classMapping: { person: "person", bicycle: "bicycle" },
-      },
-    });
-  });
-
-  test("sends complete identity class mapping from named YOLO ZIP", async () => {
-    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-upload-"));
-    const filePath = join(tmp, "dataset.ZIP");
-    const archive = zipSync({
-      "data.yaml": strToU8("names:\n  - person\n  - car\n"),
-      "images/large-dummy.jpg": new Uint8Array(1024 * 1024),
-    });
-    await writeFile(filePath, archive);
-
-    expect(
-      Object.keys(
-        unzipSync(archive, {
-          filter: ({ name }) => /(^|\/)data\.ya?ml$/i.test(name),
-        }),
-      ),
-    ).toEqual(["data.yaml"]);
-
-    const calls: { url: string; method: string; body: unknown }[] = [];
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: (async (url: string | URL, init: RequestInit = {}) => {
-        const body =
-          typeof init.body === "string" ? JSON.parse(init.body) : undefined;
-        calls.push({
-          url: String(url),
-          method: (init.method ?? "GET").toUpperCase(),
-          body,
-        });
-        const path = new URL(String(url)).pathname;
-        if (path === "/api/datasets") {
-          return jsonResponse({
-            datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-          });
-        }
-        if (path === "/api/upload/signed-url") {
-          return jsonResponse({
-            sessionId: "session_123",
-            uploadUrl: "https://signed.example/upload",
-          });
-        }
-        return jsonResponse({ jobId: "job_123" });
-      }) as unknown as typeof fetch,
-      uploadFetchImpl: (async () =>
-        new Response("", { status: 200 })) as unknown as typeof fetch,
-    });
-
-    await datasetUploadFile(client, { dataset: "user/data", filePath });
-
-    expect(calls.at(-1)).toEqual({
-      url: `${BASE}/datasets/ingest`,
-      method: "POST",
-      body: {
-        datasetId: "d".repeat(24),
-        sessionId: "session_123",
-        classMapping: { person: "person", car: "car" },
-      },
-    });
-  });
-
-  test("omits class mapping for an archive with no readable YAML metadata", async () => {
-    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-upload-"));
-    const filePath = join(tmp, "dataset.zip");
-    await writeFile(filePath, "archive");
-
+  function clientForUpload(
+    options: {
+      datasetResponse?: unknown;
+      signedResponse?: unknown;
+      completeResponse?: unknown;
+      ingestResponse?: unknown;
+      ingestStatus?: number;
+      accountOwner?: string;
+      uploadImpl?: typeof fetch;
+      onUpload?: (headers: Headers, url: string) => void;
+    } = {},
+  ) {
     const calls: { url: string; method: string; body: unknown }[] = [];
     const uploadCalls: Array<{
       url: string;
       method: string;
       body: string;
       contentType: string | null;
+      generationMatch: string | null;
       auth: string | null;
     }> = [];
+    const signedResponse = options.signedResponse ?? liveSignedResponse;
     const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
       let body: unknown;
       if (typeof init.body === "string") {
@@ -2163,63 +2104,75 @@ describe("datasetUploadFile", () => {
         body,
       });
       const parsed = new URL(String(url));
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        return jsonResponse(options.datasetResponse ?? liveDatasetWithStatus);
       }
       if (parsed.pathname === "/api/upload/signed-url") {
-        return jsonResponse({
-          url: "https://signed.example/upload",
-          sessionId: "session_123",
-        });
+        return jsonResponse(signedResponse);
       }
       if (parsed.pathname === "/api/upload/complete") {
-        return jsonResponse({ ok: true });
+        return jsonResponse(options.completeResponse ?? liveCompleteResponse);
       }
-      return jsonResponse({
-        jobId: "job_123",
-        datasetId: "d".repeat(24),
-        status: "queued",
-      });
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(
+          options.ingestResponse ?? liveIngestResponse,
+          options.ingestStatus ?? 201,
+        );
+      }
+      return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
-
-    const uploadFetch = (async (url: string | URL, init: RequestInit = {}) => {
-      uploadCalls.push({
-        url: String(url),
-        method: (init.method ?? "GET").toUpperCase(),
-        body: await new Response(init.body).text(),
-        contentType: new Headers(init.headers).get("Content-Type"),
-        auth: new Headers(init.headers).get("Authorization"),
-      });
-      return new Response("", { status: 200 });
-    }) as unknown as typeof fetch;
-
+    const uploadFetch =
+      options.uploadImpl ??
+      ((async (url: string | URL, init: RequestInit = {}) => {
+        const headers = new Headers(init.headers);
+        options.onUpload?.(headers, String(url));
+        uploadCalls.push({
+          url: String(url),
+          method: (init.method ?? "GET").toUpperCase(),
+          body: await new Response(init.body).text(),
+          contentType: headers.get("Content-Type"),
+          generationMatch: headers.get("x-goog-if-generation-match"),
+          auth: headers.get("Authorization"),
+        });
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch);
     const uploadClient = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
       fetchImpl,
       uploadFetchImpl: uploadFetch,
     });
+    return { client: uploadClient, calls, uploadCalls };
+  }
 
-    const result = await datasetUploadFile(uploadClient, {
-      dataset: "user/data",
+  test("uploads through the owner-scoped flow with both storage headers and reports ingest status", async () => {
+    const filePath = await writeArchive();
+    const { client, calls, uploadCalls } = clientForUpload();
+    const result = await datasetUploadFile(client, {
+      dataset: "alice/cars",
       filePath,
       targetSplit: "train",
     });
 
     expect(calls.map((call) => call.url)).toEqual([
-      `${BASE}/datasets?username=user`,
+      `${BASE}/datasets/alice/cars`,
       `${BASE}/upload/signed-url`,
       `${BASE}/upload/complete`,
-      `${BASE}/datasets/ingest`,
+      `${BASE}/datasets/alice/cars/ingest`,
+      `${BASE}/datasets/alice/cars`,
     ]);
     expect(calls[1]).toEqual({
       url: `${BASE}/upload/signed-url`,
       method: "POST",
       body: {
         assetType: "datasets",
-        assetId: "d".repeat(24),
+        assetId: liveDatasetId,
         filename: "dataset.zip",
         contentType: "application/zip",
         totalBytes: 7,
@@ -2231,6 +2184,7 @@ describe("datasetUploadFile", () => {
         method: "PUT",
         body: "archive",
         contentType: "application/zip",
+        generationMatch: "0",
         auth: null,
       },
     ]);
@@ -2240,31 +2194,284 @@ describe("datasetUploadFile", () => {
       body: { sessionId: "session_123" },
     });
     expect(calls[3]).toEqual({
-      url: `${BASE}/datasets/ingest`,
+      url: `${BASE}/datasets/alice/cars/ingest`,
       method: "POST",
       body: {
-        datasetId: "d".repeat(24),
         sessionId: "session_123",
+        conflictPolicy: "skip",
         targetSplit: "train",
       },
     });
-    expect(result.summary).toBe(
-      "Uploaded dataset.zip (7 bytes) and started dataset ingest job job_123.",
-    );
-    expect(result.data).toEqual({
-      datasetId: "d".repeat(24),
+    expect(result.summary).toContain("dataset.zip");
+    expect(result.summary).toContain(liveJobId);
+    expect(result.summary).toContain("datasets_get");
+    expect(result.data).toMatchObject({
+      jobId: liveJobId,
+      status: "queued",
+      conflictPolicy: "skip",
+      targetSplit: "train",
+      owner: "alice",
+      dataset: "cars",
+      datasetStatus: "processing",
       filename: "dataset.zip",
       bytes: 7,
       sessionId: "session_123",
-      ingest: {
-        jobId: "job_123",
-        datasetId: "d".repeat(24),
-        status: "queued",
-      },
+      sizeWarning: null,
     });
   });
 
-  test("validates file path and target split before network", async () => {
+  test("never sends class mapping, image metadata, or a dataset id to ingest", async () => {
+    const filePath = await writeArchive("coco8.zip", "archive");
+    const { client, calls } = clientForUpload();
+    await datasetUploadFile(client, {
+      dataset: "alice/cars",
+      filePath,
+    });
+    const ingestCall = calls.find((call) =>
+      call.url.endsWith("/datasets/alice/cars/ingest"),
+    );
+    expect(
+      Object.keys(ingestCall?.body as Record<string, unknown>).sort(),
+    ).toEqual(["conflictPolicy", "sessionId"]);
+  });
+
+  test("sends an explicit replace policy and omits targetSplit when absent", async () => {
+    const filePath = await writeArchive();
+    const { client, calls } = clientForUpload();
+    const result = await datasetUploadFile(client, {
+      dataset: "alice/cars",
+      filePath,
+      conflictPolicy: "replace",
+    });
+    const ingestCall = calls.find((call) =>
+      call.url.endsWith("/datasets/alice/cars/ingest"),
+    );
+    expect(ingestCall?.body).toEqual({
+      sessionId: "session_123",
+      conflictPolicy: "replace",
+    });
+    expect(result.data).toMatchObject({
+      conflictPolicy: "replace",
+      targetSplit: null,
+    });
+  });
+
+  test("starts a fresh signed-url session when the first upload fails", async () => {
+    const filePath = await writeArchive();
+    const signedResponses = [
+      {
+        sessionId: "session_old",
+        uploadUrl: "https://signed.example/old",
+        expiresAt: "2026-09-12T04:00:00.000Z",
+        headers: liveSignedHeaders,
+      },
+      {
+        sessionId: "session_new",
+        uploadUrl: "https://signed.example/new",
+        expiresAt: "2026-09-12T04:01:00.000Z",
+        headers: liveSignedHeaders,
+      },
+    ];
+    let signedCount = 0;
+    const putUrls: string[] = [];
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        return jsonResponse(liveDatasetWithStatus);
+      }
+      if (parsed.pathname === "/api/upload/signed-url") {
+        return jsonResponse(signedResponses[Math.min(signedCount++, 1)]);
+      }
+      if (parsed.pathname === "/api/upload/complete") {
+        return jsonResponse(liveCompleteResponse);
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(liveIngestResponse, 201);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const uploadFetch = (async (url: string | URL) => {
+      putUrls.push(String(url));
+      if (putUrls.length === 1) {
+        return new Response("precondition failed", { status: 412 });
+      }
+      return new Response("", { status: 200 });
+    }) as unknown as typeof fetch;
+    const uploadClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+      uploadFetchImpl: uploadFetch,
+    });
+
+    const result = await datasetUploadFile(uploadClient, {
+      dataset: "alice/cars",
+      filePath,
+    });
+
+    expect(putUrls).toEqual([
+      "https://signed.example/old",
+      "https://signed.example/new",
+    ]);
+    const completeCall = calls.find((call) =>
+      call.url.endsWith("/upload/complete"),
+    );
+    expect(completeCall?.body).toEqual({ sessionId: "session_new" });
+    const ingestCall = calls.find((call) =>
+      call.url.endsWith("/datasets/alice/cars/ingest"),
+    );
+    expect(ingestCall?.body).toMatchObject({ sessionId: "session_new" });
+    expect(result.data).toMatchObject({ sessionId: "session_new" });
+  });
+
+  test("warns rather than blocks when the archive exceeds the free-tier limit", async () => {
+    const { archiveSizeWarning } = await import("../../src/tools/datasets.js");
+    const small = archiveSizeWarning("dataset.zip", 7);
+    expect(small).toBeNull();
+    const bigBytes = 10 * 1024 * 1024 * 1024 + 1;
+    const warning = archiveSizeWarning("dataset.zip", bigBytes);
+    expect(typeof warning).toBe("string");
+    expect(warning).toMatch(/10 GB/);
+    expect(warning).toMatch(/20 GB/);
+    expect(warning).toMatch(/50 GB/);
+    expect(warning).toMatch(/dataset_ingest/);
+    expect(warning).toMatch(/cloud/i);
+
+    const filePath = await writeArchive();
+    const { client } = clientForUpload();
+    const result = await datasetUploadFile(client, {
+      dataset: "alice/cars",
+      filePath,
+    });
+    expect(result.data).toMatchObject({ sizeWarning: null });
+  });
+
+  test("still returns the job id when the status lookup fails", async () => {
+    const filePath = await writeArchive();
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const parsed = new URL(String(url));
+      if (
+        parsed.pathname === "/api/datasets/alice/cars" &&
+        init.method === undefined
+      ) {
+        // First GET (id lookup) succeeds; second GET (status) is distinguished
+        // by call order below.
+        const getCount = calls.filter(
+          (call) => call.url === `${BASE}/datasets/alice/cars`,
+        ).length;
+        if (getCount === 1) {
+          return jsonResponse({
+            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
+          });
+        }
+        return jsonResponse({ error: "Server error" }, 500);
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        const getCount = calls.filter(
+          (call) => call.url === `${BASE}/datasets/alice/cars`,
+        ).length;
+        if (getCount === 1) {
+          return jsonResponse({
+            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
+          });
+        }
+        return jsonResponse({ error: "Server error" }, 500);
+      }
+      if (parsed.pathname === "/api/upload/signed-url") {
+        return jsonResponse(liveSignedResponse);
+      }
+      if (parsed.pathname === "/api/upload/complete") {
+        return jsonResponse(liveCompleteResponse);
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(liveIngestResponse, 201);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const uploadClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+      uploadFetchImpl: (async () =>
+        new Response("", { status: 200 })) as unknown as typeof fetch,
+    });
+    const result = await datasetUploadFile(uploadClient, {
+      dataset: "alice/cars",
+      filePath,
+    });
+    expect(result.data).toMatchObject({
+      jobId: liveJobId,
+      datasetStatus: null,
+      lastIngestJobId: null,
+    });
+    expect(result.summary).toContain("status lookup failed");
+    expect(result.summary).toContain("datasets_get");
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const filePath = await writeArchive();
+    const { client, calls } = clientForUpload({ accountOwner: "alice" });
+    const result = await datasetUploadFile(client, {
+      dataset: "cars",
+      filePath,
+    });
+    expect(calls[0].url).toBe(`${BASE}/account/summary`);
+    expect(calls[1].url).toBe(`${BASE}/datasets/alice/cars`);
+    expect(result.data).toMatchObject({ owner: "alice", dataset: "cars" });
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const filePath = await writeArchive();
+    const { client, calls } = clientForUpload();
+    const result = await datasetUploadFile(client, {
+      dataset: "ul://alice/cars",
+      filePath,
+    });
+    expect(
+      calls.map((call) => `${call.method} ${new URL(call.url).pathname}`),
+    ).toEqual([
+      "GET /api/datasets/alice/cars",
+      "POST /api/upload/signed-url",
+      "POST /api/upload/complete",
+      "POST /api/datasets/alice/cars/ingest",
+      "GET /api/datasets/alice/cars",
+    ]);
+    expect(result.data).toMatchObject({ owner: "alice" });
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const filePath = await writeArchive();
+    const { client, calls } = clientForUpload();
+    await expect(
+      datasetUploadFile(client, {
+        dataset: "a".repeat(24),
+        filePath,
+      }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("validates file path, conflict policy, and target split before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -2275,13 +2482,13 @@ describe("datasetUploadFile", () => {
 
     await expect(
       datasetUploadFile(client, {
-        dataset: "user/data",
+        dataset: "alice/cars",
         filePath: "",
       }),
     ).rejects.toThrow(/`filePath` is required/);
     await expect(
       datasetUploadFile(client, {
-        dataset: "user/data",
+        dataset: "alice/cars",
         filePath: join(tmpdir(), "missing-dataset.zip"),
       }),
     ).rejects.toThrow(/does not exist/);
@@ -2291,7 +2498,7 @@ describe("datasetUploadFile", () => {
     await writeFile(badPath, "bad");
     await expect(
       datasetUploadFile(client, {
-        dataset: "user/data",
+        dataset: "alice/cars",
         filePath: badPath,
       }),
     ).rejects.toThrow(/Unsupported dataset upload file type/);
@@ -2300,10 +2507,44 @@ describe("datasetUploadFile", () => {
     await writeFile(goodPath, "archive");
     await expect(
       datasetUploadFile(client, {
-        dataset: "user/data",
+        dataset: "alice/cars",
         filePath: goodPath,
         targetSplit: "bad",
       }),
     ).rejects.toThrow(/Unsupported targetSplit/);
+    await expect(
+      datasetUploadFile(client, {
+        dataset: "alice/cars",
+        filePath: goodPath,
+        conflictPolicy: "bogus",
+      }),
+    ).rejects.toThrow(/Unsupported conflictPolicy/);
+  });
+
+  test("surfaces the API message for a missing dataset", async () => {
+    const filePath = await writeArchive();
+    const { client } = clientForUpload({
+      datasetResponse: { error: "Dataset not found" },
+    });
+    // The mocked dataset GET returns an error shape; the client surfaces the
+    // API message when the fetch itself 404s. Simulate that here.
+    const missingClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        if (parsed.pathname === "/api/datasets/alice/missing") {
+          return jsonResponse({ error: "Dataset not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch,
+    });
+    await expect(
+      datasetUploadFile(missingClient, {
+        dataset: "alice/missing",
+        filePath,
+      }),
+    ).rejects.toThrow(/Dataset not found/);
+    expect(client).toBeDefined();
   });
 });
