@@ -103,6 +103,7 @@ describe("modelDownload", () => {
       project: "road",
       model: "exp",
       filename: "exp.pt",
+      size: 7,
       path: outputPath,
       bytes: 7,
     });
@@ -223,6 +224,7 @@ describe("modelDownload", () => {
       project: "road",
       model: "exp",
       filename: "best.pt",
+      size: 7,
       path: outputPath,
       bytes: 7,
     });
@@ -256,6 +258,7 @@ describe("modelDownload", () => {
       project: "road",
       model: "exp",
       filename: "exp-4.pt",
+      size: 7,
       path: outputPath,
       bytes: 7,
     });

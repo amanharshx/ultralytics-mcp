@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { UltralyticsClient } from "../client.js";
-import { type ResolvedModelRef, resolveModel } from "../resolve.js";
+import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { listField } from "./shared.js";
 
@@ -19,6 +19,10 @@ function fileName(info: Record<string, unknown>): string | null {
 function fileUrl(info: Record<string, unknown>): string | null {
   const value = info.downloadUrl;
   return value ? String(value) : null;
+}
+
+function fileSize(info: Record<string, unknown>): number | null {
+  return typeof info.size === "number" ? info.size : null;
 }
 
 function urlPathBasename(info: Record<string, unknown>): string | null {
@@ -57,19 +61,14 @@ function availableFileNames(files: Record<string, unknown>[]): string {
     .join(", ");
 }
 
-function modelFiles(data: unknown): Record<string, unknown>[] {
-  return listField(data, "files");
-}
-
 function selectModelFile(
   files: Record<string, unknown>[],
-  ref: ResolvedModelRef,
-  resolvedOwner: string,
+  ref: { owner: string; project: string; model: string },
   filename?: string,
 ): Record<string, unknown> {
   if (files.length === 0) {
     throw new Error(
-      `Model '${ref.model}' for owner '${resolvedOwner}' project '${ref.project}' ` +
+      `Model '${ref.model}' for owner '${ref.owner}' project '${ref.project}' ` +
         `has no downloadable weight files yet; it may not be trained.`,
     );
   }
@@ -189,7 +188,8 @@ async function downloadTarget(
  * addressable), fills a missing owner from the account summary, and lists
  * the model's files through the live owner-scoped endpoint. The API returns
  * `{files[]}` with each entry naming the file via `name`, `size`, and
- * `downloadUrl`. An empty list means the model has no weights yet, which is
+ * `downloadUrl`. The API-reported `size` is surfaced alongside the
+ * downloaded byte count. An empty list means the model has no weights yet, which is
  * reported distinctly from a failed download. The signed-URL fetch never
  * forwards API credentials (handled by client.downloadBytes).
  */
@@ -211,9 +211,8 @@ export async function modelDownload(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/files`,
   );
   const fileInfo = selectModelFile(
-    modelFiles(data),
-    resolved,
-    resolvedOwner,
+    listField(data, "files"),
+    { ...resolved, owner: resolvedOwner },
     filename,
   );
   const selectedName = fileName(fileInfo) ?? filename ?? "model file";
@@ -233,6 +232,7 @@ export async function modelDownload(
       project: resolved.project,
       model: resolved.model,
       filename: selectedName,
+      size: fileSize(fileInfo),
       path: target,
       bytes: content.length,
     },

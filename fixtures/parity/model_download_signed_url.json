@@ -33,6 +33,7 @@
       "project": "example-project-1",
       "model": "example-model-1",
       "filename": "example-model-1.pt",
+      "size": 6570909,
       "path": "__TMP__/best.pt",
       "bytes": 7
     }
