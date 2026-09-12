@@ -7,19 +7,22 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyModelId } from "../resolve.js";
+import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { asRecord } from "./shared.js";
+import { listField } from "./shared.js";
 
 function fileName(info: Record<string, unknown>): string | null {
-  const value = info.name ?? info.filename ?? info.fileName;
+  const value = info.name;
   return value ? String(value) : null;
 }
 
 function fileUrl(info: Record<string, unknown>): string | null {
-  const value =
-    info.url ?? info.downloadUrl ?? info.download_url ?? info.signedUrl;
+  const value = info.downloadUrl;
   return value ? String(value) : null;
+}
+
+function fileSize(info: Record<string, unknown>): number | null {
+  return typeof info.size === "number" ? info.size : null;
 }
 
 function urlPathBasename(info: Record<string, unknown>): string | null {
@@ -58,24 +61,16 @@ function availableFileNames(files: Record<string, unknown>[]): string {
     .join(", ");
 }
 
-function modelFiles(data: unknown): Record<string, unknown>[] {
-  const record = asRecord(data);
-  const files = record.files ?? record.modelFiles ?? record.models;
-  if (!Array.isArray(files)) {
-    return [];
-  }
-  return files.filter((item) => item && typeof item === "object") as Record<
-    string,
-    unknown
-  >[];
-}
-
 function selectModelFile(
   files: Record<string, unknown>[],
+  ref: { owner: string; project: string; model: string },
   filename?: string,
 ): Record<string, unknown> {
   if (files.length === 0) {
-    throw new Error("No downloadable model files returned by the API.");
+    throw new Error(
+      `Model '${ref.model}' for owner '${ref.owner}' project '${ref.project}' ` +
+        `has no downloadable weight files yet; it may not be trained.`,
+    );
   }
   if (filename) {
     for (const file of files) {
@@ -187,7 +182,17 @@ async function downloadTarget(
   return target;
 }
 
-/** Download one model weight file to an explicit local path. */
+/** Download one model weight file to an explicit local path.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and lists
+ * the model's files through the live owner-scoped endpoint. The API returns
+ * `{files[]}` with each entry naming the file via `name`, `size`, and
+ * `downloadUrl`. The API-reported `size` is surfaced alongside the
+ * downloaded byte count. An empty list means the model has no weights yet, which is
+ * reported distinctly from a failed download. The signed-URL fetch never
+ * forwards API credentials (handled by client.downloadBytes).
+ */
 export async function modelDownload(
   client: UltralyticsClient,
   model: string,
@@ -200,9 +205,16 @@ export async function modelDownload(
 ): Promise<NormalizedToolResult> {
   const { outputPath, project, filename, overwrite = false } = options;
   const target = await downloadTarget(outputPath, overwrite);
-  const modelId = await resolveLegacyModelId(client, model, project);
-  const data = await client.get(`/models/${modelId}/files`);
-  const fileInfo = selectModelFile(modelFiles(data), filename);
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/files`,
+  );
+  const fileInfo = selectModelFile(
+    listField(data, "files"),
+    { ...resolved, owner: resolvedOwner },
+    filename,
+  );
   const selectedName = fileName(fileInfo) ?? filename ?? "model file";
   const signedUrl = fileUrl(fileInfo);
   if (signedUrl === null) {
@@ -216,8 +228,11 @@ export async function modelDownload(
   return {
     summary: `Downloaded ${selectedName} to ${target} (${content.length} bytes).`,
     data: {
-      modelId,
+      owner: resolvedOwner,
+      project: resolved.project,
+      model: resolved.model,
       filename: selectedName,
+      size: fileSize(fileInfo),
       path: target,
       bytes: content.length,
     },
