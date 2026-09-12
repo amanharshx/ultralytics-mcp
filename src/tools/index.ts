@@ -706,11 +706,14 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "models_delete",
     registrationGroup: "write",
     stateChanging: true,
-    description: "Delete a model by id, or by slug plus project.",
+    description:
+      "Soft-delete a model by owner/project/model, ul://owner/project/model, or slug with a project. Deleted models go to trash and remain restorable; weights, training history, and exports are removed only on permanent deletion.",
     inputSchema: {
       model: z
         .string()
-        .describe("Model id, or slug when project is also provided."),
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
       project: z
         .string()
         .optional()

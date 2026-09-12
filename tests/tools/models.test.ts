@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 
+import { UltralyticsClient } from "../../src/client.js";
 import { modelsDelete, modelsGet, modelsList } from "../../src/tools/models.js";
-import { jsonResponse, routeClient } from "../helpers.js";
+import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
 
 /** Client whose owner-scoped models path answers 404 Project not found. */
 function clientForMissingProject() {
@@ -340,52 +341,113 @@ describe("modelsGet", () => {
 });
 
 describe("modelsDelete", () => {
-  test("deletes a model by id", async () => {
-    const id = "a".repeat(24);
-    const { client, calls } = routeClient((path) => {
-      if (path === `/api/models/${id}`) {
-        return jsonResponse({ success: true });
+  function clientForDelete(
+    deleteResponse: unknown,
+    options: { accountOwner?: string } = {},
+  ) {
+    const calls: { path: string; method: string }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+      });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (
+        parsed.pathname === "/api/models/alice/road/exp" &&
+        (init.method ?? "GET").toUpperCase() === "DELETE"
+      ) {
+        return jsonResponse(deleteResponse);
       }
       return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
     });
+    return { client, calls };
+  }
 
-    const result = await modelsDelete(client, id);
-
-    expect(result.summary).toBe(`Deleted model ${id}.`);
+  test("deletes through the owner-scoped path and reports what the API returns", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    const result = await modelsDelete(client, "alice/road/exp");
+    expect(calls).toEqual([
+      { path: "/api/models/alice/road/exp", method: "DELETE" },
+    ]);
+    expect(result.summary).toBe(
+      "Deleted model 'exp' for owner 'alice' project 'road' (soft delete; restorable from trash; weights, training history, and exports removed only on permanent deletion).",
+    );
     expect(result.data).toEqual({
-      id,
-      response: { success: true },
+      owner: "alice",
+      project: "road",
+      model: "exp",
+      success: true,
     });
-    expect(calls[0].path).toBe(`/api/models/${id}`);
   });
 
-  test("resolves slug plus project before deleting", async () => {
-    const projectId = "b".repeat(24);
-    const modelId = "c".repeat(24);
-    const { client, calls } = routeClient((path, params) => {
-      if (path === "/api/projects" && params.get("username") === "user") {
-        return jsonResponse({
-          projects: [{ _id: projectId, slug: "proj", username: "user" }],
-        });
-      }
-      if (path === "/api/models" && params.get("projectId") === projectId) {
-        return jsonResponse({
-          models: [{ _id: modelId, slug: "exp" }],
-        });
-      }
-      if (path === `/api/models/${modelId}`) {
-        return jsonResponse({ success: true });
+  test("claims no cascade summary", async () => {
+    const { client } = clientForDelete({ success: true });
+    const result = await modelsDelete(client, "alice/road/exp");
+    expect(result.summary).not.toMatch(/model\(s\) removed/i);
+    expect(result.summary).not.toMatch(/cascad/i);
+    expect(result.data).not.toHaveProperty("cascadedModels");
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForDelete(
+      { success: true },
+      { accountOwner: "alice" },
+    );
+    const result = await modelsDelete(client, "exp", "road");
+    expect(calls).toEqual([
+      { path: "/api/account/summary", method: "GET" },
+      { path: "/api/models/alice/road/exp", method: "DELETE" },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("accepts a ul:// model URI without an account lookup", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    const result = await modelsDelete(client, "ul://alice/road/exp");
+    expect(calls).toEqual([
+      { path: "/api/models/alice/road/exp", method: "DELETE" },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    await expect(modelsDelete(client, "a".repeat(24))).rejects.toThrow(
+      /not addressable.*owner\/project\/model.*ul:\/\//s,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("requires a project for a bare slug", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    await expect(modelsDelete(client, "exp")).rejects.toThrow(
+      /project is required/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  // Live capture: DELETE /api/models/{owner}/{project}/{bad-model} -> 404 {"error":"Model not found"}
+  test.each([
+    "alice/road/missing",
+    "ghost/road/exp",
+  ])("surfaces the API message for %s", async (ref) => {
+    const { client } = routeClient((path) => {
+      if (path === `/api/models/${ref}`) {
+        return jsonResponse({ error: "Model not found" }, 404);
       }
       return jsonResponse({}, 404);
     });
-
-    const result = await modelsDelete(client, "exp", "user/proj");
-
-    expect(result.summary).toBe(`Deleted model ${modelId}.`);
-    expect(calls.map((call) => call.path)).toEqual([
-      "/api/projects",
-      "/api/models",
-      `/api/models/${modelId}`,
-    ]);
+    await expect(modelsDelete(client, ref)).rejects.toThrow(/Model not found/);
   });
 });
