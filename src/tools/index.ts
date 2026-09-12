@@ -477,7 +477,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       conflictPolicy: z
         .string()
         .optional()
-        .describe('Conflict policy "skip" (default) or "replace".'),
+        .describe(
+          'Conflict policy "skip" (default), "keep_both", or "replace".',
+        ),
     },
     annotations: {
       readOnlyHint: false,

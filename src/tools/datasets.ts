@@ -654,6 +654,7 @@ export interface DatasetsIngestOptions {
 
 const INGEST_CONFLICT_POLICIES: ReadonlySet<string> = new Set([
   "skip",
+  "keep_both",
   "replace",
 ]);
 
@@ -703,14 +704,26 @@ export async function datasetsIngest(
     await client.postJson(`/datasets/${encodedRef}/ingest`, payload),
   );
   const jobId = ingest.jobId ?? ingest.id ?? null;
-  const datasetRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
-  const fields = asRecord(datasetRecord.dataset);
+  // The ingest job is already queued at this point, so a transient failure
+  // of the status lookup must not discard the issued job id and invite a
+  // duplicate retry. Report the submission with unknown status instead.
+  let fields: Record<string, unknown> = {};
+  let statusLookupFailed = false;
+  try {
+    const datasetRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
+    fields = asRecord(datasetRecord.dataset);
+  } catch {
+    statusLookupFailed = true;
+  }
   const datasetStatus = fields.status ?? null;
+  const statusNote = statusLookupFailed
+    ? `(dataset status: ${String(datasetStatus ?? "None")}; status lookup failed)`
+    : `(dataset status: ${String(datasetStatus ?? "None")})`;
   return {
     summary:
       `Started dataset ingest job ${String(jobId ?? "None")} for dataset ` +
       `'${refSlug}' for owner '${resolvedOwner}' ` +
-      `(dataset status: ${String(datasetStatus ?? "None")}). ` +
+      `${statusNote}. ` +
       `Use datasets_get to follow up; ingest completes when lastIngestJobId matches ${String(jobId ?? "None")}.`,
     data: {
       jobId,

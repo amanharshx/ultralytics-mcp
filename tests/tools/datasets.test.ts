@@ -1814,6 +1814,23 @@ describe("datasetsIngest", () => {
     });
   });
 
+  test("sends the keep_both policy the live API accepts", async () => {
+    const { client, calls } = clientForIngest();
+    const result = await datasetsIngest(client, {
+      dataset: "alice/cars",
+      sourceUrl: "https://example.com/dataset.zip",
+      conflictPolicy: "keep_both",
+    });
+    expect(calls[0].body).toEqual({
+      sourceUrl: "https://example.com/dataset.zip",
+      conflictPolicy: "keep_both",
+    });
+    expect(result.data).toMatchObject({
+      jobId: liveJobId,
+      conflictPolicy: "keep_both",
+    });
+  });
+
   test("never sends class mapping or image metadata", async () => {
     const { client, calls } = clientForIngest();
     await datasetsIngest(client, {
@@ -1885,6 +1902,41 @@ describe("datasetsIngest", () => {
       },
     });
     expect(result.summary).toContain(failedJobId);
+    expect(result.summary).toContain("datasets_get");
+  });
+
+  test("still returns the job id when the status lookup fails", async () => {
+    const queuedJobId = "f".repeat(24);
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse({ jobId: queuedJobId, status: "queued" }, 201);
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        return jsonResponse({ error: "Server error" }, 500);
+      }
+      return jsonResponse({}, 404);
+    });
+    const result = await datasetsIngest(client, {
+      dataset: "alice/cars",
+      sourceUrl: "https://example.com/dataset.zip",
+    });
+    expect(calls.map((call) => call.method)).toEqual(["POST", "GET"]);
+    expect(result.data).toEqual({
+      jobId: queuedJobId,
+      status: "queued",
+      conflictPolicy: "skip",
+      targetSplit: null,
+      owner: "alice",
+      dataset: "cars",
+      datasetStatus: null,
+      lastIngestJobId: null,
+      lastIngestSummary: null,
+      processingError: null,
+      errorCount: null,
+    });
+    expect(result.summary).toContain(queuedJobId);
+    expect(result.summary).toContain("status lookup failed");
     expect(result.summary).toContain("datasets_get");
   });
 

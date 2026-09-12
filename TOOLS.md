@@ -205,7 +205,7 @@ Metadata: state-changing, non-idempotent, external/live
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `sourceUrl` | string | Yes |  |
 | `targetSplit` | string | No |  |
-| `conflictPolicy` | string | No | Conflict policy "skip" (default) or "replace". |
+| `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 ### dataset_upload_file
 
