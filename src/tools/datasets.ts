@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 import { zipSync } from "fflate";
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveDataset, resolveLegacyDatasetId } from "../resolve.js";
+import { resolveDataset } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { exploreSearch, validateExploreTasks } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
@@ -332,59 +332,6 @@ function withSizeWarning(error: unknown, sizeWarning: string | null): unknown {
     return error;
   }
   return new Error(`${error.message} ${sizeWarning}`, { cause: error });
-}
-
-/** Legacy signed-upload wrapper for the unmigrated video tool.
- *
- * Runs the shared session lifecycle but keeps the legacy id-based ingest
- * call. The video ticket migrates the ingest half with its own live
- * verification; do not extend this for new code.
- */
-async function uploadDatasetContent(
-  client: UltralyticsClient,
-  options: {
-    datasetId: string;
-    filename: string;
-    contentType: string;
-    totalBytes: number;
-    content: Uint8Array;
-    targetSplit?: string;
-    classMapping?: Record<string, string>;
-  },
-): Promise<{ sessionId: string; ingest: Record<string, unknown> }> {
-  const { sessionId } = await uploadThroughSignedSession(client, {
-    requestSigned: async () =>
-      asRecord(
-        await client.postJson("/upload/signed-url", {
-          assetType: "datasets",
-          assetId: options.datasetId,
-          filename: options.filename,
-          contentType: options.contentType,
-          totalBytes: options.totalBytes,
-        }),
-      ),
-    openBody: () => new Uint8Array(options.content),
-    contentType: options.contentType,
-    contentLength: options.totalBytes,
-  });
-
-  const ingestPayload: Record<string, unknown> = {
-    datasetId: options.datasetId,
-    sessionId,
-  };
-  if (options.targetSplit !== undefined) {
-    ingestPayload.targetSplit = options.targetSplit;
-  }
-  if (
-    options.classMapping !== undefined &&
-    Object.keys(options.classMapping).length > 0
-  ) {
-    ingestPayload.classMapping = options.classMapping;
-  }
-  const ingest = asRecord(
-    await client.postJson("/datasets/ingest", ingestPayload),
-  );
-  return { sessionId, ingest };
 }
 
 /** List datasets in the workspace, optionally filtered by owner.
@@ -1062,6 +1009,7 @@ export interface DatasetUploadVideoOptions {
   fps?: number;
   maxFrames?: number;
   targetSplit?: string;
+  conflictPolicy?: string;
   _findTool?: (name: string) => string | null;
   _probeDuration?: (videoPath: string, ffprobePath: string) => Promise<number>;
   _extractFrames?: (options: {
@@ -1073,12 +1021,30 @@ export interface DatasetUploadVideoOptions {
   }) => Promise<void>;
 }
 
-/** Upload local video by extracting JPEG frames, then start dataset ingest. */
+/** Upload a local video as extracted frames, then start ingest for that upload.
+ *
+ * Keeps the existing ffmpeg frame extraction, its frame-rate and frame-count
+ * controls, and its local path safety checks unchanged, then runs the
+ * signed-upload flow the archive tool established: resolve the reference by
+ * pure string parsing (ids are not addressable), fill a missing owner from
+ * the account summary, fetch the dataset to obtain its id, request a signed
+ * URL with the dataset asset type and the zipped frames' name, content type,
+ * and byte size; upload the zip with both the runtime headers and the
+ * declared content type; complete the session before ingest; and start
+ * ingest from the completed session through the live owner-scoped endpoint.
+ * The conflict policy is always sent explicitly, defaulting to the
+ * non-destructive `skip` (the platform default is undocumented). The queued
+ * job id is returned with the dataset's current ingest status fields; use
+ * `datasets_get` to follow up, since ingest runs asynchronously and this
+ * tool does not poll to completion. On upload failure a fresh signed-url
+ * session is started rather than retrying the same URL.
+ */
 export async function datasetUploadVideo(
   client: UltralyticsClient,
   options: DatasetUploadVideoOptions,
 ): Promise<NormalizedToolResult> {
   validateTargetSplit(options.targetSplit);
+  const conflictPolicy = validateIngestConflictPolicy(options.conflictPolicy);
   if (!options.videoPath.trim()) {
     throw new Error("`videoPath` is required.");
   }
@@ -1140,28 +1106,99 @@ export async function datasetUploadVideo(
     });
     const folder = await datasetFolderImages(outputDir);
     const content = await buildDatasetFolderZip(folder.files);
-    const datasetId = await resolveLegacyDatasetId(client, options.dataset);
+    const { owner: refOwner, dataset: refSlug } = resolveDataset(
+      options.dataset,
+    );
+    const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+    const encodedRef = `${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`;
+    const datasetRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
+    const datasetFields = asRecord(datasetRecord.dataset);
+    const datasetId =
+      typeof datasetFields.id === "string" && datasetFields.id.trim()
+        ? datasetFields.id
+        : null;
+    if (datasetId === null) {
+      throw new Error(
+        `Dataset '${refSlug}' for owner '${resolvedOwner}' did not include an id; cannot request an upload session.`,
+      );
+    }
     const filename = `${basename(resolvedVideo).replace(/\.[^.]+$/, "")}.zip`;
-    const upload = await uploadDatasetContent(client, {
-      datasetId,
-      filename,
+
+    const requestSigned = async (): Promise<Record<string, unknown>> =>
+      asRecord(
+        await client.postJson("/upload/signed-url", {
+          assetType: "datasets",
+          assetId: datasetId,
+          filename,
+          contentType: "application/zip",
+          totalBytes: content.byteLength,
+        }),
+      );
+    // The zip lives in memory: each PUT attempt opens a fresh copy, since a
+    // consumed body cannot be re-read on retry.
+    const openBody = (): BodyInit => new Uint8Array(content);
+
+    const { sessionId } = await uploadThroughSignedSession(client, {
+      requestSigned,
+      openBody,
       contentType: "application/zip",
-      totalBytes: content.byteLength,
-      content,
-      targetSplit: options.targetSplit,
+      contentLength: content.byteLength,
     });
-    const jobId = upload.ingest.jobId ?? upload.ingest.id ?? "None";
+
+    const ingestPayload: Record<string, unknown> = {
+      sessionId,
+      conflictPolicy,
+    };
+    if (options.targetSplit !== undefined) {
+      ingestPayload.targetSplit = options.targetSplit;
+    }
+    const ingest = asRecord(
+      await client.postJson(`/datasets/${encodedRef}/ingest`, ingestPayload),
+    );
+    const jobId = ingest.jobId ?? ingest.id ?? null;
+    // The ingest job is already queued at this point, so a transient failure
+    // of the status lookup must not discard the issued job id and invite a
+    // duplicate retry. Report the submission with unknown status instead.
+    let statusFields: Record<string, unknown> = {};
+    let statusLookupFailed = false;
+    try {
+      const statusRecord = asRecord(
+        await client.get(`/datasets/${encodedRef}`),
+      );
+      statusFields = asRecord(statusRecord.dataset);
+    } catch {
+      statusLookupFailed = true;
+    }
+    const datasetStatus = statusFields.status ?? null;
+    const statusNote = statusLookupFailed
+      ? `(dataset status: ${String(datasetStatus ?? "None")}; status lookup failed)`
+      : `(dataset status: ${String(datasetStatus ?? "None")})`;
     return {
-      summary: `Extracted ${folder.files.length} frame(s) at ~${Number(rate.toFixed(4))} fps from ${resolvedVideo}; started ingest job ${String(jobId)} for dataset ${datasetId}.${usedProbeFallback ? " probe fallback" : ""}`,
+      summary:
+        `Extracted ${folder.files.length} frame(s) at ~${Number(rate.toFixed(4))} fps ` +
+        `from ${resolvedVideo} as ${filename} (${content.byteLength} bytes) and started ` +
+        `dataset ingest job ${String(jobId ?? "None")} for dataset '${refSlug}' ` +
+        `for owner '${resolvedOwner}' ${statusNote}. ` +
+        `Use datasets_get to follow up; ingest completes when lastIngestJobId matches ${String(jobId ?? "None")}.` +
+        `${usedProbeFallback ? " probe fallback" : ""}`,
       data: {
-        datasetId,
+        jobId,
+        status: ingest.status ?? null,
+        conflictPolicy,
+        targetSplit: options.targetSplit ?? null,
+        owner: resolvedOwner,
+        dataset: refSlug,
+        datasetStatus,
+        lastIngestJobId: statusFields.lastIngestJobId ?? null,
+        lastIngestSummary: statusFields.lastIngestSummary ?? null,
+        processingError: statusFields.processingError ?? null,
+        errorCount: statusFields.errorCount ?? null,
         frameCount: folder.files.length,
         fps,
         maxFrames,
         filename,
         bytes: content.byteLength,
-        sessionId: upload.sessionId,
-        ingest: upload.ingest,
+        sessionId,
       },
     };
   } finally {
