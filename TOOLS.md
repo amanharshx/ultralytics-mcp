@@ -292,13 +292,13 @@ Notes: Uses a local video path, extracts JPEG frames with ffmpeg, and starts ing
 
 ### models_list
 
-List models in a project by project id, slug, username/slug, or project ul:// URI.
+List models in a project by slug, owner/slug, or project ul:// URI.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `project` | string | Yes | Project ref by id, slug, username/slug, or ul:// URI. |
+| `project` | string | Yes | Project ref by slug, owner/slug, or ul:// URI. |
 
 ### models_get
 

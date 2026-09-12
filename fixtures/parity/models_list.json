@@ -1,0 +1,71 @@
+{
+  "tool": "models_list",
+  "args": {
+    "project": "example-owner/example-project-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "models": [
+            {
+              "id": "000000000000000000000001",
+              "owner": "example-owner",
+              "project": "example-project-1",
+              "model": "example-model-1",
+              "name": "example-model-1",
+              "visibility": "private",
+              "status": "completed",
+              "task": "segment",
+              "epochs": 100,
+              "bestFitness": 1.08609
+            },
+            {
+              "id": "000000000000000000000002",
+              "owner": "example-owner",
+              "project": "example-project-1",
+              "model": "example-model-2",
+              "name": "example-model-2",
+              "visibility": "private",
+              "status": "completed",
+              "task": "segment",
+              "epochs": 100,
+              "bestFitness": 1.08609
+            }
+          ],
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "2 model(s) for project 'example-project-1' for owner 'example-owner'.",
+    "data": [
+      {
+        "id": "000000000000000000000001",
+        "name": "example-model-1",
+        "slug": "example-model-1",
+        "username": "example-owner",
+        "visibility": "private",
+        "status": "completed",
+        "task": "segment",
+        "epochs": 100,
+        "bestFitness": 1.08609
+      },
+      {
+        "id": "000000000000000000000002",
+        "name": "example-model-2",
+        "slug": "example-model-2",
+        "username": "example-owner",
+        "visibility": "private",
+        "status": "completed",
+        "task": "segment",
+        "epochs": 100,
+        "bestFitness": 1.08609
+      }
+    ]
+  }
+}

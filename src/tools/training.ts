@@ -6,8 +6,8 @@ import {
   parseRef,
   resolveLegacyDatasetDetails,
   resolveLegacyDatasetId,
+  resolveLegacyModelId,
   resolveLegacyProjectId,
-  resolveModel,
 } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, pyField } from "./shared.js";
@@ -170,7 +170,7 @@ export async function trainingMonitor(
   } = options;
   validateHistoryLastN(historyLastN);
 
-  const modelId = await resolveModel(client, model, project);
+  const modelId = await resolveLegacyModelId(client, model, project);
   const data = await client.get(`/models/${modelId}`);
   const record = asRecord(data);
   const item = asRecord("model" in record ? record.model : data);
@@ -329,7 +329,7 @@ export async function trainingStart(
     data: datasetId,
   };
   if (checkpoint === null) {
-    modelId = await resolveModel(client, model, project);
+    modelId = await resolveLegacyModelId(client, model, project);
     const modelData = await client.get(`/models/${modelId}`);
     const trainModel = storedTrainModel(modelData);
     if (trainModel === null) {
