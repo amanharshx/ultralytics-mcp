@@ -80,7 +80,7 @@
       "owner": "example-owner",
       "project": "example-project-1",
       "model": "example-model-1",
-      "id": "000000000000000000000001",
+      "modelId": "000000000000000000000001",
       "status": "completed",
       "jobStatus": "completed",
       "epochsDone": 1,

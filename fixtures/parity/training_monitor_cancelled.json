@@ -111,7 +111,7 @@
       "owner": "example-owner",
       "project": "example-project-1",
       "model": "example-cancelled-1",
-      "id": "000000000000000000000002",
+      "modelId": "000000000000000000000002",
       "status": "cancelled",
       "jobStatus": "cancelled",
       "epochsDone": 2,

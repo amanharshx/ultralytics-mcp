@@ -295,7 +295,7 @@ export async function trainingMonitor(
       owner: resolvedOwner,
       project: resolved.project,
       model: resolved.model,
-      id: fields.id ?? null,
+      modelId: fields.id ?? null,
       status,
       jobStatus,
       epochsDone,
