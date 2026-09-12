@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveModel } from "../resolve.js";
+import { resolveLegacyModelId } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord } from "./shared.js";
 
@@ -200,7 +200,7 @@ export async function modelDownload(
 ): Promise<NormalizedToolResult> {
   const { outputPath, project, filename, overwrite = false } = options;
   const target = await downloadTarget(outputPath, overwrite);
-  const modelId = await resolveModel(client, model, project);
+  const modelId = await resolveLegacyModelId(client, model, project);
   const data = await client.get(`/models/${modelId}/files`);
   const fileInfo = selectModelFile(modelFiles(data), filename);
   const selectedName = fileName(fileInfo) ?? filename ?? "model file";

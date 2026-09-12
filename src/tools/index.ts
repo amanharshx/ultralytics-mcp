@@ -661,11 +661,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "List models in a project by project id, slug, username/slug, or project ul:// URI.",
+      "List models in a project by slug, owner/slug, or project ul:// URI.",
     inputSchema: {
       project: z
         .string()
-        .describe("Project ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Project ref by slug, owner/slug, or ul:// URI."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:

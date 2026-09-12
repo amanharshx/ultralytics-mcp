@@ -1,15 +1,19 @@
 /** Resolve Platform references to owner-scoped paths.
  *
- * Project and dataset references resolve by pure string parsing with no
- * network calls: `owner/slug`, `ul://owner/<kind>`, and bare `slug` all
- * parse directly into an `{owner, <kind>}` pair. Ids are not addressable on
- * any endpoint, so a bare 24-character hex id is rejected with an actionable
- * error.
+ * Project, dataset, and model references resolve by pure string parsing with
+ * no network calls: project and dataset refs parse into `{owner, <kind>}`
+ * pairs, and model refs parse into `{owner, project, model}` triples. Ids
+ * are not addressable on any endpoint, so a bare 24-character hex id is
+ * rejected with an actionable error.
  *
- * Model lookups and the legacy id lookups below are unmigrated legacy: they
- * still resolve to ids for endpoints whose live contract has not been
- * captured yet. They keep their previous behavior until their own migration;
- * do not extend them.
+ * The legacy id lookups below are unmigrated legacy: they still resolve to
+ * ids for endpoints whose live contract has not been captured yet (model
+ * get/delete, training, exports, predict, download, and training start's
+ * project/dataset inputs). They keep their previous behavior until their own
+ * migration; do not extend them. Migrated tools use the pure resolvers
+ * instead. Each later ticket migrates its tools off legacy and rejects bare
+ * ids through the pure resolvers; legacy is removed piece by piece with the
+ * final removal landing with training start (sequenced last).
  */
 
 import type { UltralyticsClient } from "./client.js";
@@ -164,6 +168,88 @@ export function resolveDataset(ref: string): ResolvedDatasetRef {
     owner: parts.length === 2 ? parts[0] : null,
     dataset: parts[parts.length - 1],
   };
+}
+
+/** Owner-scoped model reference. `owner` is null when neither the model ref
+ * nor the project ref names one; the caller fills it from the account
+ * summary (see `getAccountOwner`). */
+export interface ResolvedModelRef {
+  owner: string | null;
+  project: string;
+  model: string;
+}
+
+const MODEL_REF_HELP =
+  "Use 'owner/project/model', 'ul://owner/project/model', or 'model' with a project.";
+const MODEL_IDS_NOT_ADDRESSABLE = "Model ids are not addressable.";
+
+/** Parse a model ref into an `{owner, project, model}` triple with no network call.
+ *
+ * Accepts `owner/project/model`, `ul://owner/project/model`, and a bare
+ * `model` slug when a project ref is also given (the project ref itself
+ * accepts `slug`, `owner/slug`, or `ul://owner/project` and is parsed via
+ * {@link resolveProject}, so its disambiguation errors are preserved).
+ * Rejects bare 24-character hex ids (not addressable), dataset `ul://` URIs,
+ * and project `ul://` URIs with errors that point at the correct form.
+ *
+ * This is the shared model resolver for the models epic: it lands here so
+ * later tickets wire their tools to it without touching it again. It has no
+ * `src/` caller yet by design (`modelsList` takes a project ref via
+ * {@link resolveProject}); coverage lives in `tests/resolve.test.ts` and the
+ * `models_list` parity fixture asserts the live field contract.
+ */
+export function resolveModel(
+  ref: string,
+  projectRef?: string,
+): ResolvedModelRef {
+  const trimmed = ref.trim();
+  if (!trimmed) {
+    throw new ResolutionError(
+      `Cannot parse model reference ''. ${MODEL_REF_HELP} ${MODEL_IDS_NOT_ADDRESSABLE}`,
+    );
+  }
+  if (looksLikeId(trimmed)) {
+    throw new ResolutionError(
+      `${MODEL_IDS_NOT_ADDRESSABLE} ${MODEL_REF_HELP} '${trimmed}' is a bare id, ` +
+        "which is no longer accepted.",
+    );
+  }
+
+  const { isUlUri, parts } = parseRef(trimmed);
+  if (isUlUri) {
+    if (parts.length === 3 && parts[1] === "datasets") {
+      throw new ResolutionError(
+        `'${trimmed}' is a dataset URI, not a model. ${MODEL_REF_HELP}`,
+      );
+    }
+    if (parts.length === 3) {
+      return { owner: parts[0], project: parts[1], model: parts[2] };
+    }
+    if (parts.length === 2) {
+      throw new ResolutionError(
+        `'${trimmed}' is a project URI, not a model. ${MODEL_REF_HELP}`,
+      );
+    }
+    throw new ResolutionError(
+      `Unsupported model ul:// URI '${trimmed}'. Expected 'ul://owner/project/model'.`,
+    );
+  }
+  if (parts.length === 3) {
+    return { owner: parts[0], project: parts[1], model: parts[2] };
+  }
+  if (parts.length === 1) {
+    if (projectRef === undefined) {
+      throw new ResolutionError(
+        `Model reference '${trimmed}' is a slug; a project is required to resolve it. ${MODEL_REF_HELP}`,
+      );
+    }
+    const { owner, project } = resolveProject(projectRef);
+    return { owner, project, model: parts[0] };
+  }
+  throw new ResolutionError(
+    `Cannot parse model reference '${trimmed}'. ${MODEL_REF_HELP} ` +
+      MODEL_IDS_NOT_ADDRESSABLE,
+  );
 }
 
 /** Return true when `ref` is a 24-hex Platform object id. */
@@ -361,8 +447,16 @@ export async function resolveLegacyDatasetDetails(
   };
 }
 
-/** Resolve a model id, slug plus project, or model ul:// URI. */
-export async function resolveModel(
+/** Legacy model-id lookup for unmigrated tools only.
+ *
+ * Preserves the previous list-then-filter behavior (including id
+ * passthrough) for consumers whose live contract has not been captured yet
+ * (model get/delete, training monitor/start, exports, predict, download).
+ * Migrated tools use the pure {@link resolveModel} instead, and tools that
+ * need a model's database id fetch it themselves via the model detail
+ * endpoint. Do not use for new code.
+ */
+export async function resolveLegacyModelId(
   client: UltralyticsClient,
   ref: string,
   projectRef?: string,

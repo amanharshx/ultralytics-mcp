@@ -6,6 +6,7 @@ import {
   parseRef,
   resolveDataset,
   resolveLegacyDatasetId,
+  resolveLegacyModelId,
   resolveLegacyProjectId,
   resolveModel,
   resolveProject,
@@ -323,6 +324,110 @@ describe("resolveLegacyDatasetId (legacy id lookup for unmigrated tools)", () =>
 });
 
 describe("resolveModel", () => {
+  test("parses owner/project/model into a triple with no network call", () => {
+    expect(resolveModel("u/proj/mod")).toEqual({
+      owner: "u",
+      project: "proj",
+      model: "mod",
+    });
+  });
+
+  test("parses a ul:// model URI into a triple with no network call", () => {
+    expect(resolveModel("ul://u/proj/mod")).toEqual({
+      owner: "u",
+      project: "proj",
+      model: "mod",
+    });
+  });
+
+  test("parses a bare slug with an owner/slug project without network", () => {
+    expect(resolveModel("mod", "u/proj")).toEqual({
+      owner: "u",
+      project: "proj",
+      model: "mod",
+    });
+  });
+
+  test("parses a bare slug with a ul:// project without network", () => {
+    expect(resolveModel("mod", "ul://u/proj")).toEqual({
+      owner: "u",
+      project: "proj",
+      model: "mod",
+    });
+  });
+
+  test("leaves a missing owner as null for the caller to fill", () => {
+    expect(resolveModel("mod", "proj")).toEqual({
+      owner: null,
+      project: "proj",
+      model: "mod",
+    });
+  });
+
+  test("trims surrounding whitespace", () => {
+    expect(resolveModel("  u/proj/mod  ")).toEqual({
+      owner: "u",
+      project: "proj",
+      model: "mod",
+    });
+  });
+
+  test("rejects a bare 24-hex id and names the accepted ref forms", () => {
+    expect(() => resolveModel("6a15700a49a694644aeb62aa")).toThrow(
+      /not addressable.*owner\/project\/model.*ul:\/\//s,
+    );
+  });
+
+  test("rejects an uppercase 24-hex id", () => {
+    expect(() => resolveModel("6A15700A49A694644AEB62AA")).toThrow(
+      /not addressable/,
+    );
+  });
+
+  test("rejects a blank reference", () => {
+    expect(() => resolveModel("   ")).toThrow(/Cannot parse model/);
+  });
+
+  test("rejects a slash-only reference", () => {
+    expect(() => resolveModel("///")).toThrow(/Cannot parse model/);
+  });
+
+  test("rejects a two-segment path reference", () => {
+    expect(() => resolveModel("a/b", "u/proj")).toThrow(/Cannot parse model/);
+  });
+
+  test("a dataset URI is rejected and points at the model form", () => {
+    expect(() => resolveModel("ul://u/datasets/data")).toThrow(
+      /dataset URI, not a model.*owner\/project\/model/s,
+    );
+  });
+
+  test("a project URI is rejected and points at the model form", () => {
+    expect(() => resolveModel("ul://u/proj")).toThrow(
+      /project URI, not a model.*owner\/project\/model/s,
+    );
+  });
+
+  test("a malformed model ul:// URI names the expected form", () => {
+    expect(() => resolveModel("ul://only-one-part")).toThrow(
+      /Unsupported model ul:\/\/ URI.*ul:\/\/owner\/project\/model/s,
+    );
+  });
+
+  test("a bare slug without a project fails loudly", () => {
+    expect(() => resolveModel("mod")).toThrow(
+      /slug; a project is required.*owner\/project\/model/s,
+    );
+  });
+
+  test("a dataset URI as the project ref stays a dataset error", () => {
+    expect(() => resolveModel("mod", "ul://u/datasets/data")).toThrow(
+      /dataset URI, not a project/,
+    );
+  });
+});
+
+describe("resolveLegacyModelId (legacy id lookup for unmigrated tools)", () => {
   test("infers the project from a model ul:// URI", async () => {
     const { client, calls } = clientWith((path) => {
       if (path === "/api/projects") {
@@ -343,13 +448,15 @@ describe("resolveModel", () => {
       }
       return new Response(null, { status: 404 });
     });
-    expect(await resolveModel(client, "ul://u/proj/mod")).toBe("m".repeat(24));
+    expect(await resolveLegacyModelId(client, "ul://u/proj/mod")).toBe(
+      "m".repeat(24),
+    );
     expect(calls[1].params.get("projectId")).toBe("p".repeat(24));
   });
 
   test("a bare slug without a project fails loudly", async () => {
     const { client } = clientWith(() => new Response(null, { status: 500 }));
-    await expect(resolveModel(client, "mod")).rejects.toThrow(
+    await expect(resolveLegacyModelId(client, "mod")).rejects.toThrow(
       /project id\/slug is required/,
     );
   });

@@ -1,7 +1,7 @@
 /** Export tools. `export_create` is state-changing and guarded by confirm_cost. */
 
 import type { UltralyticsClient } from "../client.js";
-import { looksLikeId, resolveModel } from "../resolve.js";
+import { looksLikeId, resolveLegacyModelId } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
 
@@ -33,7 +33,7 @@ export async function exportsList(
   model: string,
   project?: string,
 ): Promise<NormalizedToolResult> {
-  const modelId = await resolveModel(client, model, project);
+  const modelId = await resolveLegacyModelId(client, model, project);
   const data = await client.get("/exports", { modelId });
   const items = listField(data, "exports").map((entry) => ({
     id: entry._id ?? null,
@@ -96,7 +96,7 @@ export async function exportCreate(
     throw new Error("`gpu_type` is required for TensorRT engine exports.");
   }
 
-  const modelId = await resolveModel(client, model, project);
+  const modelId = await resolveLegacyModelId(client, model, project);
   const payload: Record<string, unknown> = { modelId, format: exportFormat };
   if (gpuType) {
     payload.gpuType = gpuType;

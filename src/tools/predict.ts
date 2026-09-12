@@ -1,7 +1,7 @@
 /** Inference tool. Accepts only an image URL or base64 source (no local paths). */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveModel } from "../resolve.js";
+import { resolveLegacyModelId } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField } from "./shared.js";
 
@@ -24,7 +24,7 @@ export async function modelPredict(
     );
   }
 
-  const modelId = await resolveModel(client, model, project);
+  const modelId = await resolveLegacyModelId(client, model, project);
   const result = await client.postMultipart(`/models/${modelId}/predict`, {
     data: {
       source,
