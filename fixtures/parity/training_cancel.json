@@ -1,0 +1,29 @@
+{
+  "tool": "training_cancel",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1"
+  },
+  "api": [
+    {
+      "method": "DELETE",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/training",
+      "response": {
+        "status": 200,
+        "json": {
+          "success": true,
+          "status": "cancelled"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Cancelled training job for model 'example-model-1' for owner 'example-owner' project 'example-project-1' (status=cancelled). Compute instance released; elapsed GPU time still charged; most recent checkpoint preserved. This stops the job and does not delete the model.",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-model-1",
+      "success": true,
+      "status": "cancelled"
+    }
+  }
+}

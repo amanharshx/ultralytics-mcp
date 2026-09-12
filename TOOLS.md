@@ -384,7 +384,7 @@ Notes: Writes model weights to a local filesystem path.
 
 ## Training
 
-2 tools.
+3 tools.
 
 ### training_monitor
 
@@ -444,6 +444,17 @@ Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt`
   "confirm_cost": true
 }
 ```
+
+### training_cancel
+
+Cancel a running training job by owner/project/model, ul://owner/project/model, or slug with a project. Cancelling releases the compute instance; elapsed GPU time is still charged and the most recently uploaded checkpoint is preserved rather than discarded. This stops the job and does not delete the model.
+
+Metadata: state-changing, non-idempotent, external/live
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `project` | string | No | Project ref required when model is given by slug. |
 
 ## Exports
 

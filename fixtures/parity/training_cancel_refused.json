@@ -1,0 +1,24 @@
+{
+  "tool": "training_cancel",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1"
+  },
+  "api": [
+    {
+      "method": "DELETE",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/training",
+      "response": {
+        "status": 400,
+        "json": {
+          "error": "Cannot cancel training with status: cancelled"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Cannot cancel training with status: cancelled",
+    "data": {
+      "error": "Cannot cancel training with status: cancelled"
+    }
+  }
+}

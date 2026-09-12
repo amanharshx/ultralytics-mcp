@@ -9,6 +9,7 @@ import { describe, expect, test } from "vitest";
 import { z } from "zod";
 
 import { UltralyticsClient } from "../src/client.js";
+import { UltralyticsApiError } from "../src/errors.js";
 import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
   datasetExport,
@@ -33,6 +34,7 @@ import {
   projectsDelete,
   projectsGet,
   projectsList,
+  trainingCancel,
   trainingMonitor,
 } from "../src/tools/index.js";
 
@@ -310,6 +312,12 @@ const TOOL_RUNNERS: Record<
         historyLastN: args.history_last_n as number | undefined,
       },
     ),
+  training_cancel: (client, args) =>
+    trainingCancel(
+      client,
+      args.model as string,
+      args.project as string | undefined,
+    ),
 };
 
 /** Recursively replace the `__TMP__` placeholder with a real temp dir path. */
@@ -367,6 +375,8 @@ describe("parity fixtures", () => {
         "training_monitor_private.json",
         "training_monitor_cancelled.json",
         "training_monitor_untrained.json",
+        "training_cancel.json",
+        "training_cancel_refused.json",
       ].sort(),
     );
   });
@@ -390,6 +400,11 @@ describe("parity fixtures", () => {
     ) {
       continue;
     }
+    // Error case: the live API refuses with a 400 carrying its own message.
+    // Replayed by the dedicated test below, which asserts the refusal.
+    if (fixtureFile === "training_cancel_refused.json") {
+      continue;
+    }
     const runner = TOOL_RUNNERS[fixture.tool];
     if (!runner) continue; // tool not ported yet; schema-validated above
 
@@ -403,6 +418,30 @@ describe("parity fixtures", () => {
       expect(result).toEqual(fixture.expected);
     });
   }
+
+  test("parity output: training_cancel_refused.json", async () => {
+    // Live capture: DELETE /api/models/{owner}/{project}/{model}/training
+    // on an already-cancelled job -> 400 {"error":"Cannot cancel training with status: cancelled"}
+    const raw = readFileSync(
+      join(fixtureDir, "training_cancel_refused.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await trainingCancel(
+      client,
+      fixture.args.model as string,
+    ).catch((e) => e as UltralyticsApiError);
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(400);
+    expect(String(error)).toMatch(
+      /Cannot cancel training with status: cancelled/,
+    );
+  });
 
   test("parity output: model_download_signed_url.json", async () => {
     const raw = readFileSync(
