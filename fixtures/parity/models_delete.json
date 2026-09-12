@@ -1,50 +1,12 @@
 {
   "tool": "models_delete",
   "args": {
-    "model": "exp",
-    "project": "user/road"
+    "model": "example-owner/example-project-1/example-model-1"
   },
   "api": [
     {
-      "method": "GET",
-      "path": "/api/projects",
-      "query": {
-        "username": "user"
-      },
-      "response": {
-        "status": 200,
-        "json": {
-          "projects": [
-            {
-              "_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
-              "slug": "road",
-              "username": "user"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/api/models",
-      "query": {
-        "projectId": "aaaaaaaaaaaaaaaaaaaaaaaa"
-      },
-      "response": {
-        "status": 200,
-        "json": {
-          "models": [
-            {
-              "_id": "cccccccccccccccccccccccc",
-              "slug": "exp"
-            }
-          ]
-        }
-      }
-    },
-    {
       "method": "DELETE",
-      "path": "/api/models/cccccccccccccccccccccccc",
+      "path": "/api/models/example-owner/example-project-1/example-model-1",
       "response": {
         "status": 200,
         "json": {
@@ -54,12 +16,12 @@
     }
   ],
   "expected": {
-    "summary": "Deleted model cccccccccccccccccccccccc.",
+    "summary": "Deleted model 'example-model-1' for owner 'example-owner' project 'example-project-1' (soft delete; restorable from trash; weights, training history, and exports removed only on permanent deletion).",
     "data": {
-      "id": "cccccccccccccccccccccccc",
-      "response": {
-        "success": true
-      }
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-model-1",
+      "success": true
     }
   }
 }

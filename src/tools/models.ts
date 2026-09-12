@@ -1,11 +1,7 @@
 /** Model tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import {
-  resolveLegacyModelId,
-  resolveModel,
-  resolveProject,
-} from "../resolve.js";
+import { resolveModel, resolveProject } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
 
@@ -130,16 +126,37 @@ export async function modelsGet(
   };
 }
 
-/** Delete a model by id, or by slug within a project. */
+/** Delete a model by owner/project/model, ul:// URI, or slug with a project.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and deletes
+ * through the live owner-scoped endpoint. The API reports only
+ * `{success: true}` with no cascade summary; both the returned fields and
+ * the ref are surfaced so the caller can tell what was removed. Deleting a
+ * model moves it to trash where it remains restorable; weights, training
+ * history, and exports are removed only on permanent deletion.
+ */
 export async function modelsDelete(
   client: UltralyticsClient,
   model: string,
   project?: string,
 ): Promise<NormalizedToolResult> {
-  const modelId = await resolveLegacyModelId(client, model, project);
-  const data = await client.delete(`/models/${modelId}`);
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data = await client.delete(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}`,
+  );
+  const record = asRecord(data);
   return {
-    summary: `Deleted model ${modelId}.`,
-    data: { id: modelId, response: data },
+    summary:
+      `Deleted model '${resolved.model}' for owner '${resolvedOwner}' ` +
+      `project '${resolved.project}' (soft delete; restorable from trash; ` +
+      `weights, training history, and exports removed only on permanent deletion).`,
+    data: {
+      owner: resolvedOwner,
+      project: resolved.project,
+      model: resolved.model,
+      ...record,
+    },
   };
 }
