@@ -858,37 +858,139 @@ describe("datasetsCreate", () => {
 });
 
 describe("datasetExport", () => {
-  test("resolves dataset and returns export link", async () => {
-    const { client, calls } = captureClient((url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+  const liveCurrentResponse = {
+    downloadUrl: "https://storage.googleapis.com/example-exports/cars.ndjson",
+    cached: false,
+  };
+  const liveVersionedResponse = {
+    downloadUrl:
+      "https://storage.googleapis.com/example-exports/version-example/cars-v1.ndjson",
+    version: 1,
+  };
+
+  function clientForExport(
+    response: unknown,
+    options: { accountOwner?: string; status?: number } = {},
+  ) {
+    return routeClient((path) => {
+      if (options.accountOwner && path === "/api/account/summary") {
+        return jsonResponse({ username: options.accountOwner });
       }
-      return jsonResponse({
-        downloadUrl: "https://cdn.example.com/data-v3.ndjson",
-        cached: false,
-      });
+      if (path === "/api/datasets/alice/cars/export") {
+        return jsonResponse(response, options.status ?? 200);
+      }
+      return jsonResponse({}, 404);
     });
+  }
 
-    const result = await datasetExport(client, {
-      dataset: "user/data",
-      version: 3,
-    });
+  test("fetches the current export through the owner-scoped path", async () => {
+    const { client, calls } = clientForExport(liveCurrentResponse);
 
-    expect(calls[1]).toEqual({
-      url: `${BASE}/datasets/${"d".repeat(24)}/export?v=3`,
-      method: "GET",
-      body: undefined,
-    });
+    const result = await datasetExport(client, { dataset: "alice/cars" });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars/export",
+    ]);
+    expect(calls[0].params.get("v")).toBeNull();
     expect(result.summary).toBe(
-      "Export link for user/data (version 3, cached=false)",
+      "Export link for dataset 'cars' for owner 'alice' (version latest, cached=false). " +
+        "This link is time-limited and will expire.",
     );
     expect(result.data).toEqual({
-      downloadUrl: "https://cdn.example.com/data-v3.ndjson",
+      downloadUrl: "https://storage.googleapis.com/example-exports/cars.ndjson",
       cached: false,
+      version: null,
     });
+  });
+
+  test("requests a specific saved version with ?v and surfaces it", async () => {
+    const { client, calls } = clientForExport(liveVersionedResponse);
+
+    const result = await datasetExport(client, {
+      dataset: "alice/cars",
+      version: 1,
+    });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars/export",
+    ]);
+    expect(calls[0].params.get("v")).toBe("1");
+    expect(result.summary).toContain("(version 1,");
+    expect(result.summary).toContain("time-limited");
+    expect(result.data).toEqual({
+      downloadUrl:
+        "https://storage.googleapis.com/example-exports/version-example/cars-v1.ndjson",
+      cached: null,
+      version: 1,
+    });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForExport(liveCurrentResponse, {
+      accountOwner: "alice",
+    });
+
+    const result = await datasetExport(client, { dataset: "cars" });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/datasets/alice/cars/export",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const { client, calls } = clientForExport(liveCurrentResponse);
+
+    const result = await datasetExport(client, { dataset: "ul://alice/cars" });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars/export",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForExport(liveCurrentResponse);
+    await expect(
+      datasetExport(client, { dataset: "a".repeat(24) }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("validates version before any network call", async () => {
+    const { client, calls } = clientForExport(liveCurrentResponse);
+    await expect(
+      datasetExport(client, { dataset: "alice/cars", version: 0 }),
+    ).rejects.toThrow(/`version` must be greater than 0/);
+    expect(calls).toHaveLength(0);
+  });
+
+  test.each([
+    "alice/missing",
+    "ghost/cars",
+  ])("surfaces the API message for %s", async (ref) => {
+    const { client } = routeClient((path) => {
+      if (path === `/api/datasets/${ref}/export`) {
+        return jsonResponse({ error: "Dataset not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(datasetExport(client, { dataset: ref })).rejects.toThrow(
+      /Dataset not found/,
+    );
+  });
+
+  test("surfaces the API message for a version that does not exist", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/datasets/alice/cars/export") {
+        return jsonResponse({ error: "Version not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(
+      datasetExport(client, { dataset: "alice/cars", version: 999999 }),
+    ).rejects.toThrow(/Version not found/);
   });
 });
 

@@ -395,11 +395,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "dataset_export",
     registrationGroup: "read",
     stateChanging: false,
-    description: "Get export link for latest or one frozen dataset version.",
+    description:
+      "Get a time-limited export download link for a dataset by slug, owner/slug, or dataset ul:// URI, for the latest export or one frozen version.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       version: z.number().optional(),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },

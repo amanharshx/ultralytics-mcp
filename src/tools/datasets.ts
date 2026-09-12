@@ -884,7 +884,14 @@ export interface DatasetExportOptions {
   version?: number;
 }
 
-/** Get dataset export link for latest or one frozen version. */
+/** Get dataset export link for latest or one frozen version.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and reads the live
+ * owner-scoped endpoint. A specific saved version is requested with `?v=N`;
+ * without a version the current dataset export is returned. The API returns
+ * a signed, time-limited download URL; the summary says so explicitly.
+ */
 export async function datasetExport(
   client: UltralyticsClient,
   options: DatasetExportOptions,
@@ -893,24 +900,26 @@ export async function datasetExport(
     throw new Error("`version` must be greater than 0.");
   }
 
-  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
   const data = asRecord(
     await client.get(
-      `/datasets/${datasetId}/export`,
+      `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}/export`,
       options.version !== undefined ? { v: options.version } : undefined,
     ),
   );
-  const cached =
-    typeof data.cached === "boolean"
-      ? String(data.cached)
-      : String(data.cached ?? null);
+  const versionLabel = String(options.version ?? data.version ?? "latest");
+  const cachedDisplay =
+    typeof data.cached === "boolean" ? String(data.cached) : "None";
   return {
     summary:
-      `Export link for ${options.dataset} ` +
-      `(version ${String(options.version ?? "latest")}, cached=${cached})`,
+      `Export link for dataset '${refSlug}' for owner '${resolvedOwner}' ` +
+      `(version ${versionLabel}, cached=${cachedDisplay}). ` +
+      `This link is time-limited and will expire.`,
     data: {
       downloadUrl: data.downloadUrl ?? null,
       cached: data.cached ?? null,
+      version: data.version ?? options.version ?? null,
     },
   };
 }

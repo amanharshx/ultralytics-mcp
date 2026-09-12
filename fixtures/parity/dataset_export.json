@@ -1,49 +1,47 @@
 {
   "tool": "dataset_export",
   "args": {
-    "dataset": "user/data",
-    "version": 3
+    "dataset": "example-dataset-1"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/datasets",
-      "query": {
-        "username": "user"
-      },
+      "path": "/api/account/summary",
       "response": {
         "status": 200,
         "json": {
-          "datasets": [
-            {
-              "_id": "dddddddddddddddddddddddd",
-              "slug": "data",
-              "username": "user"
-            }
-          ]
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
         }
       }
     },
     {
       "method": "GET",
-      "path": "/api/datasets/dddddddddddddddddddddddd/export",
-      "query": {
-        "v": "3"
-      },
+      "path": "/api/datasets/example-owner/example-dataset-1/export",
       "response": {
         "status": 200,
         "json": {
-          "downloadUrl": "https://cdn.example.com/data-v3.ndjson",
+          "downloadUrl": "https://storage.googleapis.com/example-exports/example-dataset-1.ndjson",
           "cached": false
         }
       }
     }
   ],
   "expected": {
-    "summary": "Export link for user/data (version 3, cached=false)",
+    "summary": "Export link for dataset 'example-dataset-1' for owner 'example-owner' (version latest, cached=false). This link is time-limited and will expire.",
     "data": {
-      "downloadUrl": "https://cdn.example.com/data-v3.ndjson",
-      "cached": false
+      "downloadUrl": "https://storage.googleapis.com/example-exports/example-dataset-1.ndjson",
+      "cached": false,
+      "version": null
     }
   }
 }

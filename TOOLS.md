@@ -164,13 +164,13 @@ Metadata: read-only
 
 ### dataset_export
 
-Get export link for latest or one frozen dataset version.
+Get a time-limited export download link for a dataset by slug, owner/slug, or dataset ul:// URI, for the latest export or one frozen version.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `version` | number | No |  |
 
 ### dataset_version_create
