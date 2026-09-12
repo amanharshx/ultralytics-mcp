@@ -164,22 +164,59 @@ export class UltralyticsClient {
     }
   }
 
-  /** Upload bytes to a signed URL WITHOUT forwarding API credentials. */
+  /** Upload bytes to a signed URL WITHOUT forwarding API credentials.
+   *
+   * Sends the declared content type together with any runtime headers the
+   * signed-url response returned (for example GCS preconditions). Omitting
+   * either fails at the storage layer with an error that does not name the
+   * cause.
+   */
   async uploadBytes(
     url: string,
     content: Uint8Array,
     contentType: string,
+    extraHeaders?: Record<string, string>,
   ): Promise<void> {
     const bytes = new Uint8Array(content.byteLength);
     bytes.set(content);
-    const response = await this.fetchWithTimeout(this.uploadFetchImpl, url, {
+    return this.putSignedBytes(url, bytes, contentType, extraHeaders);
+  }
+
+  /** PUT a body to a signed URL WITHOUT forwarding API credentials.
+   *
+   * Accepts bytes or a stream. Streams are never buffered here, so archives
+   * larger than the in-memory limit can still upload; each PUT attempt must
+   * open a fresh stream because a consumed stream cannot be re-read.
+   * Streaming bodies require `duplex: "half"` on Node's fetch.
+   */
+  async putSignedBytes(
+    url: string,
+    body: BodyInit,
+    contentType: string,
+    extraHeaders: Record<string, string> = {},
+  ): Promise<void> {
+    // Undici's RequestInit type lags the runtime: streaming bodies require
+    // `duplex: "half"`, so it is typed here rather than on RequestInit.
+    const init: RequestInit & { duplex?: "half" } = {
       method: "PUT",
       headers: {
         Accept: "*/*",
+        ...extraHeaders,
         "Content-Type": contentType,
       },
-      body: bytes,
-    });
+      body,
+    };
+    if (
+      typeof ReadableStream !== "undefined" &&
+      body instanceof ReadableStream
+    ) {
+      init.duplex = "half";
+    }
+    const response = await this.fetchWithTimeout(
+      this.uploadFetchImpl,
+      url,
+      init,
+    );
     if (response.ok) {
       return;
     }

@@ -209,15 +209,16 @@ Metadata: state-changing, non-idempotent, external/live
 
 ### dataset_upload_file
 
-Upload a local dataset archive file and start ingest for an existing dataset.
+Upload a local dataset archive through the signed-upload flow for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.
 
 Metadata: state-changing, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `file_path` | string | Yes | Local path to dataset archive file. |
 | `targetSplit` | string | No |  |
+| `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 Notes: Uses a local archive file path and starts ingest into an existing dataset. Named YOLO ZIP archives preserve labels and classes on later ingests; archives without class names may map labels by positional index.
 
@@ -225,7 +226,7 @@ Notes: Uses a local archive file path and starts ingest into an existing dataset
 
 ```json
 {
-  "dataset": "team/datasets/warehouse-items",
+  "dataset": "team/warehouse-items",
   "file_path": "/data/warehouse-items.zip",
   "targetSplit": "train"
 }

@@ -1,13 +1,13 @@
 /** Read-only dataset tools. */
 
 import { execFile as execFileCb } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 
-import { strFromU8, unzipSync, zipSync } from "fflate";
-import { parse } from "yaml";
+import { zipSync } from "fflate";
 
 import type { UltralyticsClient } from "../client.js";
 import { resolveDataset, resolveLegacyDatasetId } from "../resolve.js";
@@ -124,9 +124,6 @@ async function datasetUploadFileMeta(filePath: string): Promise<{
   if (!info.isFile()) {
     throw new Error(`Upload path is not a file: ${filePath}`);
   }
-  if (info.size >= MAX_UPLOAD_BYTES) {
-    throw new Error("Upload file must be smaller than 10 GB.");
-  }
 
   const filename = basename(filePath);
   const lower = filename.toLowerCase();
@@ -142,6 +139,27 @@ async function datasetUploadFileMeta(filePath: string): Promise<{
     contentType: matched[1],
     totalBytes: info.size,
   };
+}
+
+/** Warn when an archive exceeds the free-tier single-upload limit.
+ *
+ * The caller's plan is not visible, so this never blocks: it names the
+ * per-plan limits and the remote-URL and cloud-storage alternatives instead
+ * of guessing whether the upload will succeed.
+ */
+export function archiveSizeWarning(
+  filename: string,
+  totalBytes: number,
+): string | null {
+  if (totalBytes <= MAX_UPLOAD_BYTES) {
+    return null;
+  }
+  return (
+    `Archive '${filename}' is ${totalBytes} bytes, exceeding the Free-tier 10 GB ` +
+    `single-upload limit (Pro: 20 GB, Enterprise: 50 GB). Proceeding with the upload ` +
+    `since your plan is not visible; if it fails, ingest the archive from a remote URL ` +
+    `with dataset_ingest or from cloud storage instead.`
+  );
 }
 
 function skipDatasetFolderPart(part: string): boolean {
@@ -252,66 +270,76 @@ async function buildDatasetFolderZip(
   return zipBytes;
 }
 
-function extractArchiveClassMapping(
-  content: Uint8Array,
-  filename: string,
-): Record<string, string> | undefined {
-  if (!filename.toLowerCase().endsWith(".zip")) {
-    return undefined;
-  }
+/** Open a fresh request body for one PUT attempt.
+ *
+ * A PUT consumes its body, so the factory runs again on retry: a consumed
+ * stream cannot be re-read, while in-memory bytes return the same content.
+ */
+export type UploadBodyOpener = () => BodyInit;
 
-  let files: Record<string, Uint8Array>;
+/** Run one signed-upload session: PUT the content, then complete the session.
+ *
+ * Shared by every dataset upload tool. The PUT sends the runtime headers
+ * from the signed-url response together with the declared content type and
+ * the known content length, without buffering the content. On PUT failure
+ * the retry requests a fresh signed-url session rather than reusing the same
+ * URL, whose storage precondition makes same-URL retry unreliable.
+ * Completion stays inside the session: a failed PUT is never completed.
+ * Returns the session id whose bytes actually landed, so ingest always
+ * references the live session.
+ */
+async function uploadThroughSignedSession(
+  client: UltralyticsClient,
+  options: {
+    requestSigned: () => Promise<Record<string, unknown>>;
+    openBody: UploadBodyOpener;
+    contentType: string;
+    contentLength: number;
+  },
+): Promise<{ sessionId: string }> {
+  let signed = await options.requestSigned();
+  const doUpload = async (upload: Record<string, unknown>): Promise<void> => {
+    await client.putSignedBytes(
+      String(upload.uploadUrl ?? upload.url),
+      options.openBody(),
+      options.contentType,
+      {
+        ...signedUploadHeaders(upload),
+        "Content-Length": String(options.contentLength),
+      },
+    );
+  };
   try {
-    files = unzipSync(content, {
-      filter: ({ name }) => /(^|\/)data\.ya?ml$/i.test(name),
-    });
+    await doUpload(signed);
   } catch {
-    return undefined;
+    signed = await options.requestSigned();
+    await doUpload(signed);
   }
-
-  const paths = Object.keys(files);
-  const rootPaths = paths.filter((path) => !path.includes("/"));
-  const selectedPath =
-    rootPaths.length === 1
-      ? rootPaths[0]
-      : rootPaths.length === 0 && paths.length === 1
-        ? paths[0]
-        : undefined;
-  if (selectedPath === undefined) {
-    return undefined;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = parse(strFromU8(files[selectedPath]));
-  } catch {
-    return undefined;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return undefined;
-  }
-  const names = (parsed as Record<string, unknown>).names;
-  const values = Array.isArray(names)
-    ? names
-    : typeof names === "object" && names !== null
-      ? Object.values(names)
-      : [];
-  if (
-    values.length === 0 ||
-    values.some(
-      (value) => typeof value !== "string" || value.trim().length === 0,
-    )
-  ) {
-    return undefined;
-  }
-
-  return Object.fromEntries(
-    Array.from(new Set(values.map((value) => (value as string).trim()))).map(
-      (name) => [name, name],
-    ),
-  );
+  const sessionId = String(signed.sessionId);
+  await client.postJson("/upload/complete", { sessionId });
+  return { sessionId };
 }
 
+/** Attach the oversize-archive guidance to an upload failure.
+ *
+ * Large archives usually fail at the storage or ingest layer with errors
+ * that say nothing about plan limits. When the archive already exceeded the
+ * free-tier limit, the original error keeps its text and gains the
+ * plan-limit and alternative-upload guidance.
+ */
+function withSizeWarning(error: unknown, sizeWarning: string | null): unknown {
+  if (sizeWarning === null || !(error instanceof Error)) {
+    return error;
+  }
+  return new Error(`${error.message} ${sizeWarning}`, { cause: error });
+}
+
+/** Legacy signed-upload wrapper for the unmigrated folder/video tools.
+ *
+ * Runs the shared session lifecycle but keeps the legacy id-based ingest
+ * call. The folder/video tickets migrate the ingest half with their own
+ * live verification; do not extend this for new code.
+ */
 async function uploadDatasetContent(
   client: UltralyticsClient,
   options: {
@@ -324,19 +352,21 @@ async function uploadDatasetContent(
     classMapping?: Record<string, string>;
   },
 ): Promise<{ sessionId: string; ingest: Record<string, unknown> }> {
-  const signed = asRecord(
-    await client.postJson("/upload/signed-url", {
-      assetType: "datasets",
-      assetId: options.datasetId,
-      filename: options.filename,
-      contentType: options.contentType,
-      totalBytes: options.totalBytes,
-    }),
-  );
-  const sessionId = String(signed.sessionId);
-  const uploadUrl = String(signed.uploadUrl ?? signed.url);
-  await client.uploadBytes(uploadUrl, options.content, options.contentType);
-  await client.postJson("/upload/complete", { sessionId });
+  const { sessionId } = await uploadThroughSignedSession(client, {
+    requestSigned: async () =>
+      asRecord(
+        await client.postJson("/upload/signed-url", {
+          assetType: "datasets",
+          assetId: options.datasetId,
+          filename: options.filename,
+          contentType: options.contentType,
+          totalBytes: options.totalBytes,
+        }),
+      ),
+    openBody: () => new Uint8Array(options.content),
+    contentType: options.contentType,
+    contentLength: options.totalBytes,
+  });
 
   const ingestPayload: Record<string, unknown> = {
     datasetId: options.datasetId,
@@ -658,7 +688,15 @@ const INGEST_CONFLICT_POLICIES: ReadonlySet<string> = new Set([
   "replace",
 ]);
 
-function validateIngestConflictPolicy(conflictPolicy?: string): string {
+/** Conflict policies the live ingest endpoint accepts. The platform default
+ * is undocumented, so tools always send one explicitly. Option inputs stay
+ * `string` because MCP arguments arrive unvalidated; this type names the
+ * validated value. */
+export type IngestConflictPolicy = "skip" | "keep_both" | "replace";
+
+function validateIngestConflictPolicy(
+  conflictPolicy?: string,
+): IngestConflictPolicy {
   const effective = conflictPolicy ?? "skip";
   if (!INGEST_CONFLICT_POLICIES.has(effective)) {
     const allowed = Array.from(INGEST_CONFLICT_POLICIES).sort().join(", ");
@@ -666,7 +704,7 @@ function validateIngestConflictPolicy(conflictPolicy?: string): string {
       `Unsupported conflictPolicy '${effective}'. Expected one of: ${allowed}.`,
     );
   }
-  return effective;
+  return effective as IngestConflictPolicy;
 }
 
 /** Start a remote URL ingest job for an existing dataset.
@@ -745,40 +783,144 @@ export interface DatasetUploadFileOptions {
   dataset: string;
   filePath: string;
   targetSplit?: string;
+  conflictPolicy?: string;
 }
 
-/** Upload a local dataset archive file, then start ingest for that upload. */
+function signedUploadHeaders(
+  signed: Record<string, unknown>,
+): Record<string, string> {
+  const raw = signed.headers;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string") {
+      headers[key] = value;
+    }
+  }
+  return headers;
+}
+
+/** Upload a local dataset archive file, then start ingest for that upload.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, fetches the dataset to
+ * obtain its id, then runs the signed-upload flow: request a signed URL with
+ * the dataset asset type and the file's real name, content type, and byte
+ * size; stream the file with both the runtime headers and the declared
+ * content type, so archives larger than the in-memory limit still upload;
+ * complete the session before ingest; and start ingest from
+ * the completed session through the live owner-scoped endpoint. The conflict
+ * policy is always sent explicitly, defaulting to the non-destructive `skip`
+ * (the platform default is undocumented). The queued job id is returned with
+ * the dataset's current ingest status fields; use `datasets_get` to follow
+ * up, since ingest runs asynchronously and this tool does not poll to
+ * completion. On upload failure a fresh signed-url session is started rather
+ * than retrying the same URL. Archives larger than the free-tier limit warn
+ * instead of blocking, since the caller's plan is not visible; when such an
+ * upload fails, the error keeps that guidance.
+ */
 export async function datasetUploadFile(
   client: UltralyticsClient,
   options: DatasetUploadFileOptions,
 ): Promise<NormalizedToolResult> {
   validateTargetSplit(options.targetSplit);
+  const conflictPolicy = validateIngestConflictPolicy(options.conflictPolicy);
 
   const meta = await datasetUploadFileMeta(options.filePath);
-  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
-  const content = await readFile(options.filePath);
-  const classMapping = extractArchiveClassMapping(content, meta.filename);
+  const sizeWarning = archiveSizeWarning(meta.filename, meta.totalBytes);
 
-  const upload = await uploadDatasetContent(client, {
-    datasetId,
-    filename: meta.filename,
-    contentType: meta.contentType,
-    totalBytes: meta.totalBytes,
-    content,
-    targetSplit: options.targetSplit,
-    classMapping,
-  });
-  const ingest = upload.ingest;
-  const jobId = ingest.jobId ?? ingest.id ?? "None";
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const encodedRef = `${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`;
+  const datasetRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
+  const idFields = asRecord(datasetRecord.dataset);
+  const datasetId =
+    typeof idFields.id === "string" && idFields.id.trim() ? idFields.id : null;
+  if (datasetId === null) {
+    throw new Error(
+      `Dataset '${refSlug}' for owner '${resolvedOwner}' did not include an id; cannot request an upload session.`,
+    );
+  }
 
+  const requestSigned = async (): Promise<Record<string, unknown>> =>
+    asRecord(
+      await client.postJson("/upload/signed-url", {
+        assetType: "datasets",
+        assetId: datasetId,
+        filename: meta.filename,
+        contentType: meta.contentType,
+        totalBytes: meta.totalBytes,
+      }),
+    );
+  // The file stays on disk: each PUT attempt opens a fresh stream, so
+  // archives larger than the in-memory limit upload without buffering.
+  const openBody = (): BodyInit =>
+    Readable.toWeb(createReadStream(options.filePath)) as BodyInit;
+
+  let sessionId: string;
+  let ingest: Record<string, unknown>;
+  try {
+    ({ sessionId } = await uploadThroughSignedSession(client, {
+      requestSigned,
+      openBody,
+      contentType: meta.contentType,
+      contentLength: meta.totalBytes,
+    }));
+
+    const ingestPayload: Record<string, unknown> = {
+      sessionId,
+      conflictPolicy,
+    };
+    if (options.targetSplit !== undefined) {
+      ingestPayload.targetSplit = options.targetSplit;
+    }
+    ingest = asRecord(
+      await client.postJson(`/datasets/${encodedRef}/ingest`, ingestPayload),
+    );
+  } catch (error) {
+    throw withSizeWarning(error, sizeWarning);
+  }
+  const jobId = ingest.jobId ?? ingest.id ?? null;
+  // The ingest job is already queued at this point, so a transient failure
+  // of the status lookup must not discard the issued job id and invite a
+  // duplicate retry. Report the submission with unknown status instead.
+  let statusFields: Record<string, unknown> = {};
+  let statusLookupFailed = false;
+  try {
+    const statusRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
+    statusFields = asRecord(statusRecord.dataset);
+  } catch {
+    statusLookupFailed = true;
+  }
+  const datasetStatus = statusFields.status ?? null;
+  const statusNote = statusLookupFailed
+    ? `(dataset status: ${String(datasetStatus ?? "None")}; status lookup failed)`
+    : `(dataset status: ${String(datasetStatus ?? "None")})`;
+  const warningNote = sizeWarning === null ? "" : ` Warning: ${sizeWarning}`;
   return {
-    summary: `Uploaded ${meta.filename} (${meta.totalBytes} bytes) and started dataset ingest job ${String(jobId)}.`,
+    summary:
+      `Uploaded ${meta.filename} (${meta.totalBytes} bytes) and started dataset ingest job ` +
+      `${String(jobId ?? "None")} for dataset '${refSlug}' for owner '${resolvedOwner}' ` +
+      `${statusNote}. ` +
+      `Use datasets_get to follow up; ingest completes when lastIngestJobId matches ${String(jobId ?? "None")}.${warningNote}`,
     data: {
-      datasetId,
+      jobId,
+      status: ingest.status ?? null,
+      conflictPolicy,
+      targetSplit: options.targetSplit ?? null,
+      owner: resolvedOwner,
+      dataset: refSlug,
+      datasetStatus,
+      lastIngestJobId: statusFields.lastIngestJobId ?? null,
+      lastIngestSummary: statusFields.lastIngestSummary ?? null,
+      processingError: statusFields.processingError ?? null,
+      errorCount: statusFields.errorCount ?? null,
       filename: meta.filename,
       bytes: meta.totalBytes,
-      sessionId: upload.sessionId,
-      ingest,
+      sessionId,
+      sizeWarning,
     },
   };
 }
