@@ -1,7 +1,11 @@
 /** Model tools. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyModelId, resolveProject } from "../resolve.js";
+import {
+  resolveLegacyModelId,
+  resolveModel,
+  resolveProject,
+} from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
 
@@ -39,23 +43,90 @@ export async function modelsList(
   };
 }
 
-/** Get one model by id, or by slug within a project. */
+/** Get one model by owner/project/model, ul:// URI, or slug with a project.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and reads
+ * the live owner-scoped endpoint. The API nests the model under `model`
+ * with `isOwner` beside it; both are surfaced. The curated model carries
+ * the database id training start needs, the training state callers depend
+ * on, and the recorded compute cost when present. Evaluation plots are
+ * deliberately omitted: the platform disclaims their shape as unstable.
+ */
 export async function modelsGet(
   client: UltralyticsClient,
   model: string,
   project?: string,
 ): Promise<NormalizedToolResult> {
-  const modelId = await resolveLegacyModelId(client, model, project);
-  const data = await client.get(`/models/${modelId}`);
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}`,
+  );
   const record = asRecord(data);
-  const item = "model" in record ? record.model : data;
-  const fields = asRecord(item);
-  const info = asRecord(fields.modelInfo);
+  const fields = asRecord(record.model);
+  const isOwner = typeof record.isOwner === "boolean" ? record.isOwner : null;
+  const datasetRecord = asRecord(fields.dataset);
+  const dataset =
+    fields.dataset && typeof fields.dataset === "object"
+      ? {
+          owner: datasetRecord.owner ?? null,
+          dataset: datasetRecord.dataset ?? null,
+        }
+      : null;
+  const computeRecord = asRecord(fields.computeCost);
+  const computeCost =
+    fields.computeCost && typeof fields.computeCost === "object"
+      ? computeRecord
+      : null;
+  const slug = fields.model ?? null;
+  const name = fields.name ?? null;
+  const task = fields.task ?? null;
+  const status = fields.status ?? null;
+  const epochs = fields.epochs ?? null;
+  const bestEpoch = fields.bestEpoch ?? null;
+  const bestFitness = fields.bestFitness ?? null;
+  const hasWeights = fields.hasWeights ?? null;
+  const datasetRef =
+    dataset &&
+    typeof dataset.owner === "string" &&
+    typeof dataset.dataset === "string"
+      ? `${dataset.owner}/${dataset.dataset}`
+      : "None";
+  const costNote =
+    computeCost &&
+    computeCost.totalCost !== undefined &&
+    computeCost.totalCost !== null
+      ? ` Compute cost ${String(computeCost.totalCost)} (${String(computeCost.gpuType ?? "unknown")}).`
+      : "";
   return {
     summary:
-      `Model '${pyField(fields.name)}' [${pyField(fields.task)}] status=${pyField(fields.status)}, ` +
-      `epochs=${pyField(fields.epochs)}, params=${pyField(info.parameters)}.`,
-    data: item,
+      `Model '${pyField(slug)}' for owner '${resolvedOwner}' project '${resolved.project}': ` +
+      `'${pyField(name)}' [${pyField(task)}] status=${pyField(status)}, ` +
+      `epochs=${pyField(epochs)}, bestEpoch=${pyField(bestEpoch)}, ` +
+      `bestFitness=${pyField(bestFitness)}, hasWeights=${pyField(hasWeights)}, ` +
+      `dataset=${datasetRef}.${costNote}`,
+    data: {
+      model: {
+        id: fields.id ?? null,
+        name,
+        slug,
+        owner: fields.owner ?? null,
+        project: fields.project ?? null,
+        visibility: fields.visibility ?? null,
+        task,
+        status,
+        epochs,
+        bestEpoch,
+        bestFitness,
+        hasWeights,
+        dataset,
+        datasetId: fields.datasetId ?? null,
+        datasetVersion: fields.datasetVersion ?? null,
+        computeCost,
+      },
+      isOwner,
+    },
   };
 }
 

@@ -142,49 +142,211 @@ describe("modelsList", () => {
 });
 
 describe("modelsGet", () => {
-  test("returns the model record and a summary", async () => {
-    const id = "a".repeat(24);
-    const { client } = routeClient((path) => {
-      if (path === `/api/models/${id}`) {
-        return jsonResponse({
-          model: {
-            _id: id,
-            name: "YOLO",
-            task: "detect",
-            status: "completed",
-            epochs: 100,
-            modelInfo: { parameters: 123 },
-          },
-        });
+  const liveModel = {
+    id: "c".repeat(24),
+    owner: "alice",
+    project: "road",
+    model: "exp",
+    name: "exp",
+    visibility: "private",
+    task: "detect",
+    status: "completed",
+    epochs: 100,
+    bestEpoch: 79,
+    bestFitness: 0.40382,
+    hasWeights: true,
+    dataset: { owner: "alice", dataset: "road-data" },
+    datasetId: "d".repeat(24),
+    computeCost: {
+      gpuType: "rtx-pro-6000",
+      pricePerHour: 1.89,
+      totalCost: 0.13,
+      durationMs: 238633,
+    },
+    metrics: { mAP50: 0.7 },
+    plots: [{ type: "pr_curve" }],
+    trainResults: [{ epoch: 0 }],
+  };
+
+  test("fetches through the owner/project/model path for a full reference", async () => {
+    const { client, calls } = routeClient((path) =>
+      path === "/api/models/alice/road/exp"
+        ? jsonResponse({ model: liveModel, isOwner: true })
+        : jsonResponse({}, 404),
+    );
+
+    const result = await modelsGet(client, "alice/road/exp");
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/models/alice/road/exp",
+    ]);
+    expect(result.data).toEqual({
+      model: {
+        id: "c".repeat(24),
+        name: "exp",
+        slug: "exp",
+        owner: "alice",
+        project: "road",
+        visibility: "private",
+        task: "detect",
+        status: "completed",
+        epochs: 100,
+        bestEpoch: 79,
+        bestFitness: 0.40382,
+        hasWeights: true,
+        dataset: { owner: "alice", dataset: "road-data" },
+        datasetId: "d".repeat(24),
+        datasetVersion: null,
+        computeCost: {
+          gpuType: "rtx-pro-6000",
+          pricePerHour: 1.89,
+          totalCost: 0.13,
+          durationMs: 238633,
+        },
+      },
+      isOwner: true,
+    });
+    expect(result.summary).toContain("Model 'exp' for owner 'alice'");
+    expect(result.summary).toContain("project 'road'");
+    expect(result.summary).toContain("hasWeights=true");
+    expect(result.summary).toContain("0.13");
+  });
+
+  test("accepts a ul:// model URI without an account lookup", async () => {
+    const { client, calls } = routeClient((path) =>
+      path === "/api/models/alice/road/exp"
+        ? jsonResponse({ model: liveModel, isOwner: true })
+        : jsonResponse({}, 404),
+    );
+
+    await modelsGet(client, "ul://alice/road/exp");
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/models/alice/road/exp",
+    ]);
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/models/alice/road/exp") {
+        return jsonResponse({ model: liveModel, isOwner: true });
       }
       return jsonResponse({}, 404);
     });
 
-    const result = await modelsGet(client, id);
-    expect(result.summary).toBe(
-      "Model 'YOLO' [detect] status=completed, epochs=100, params=123.",
-    );
-    expect(result.data).toEqual({
-      _id: id,
-      name: "YOLO",
-      task: "detect",
-      status: "completed",
-      epochs: 100,
-      modelInfo: { parameters: 123 },
-    });
+    const result = await modelsGet(client, "exp", "road");
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/models/alice/road/exp",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
   });
 
-  test("renders missing fields like Python (None) for sparse payloads", async () => {
-    const id = "a".repeat(24);
+  test("leaves evaluation plots and training history out of the result", async () => {
     const { client } = routeClient((path) =>
-      path === `/api/models/${id}`
-        ? jsonResponse({ model: {} })
+      path === "/api/models/alice/road/exp"
+        ? jsonResponse({ model: liveModel, isOwner: false })
         : jsonResponse({}, 404),
     );
-    const result = await modelsGet(client, id);
-    expect(result.summary).toBe(
-      "Model 'None' [None] status=None, epochs=None, params=None.",
+
+    const result = await modelsGet(client, "alice/road/exp");
+
+    expect(JSON.stringify(result.data)).not.toContain("plots");
+    expect(JSON.stringify(result.data)).not.toContain("trainResults");
+    expect(JSON.stringify(result.data)).not.toContain("metrics/mAP50");
+    expect(result.data).toMatchObject({ isOwner: false });
+  });
+
+  test("surfaces null compute cost and dataset version when absent", async () => {
+    const sparse = {
+      id: "e".repeat(24),
+      owner: "alice",
+      project: "road",
+      model: "bare",
+      name: "bare",
+      task: "detect",
+      status: "untrained",
+      epochs: 0,
+      hasWeights: false,
+    };
+    const { client } = routeClient((path) =>
+      path === "/api/models/alice/road/bare"
+        ? jsonResponse({ model: sparse, isOwner: true })
+        : jsonResponse({}, 404),
     );
+
+    const result = await modelsGet(client, "alice/road/bare");
+
+    expect(result.data).toEqual({
+      model: {
+        id: "e".repeat(24),
+        name: "bare",
+        slug: "bare",
+        owner: "alice",
+        project: "road",
+        visibility: null,
+        task: "detect",
+        status: "untrained",
+        epochs: 0,
+        bestEpoch: null,
+        bestFitness: null,
+        hasWeights: false,
+        dataset: null,
+        datasetId: null,
+        datasetVersion: null,
+        computeCost: null,
+      },
+      isOwner: true,
+    });
+    expect(result.summary).toContain("hasWeights=false");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = routeClient(() => jsonResponse({}, 500));
+    await expect(modelsGet(client, "a".repeat(24))).rejects.toThrow(
+      /not addressable.*owner\/project\/model.*ul:\/\//s,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("requires a project for a bare slug", async () => {
+    const { client, calls } = routeClient(() => jsonResponse({}, 500));
+    await expect(modelsGet(client, "exp")).rejects.toThrow(
+      /project is required/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("surfaces the API message for a model that does not exist", async () => {
+    const { client } = routeClient((path) =>
+      path === "/api/models/alice/road/missing"
+        ? jsonResponse({ error: "Model not found" }, 404)
+        : jsonResponse({}, 404),
+    );
+    await expect(modelsGet(client, "alice/road/missing")).rejects.toThrow(
+      /Model not found/,
+    );
+  });
+
+  test("attaches the static not-found hint through the tool", async () => {
+    // Live capture: GET /api/models/{owner}/{project}/{bad-model} -> 404 {"error":"Model not found"}
+    const { client } = routeClient((path) =>
+      path === "/api/models/alice/road/missing"
+        ? jsonResponse({ error: "Model not found" }, 404)
+        : jsonResponse({}, 404),
+    );
+    const err = await modelsGet(client, "alice/road/missing").catch(
+      (e) => e as Error,
+    );
+    expect(String(err)).toMatch(/HTTP 404/);
+    expect(String(err)).toMatch(/Model not found/);
+    expect(String(err)).toMatch(/owner may not exist/);
+    expect(String(err)).toMatch(/resource may not exist/);
+    expect(String(err)).toMatch(/API key may lack access/);
   });
 });
 
