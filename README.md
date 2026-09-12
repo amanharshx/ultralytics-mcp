@@ -318,12 +318,15 @@ npm run test:live
 
 Reads the key from `ULTRALYTICS_API_KEY` (same as the server). Skipped
 silently when unset and excluded from `npm test`. Creates one disposable
-`mcp-smoke-*` project and one disposable `mcp-smoke-ds-*` dataset and
-deletes them again, even on failure. Covers the project tools and the
+`mcp-smoke-*` project and disposable `mcp-smoke-ds-*` datasets and
+deletes them again, even on failure. Covers the project tools, the
 dataset resource tools (list, get, create, images, export, version create,
-and delete). The version snapshot coverage needs `ULTRALYTICS_SMOKE_DATASET_REF`
-set to `owner/slug` for a ready dataset with ingested images, since a
-disposable dataset cannot gain content until the ingest tools land. It skips
+and delete), and the dataset upload and ingest flow: a two-image folder
+upload exercises the signed-upload chain (signed URL, storage transfer,
+completion, ingest), pins the completion gate and the runtime storage
+headers, and polls the ingest to a terminal status. The version snapshot
+coverage needs `ULTRALYTICS_SMOKE_DATASET_REF`
+set to `owner/slug` for a ready dataset with ingested images. It skips
 without the variable. Re-creating an unchanged version is a no-op, but an
 opted-in fixture that changed since its last snapshot gains an immutable
 snapshot version.
