@@ -1,78 +1,137 @@
 {
   "tool": "models_get",
   "args": {
-    "model": "yolo",
-    "project": "user/road"
+    "model": "example-owner/example-project-1/example-model-1"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/projects",
-      "query": {
-        "username": "user"
-      },
-      "response": {
-        "status": 200,
-        "json": {
-          "projects": [
-            {
-              "_id": "bbbbbbbbbbbbbbbbbbbbbbbb",
-              "slug": "road",
-              "username": "user"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/api/models",
-      "query": {
-        "projectId": "bbbbbbbbbbbbbbbbbbbbbbbb"
-      },
-      "response": {
-        "status": 200,
-        "json": {
-          "models": [
-            {
-              "_id": "cccccccccccccccccccccccc",
-              "slug": "yolo"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/api/models/cccccccccccccccccccccccc",
+      "path": "/api/models/example-owner/example-project-1/example-model-1",
       "response": {
         "status": 200,
         "json": {
           "model": {
-            "_id": "cccccccccccccccccccccccc",
-            "name": "YOLO",
+            "id": "000000000000000000000001",
+            "owner": "example-owner",
+            "project": "example-project-1",
+            "model": "example-model-1",
+            "name": "example-model-1",
+            "visibility": "private",
             "task": "detect",
             "status": "completed",
             "epochs": 100,
-            "modelInfo": {
-              "parameters": 123
-            }
-          }
+            "bestEpoch": 79,
+            "bestFitness": 0.40382,
+            "hasWeights": true,
+            "dataset": {
+              "owner": "example-owner",
+              "dataset": "example-dataset-1"
+            },
+            "datasetId": "000000000000000000000002",
+            "computeCost": {
+              "gpuType": "rtx-pro-6000",
+              "gpuDisplayName": "RTX PRO 6000",
+              "pricePerHour": 1.89,
+              "totalCost": 0.13,
+              "durationMs": 238633
+            },
+            "metrics": {
+              "mAP50": 0.705595,
+              "mAP50-95": 0.403904,
+              "precision": 0.655157,
+              "recall": 0.725099
+            },
+            "plots": [
+              {
+                "type": "pr_curve",
+                "x": [
+                  0,
+                  0.01,
+                  0.02
+                ],
+                "y": [
+                  [
+                    1,
+                    1,
+                    1
+                  ],
+                  [
+                    1,
+                    1,
+                    1
+                  ]
+                ],
+                "ap": [
+                  [
+                    0.600842,
+                    0.600842,
+                    0.469645
+                  ],
+                  [
+                    0.752775,
+                    0.657605,
+                    0.609845
+                  ]
+                ]
+              }
+            ],
+            "trainResults": [
+              {
+                "epoch": 0,
+                "metrics": {
+                  "train/box_loss": 1.56901,
+                  "train/cls_loss": 5.94392,
+                  "train/dfl_loss": 0.01678,
+                  "metrics/precision(B)": 0.00708,
+                  "metrics/recall(B)": 0.21823,
+                  "metrics/mAP50(B)": 0.01798,
+                  "metrics/mAP50-95(B)": 0.0058,
+                  "val/box_loss": 1.84221,
+                  "val/cls_loss": 5.78706,
+                  "val/dfl_loss": 0.02486,
+                  "lr": 0.000033
+                },
+                "fitness": 0.0058,
+                "timestamp": "2026-05-26T10:05:49.122Z"
+              }
+            ]
+          },
+          "isOwner": true
         }
       }
     }
   ],
   "expected": {
-    "summary": "Model 'YOLO' [detect] status=completed, epochs=100, params=123.",
+    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': 'example-model-1' [detect] status=completed, epochs=100, bestEpoch=79, bestFitness=0.40382, hasWeights=true, dataset=example-owner/example-dataset-1. Compute cost 0.13 (rtx-pro-6000).",
     "data": {
-      "_id": "cccccccccccccccccccccccc",
-      "name": "YOLO",
-      "task": "detect",
-      "status": "completed",
-      "epochs": 100,
-      "modelInfo": {
-        "parameters": 123
-      }
+      "model": {
+        "id": "000000000000000000000001",
+        "name": "example-model-1",
+        "slug": "example-model-1",
+        "owner": "example-owner",
+        "project": "example-project-1",
+        "visibility": "private",
+        "task": "detect",
+        "status": "completed",
+        "epochs": 100,
+        "bestEpoch": 79,
+        "bestFitness": 0.40382,
+        "hasWeights": true,
+        "dataset": {
+          "owner": "example-owner",
+          "dataset": "example-dataset-1"
+        },
+        "datasetId": "000000000000000000000002",
+        "datasetVersion": null,
+        "computeCost": {
+          "gpuType": "rtx-pro-6000",
+          "gpuDisplayName": "RTX PRO 6000",
+          "pricePerHour": 1.89,
+          "totalCost": 0.13,
+          "durationMs": 238633
+        }
+      },
+      "isOwner": true
     }
   }
 }

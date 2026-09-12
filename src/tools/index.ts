@@ -677,11 +677,14 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "models_get",
     registrationGroup: "read",
     stateChanging: false,
-    description: "Get one model by id, or by slug plus project.",
+    description:
+      "Get details for one model by owner/project/model, ul://owner/project/model, or slug with a project.",
     inputSchema: {
       model: z
         .string()
-        .describe("Model id, or slug when project is also provided."),
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
       project: z
         .string()
         .optional()
