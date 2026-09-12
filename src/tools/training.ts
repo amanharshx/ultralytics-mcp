@@ -8,6 +8,7 @@ import {
   resolveLegacyDatasetId,
   resolveLegacyModelId,
   resolveLegacyProjectId,
+  resolveModel,
 } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, pyField } from "./shared.js";
@@ -156,7 +157,21 @@ interface TrainingMonitorOptions {
   historyLastN?: number;
 }
 
-/** Report model training status using private-safe model trainResults. */
+/** Report a model's training status and progress.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and reads
+ * the model record and its training job through the live owner-scoped
+ * endpoints. Per-epoch history and key metrics come from the model record's
+ * `trainResults`; live progress and timing come from the training job. A
+ * never-trained model reports a `pending` or `untrained` job with null args
+ * and metrics, while an absent job (null or a 404 from the training endpoint) falls back
+ * to `trainResults`-derived progress. The job status is surfaced verbatim so
+ * a cancelled or failed run stays distinguishable from a running one. The
+ * recorded compute cost and the training error are surfaced when present.
+ * Evaluation plots are deliberately omitted: the platform disclaims their
+ * shape as unstable.
+ */
 export async function trainingMonitor(
   client: UltralyticsClient,
   model: string,
@@ -170,16 +185,17 @@ export async function trainingMonitor(
   } = options;
   validateHistoryLastN(historyLastN);
 
-  const modelId = await resolveLegacyModelId(client, model, project);
-  const data = await client.get(`/models/${modelId}`);
-  const record = asRecord(data);
-  const item = asRecord("model" in record ? record.model : data);
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const basePath = `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}`;
+  const data = await client.get(basePath);
+  const fields = asRecord(asRecord(data).model);
 
-  const status = item.status ?? null;
-  const totalEpochs = item.epochs;
+  const status = fields.status ?? null;
+  const totalEpochs = fields.epochs;
   const hasTotal = typeof totalEpochs === "number" && totalEpochs > 0;
-  const trainResults = Array.isArray(item.trainResults)
-    ? item.trainResults
+  const trainResults = Array.isArray(fields.trainResults)
+    ? fields.trainResults
     : [];
   const epochsDone = trainResults.length;
   const latestMetrics =
@@ -199,70 +215,102 @@ export async function trainingMonitor(
       metrics: asRecord(record.metrics),
     };
   });
+  const computeCost =
+    fields.computeCost && typeof fields.computeCost === "object"
+      ? asRecord(fields.computeCost)
+      : null;
+  const modelTrainingError = fields.trainingError ?? null;
 
-  let progressPct: number | null = null;
-  let progressText: string | null = null;
-  let etaMs: number | null = null;
-  let source = "model.trainResults";
-  let timing: Record<string, unknown> | null = null;
-  let instanceStatus: Record<string, unknown> | null = null;
-
+  let job: Record<string, unknown> | null = null;
   try {
-    const trainingData = await client.get(`/models/${modelId}/training`);
-    const trainingRecord = asRecord(trainingData);
-    const job = asRecord(trainingRecord.job);
+    const trainingData = await client.get(`${basePath}/training`);
+    const rawJob = asRecord(trainingData).job;
+    job =
+      rawJob && typeof rawJob === "object"
+        ? (rawJob as Record<string, unknown>)
+        : null;
+  } catch (error) {
+    if (!(error instanceof UltralyticsApiError) || error.statusCode !== 404) {
+      throw error;
+    }
+    job = null;
+  }
+
+  const deriveFromHistory = (): {
+    progressPct: number | null;
+    progressText: string | null;
+  } => {
+    if (!hasTotal) {
+      return { progressPct: null, progressText: null };
+    }
+    const progressPct =
+      Math.round(((100 * epochsDone) / (totalEpochs as number)) * 10) / 10;
+    return { progressPct, progressText: formatPercent(progressPct) };
+  };
+
+  let progressPct: number | null;
+  let progressText: string | null;
+  let etaMs: number | null;
+  let source: string;
+  let timing: Record<string, unknown> | null;
+  let jobStatus: unknown;
+  let trainingError: unknown;
+  if (job === null) {
+    jobStatus = null;
+    trainingError = modelTrainingError;
+    timing = null;
+    source = "model.trainResults";
+    ({ progressPct, progressText } = deriveFromHistory());
+    etaMs = null;
+  } else {
     const progress = asRecord(job.progress);
     const timingRecord = asRecord(job.timing);
-    progressPct = (progress.percentage as number | undefined) ?? null;
-    progressText = progressPct === null ? null : String(progressPct);
-    etaMs = (timingRecord.etaMs as number | undefined) ?? null;
-    source = "models/{id}/training";
+    jobStatus = job.status ?? null;
+    if (typeof progress.percentage === "number") {
+      progressPct = progress.percentage;
+      progressText = String(progress.percentage);
+    } else {
+      ({ progressPct, progressText } = deriveFromHistory());
+    }
+    etaMs = typeof timingRecord.etaMs === "number" ? timingRecord.etaMs : null;
+    source = "models/{owner}/{project}/{model}/training";
     timing = {
       etaMs: timingRecord.etaMs ?? null,
       timePerEpochMs: timingRecord.timePerEpochMs ?? null,
       elapsedMs: timingRecord.elapsedMs ?? null,
     };
-    instanceStatus =
-      "instanceStatus" in trainingRecord
-        ? asRecord(trainingRecord.instanceStatus)
-        : null;
-  } catch (error) {
-    if (
-      !(error instanceof UltralyticsApiError) ||
-      ![401, 403, 404].includes(error.statusCode)
-    ) {
-      throw error;
-    }
-    if (hasTotal) {
-      progressPct =
-        Math.round(((100 * epochsDone) / (totalEpochs as number)) * 10) / 10;
-      progressText = formatPercent(progressPct);
-    }
+    trainingError = job.error ?? modelTrainingError ?? null;
   }
 
   const totalDisplay = hasTotal ? (totalEpochs as number) : "?";
   const summary =
-    `Training status=${status}; epoch ${epochsDone}/${totalDisplay}` +
+    `Model '${resolved.model}' for owner '${resolvedOwner}' project '${resolved.project}': ` +
+    `training status=${pyField(status)} job=${pyField(jobStatus)}; epoch ${epochsDone}/${totalDisplay}` +
     (progressPct !== null ? `; ~${progressText}%` : "") +
     (etaMs ? `; ETA ${Math.round(etaMs / 60000)}min` : "");
 
   return {
     summary,
     data: {
-      modelId,
+      owner: resolvedOwner,
+      project: resolved.project,
+      model: resolved.model,
+      id: fields.id ?? null,
       status,
+      jobStatus,
       epochsDone,
       totalEpochs: hasTotal ? (totalEpochs as number) : null,
       progressPercentage: progressPct,
       etaMs,
-      bestEpoch: item.bestEpoch ?? null,
-      bestFitness: item.bestFitness ?? null,
+      bestEpoch: fields.bestEpoch ?? null,
+      bestFitness: fields.bestFitness ?? null,
       latestMetrics: includeMetrics ? latestMetrics : keyMetrics,
+      computeCost,
+      trainingError,
       progressSource: source,
       ...(includeMetrics
         ? {
             timing,
-            instanceStatus,
           }
         : {}),
       ...(includeHistory ? { metricsHistory } : {}),

@@ -394,8 +394,8 @@ Metadata: read-only, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `model` | string | Yes | Model id, or slug when project is also provided. |
-| `project` | string | No |  |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `project` | string | No | Project ref required when model is given by slug. |
 | `include_metrics` | boolean | No |  |
 | `include_history` | boolean | No |  |
 | `history_last_n` | number | No |  |

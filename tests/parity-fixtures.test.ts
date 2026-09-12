@@ -365,6 +365,8 @@ describe("parity fixtures", () => {
         "training_monitor_history.json",
         "training_monitor_metrics.json",
         "training_monitor_private.json",
+        "training_monitor_cancelled.json",
+        "training_monitor_untrained.json",
       ].sort(),
     );
   });
