@@ -961,16 +961,18 @@ export async function datasetVersionCreate(
   );
   const version = data.version ?? null;
   const reused = data.reused ?? null;
-  const summary =
-    reused === true
-      ? `Dataset version ${String(version)} for dataset '${refSlug}' for owner '${resolvedOwner}' ` +
-        `already existed (no changes since the previous snapshot). ` +
-        `This link is time-limited and will expire.`
-      : reused === false
-        ? `Created dataset version ${String(version)} for dataset '${refSlug}' for owner '${resolvedOwner}'. ` +
-          `This link is time-limited and will expire.`
-        : `Dataset version ${String(version)} for dataset '${refSlug}' for owner '${resolvedOwner}'. ` +
-          `This link is time-limited and will expire.`;
+  const subject = `dataset '${refSlug}' for owner '${resolvedOwner}'`;
+  const expiring = `This link is time-limited and will expire.`;
+  let summary: string;
+  if (reused === true) {
+    summary =
+      `Dataset version ${String(version)} for ${subject} ` +
+      `already existed (no changes since the previous snapshot). ${expiring}`;
+  } else if (reused === false) {
+    summary = `Created dataset version ${String(version)} for ${subject}. ${expiring}`;
+  } else {
+    summary = `Dataset version ${String(version)} for ${subject}. ${expiring}`;
+  }
   return {
     summary,
     data: {
