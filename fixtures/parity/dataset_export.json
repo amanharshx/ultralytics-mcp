@@ -30,7 +30,7 @@
       "response": {
         "status": 200,
         "json": {
-          "downloadUrl": "https://storage.googleapis.com/example-exports/example-dataset-1.ndjson",
+          "downloadUrl": "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1.ndjson",
           "cached": false
         }
       }
@@ -39,7 +39,7 @@
   "expected": {
     "summary": "Export link for dataset 'example-dataset-1' for owner 'example-owner' (version latest, cached=false). This link is time-limited and will expire.",
     "data": {
-      "downloadUrl": "https://storage.googleapis.com/example-exports/example-dataset-1.ndjson",
+      "downloadUrl": "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1.ndjson",
       "cached": false,
       "version": null
     }

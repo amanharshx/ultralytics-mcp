@@ -883,14 +883,24 @@ describe("datasetExport", () => {
     });
   }
 
+  function clientForExportError(path: string, message: string) {
+    return routeClient((actual) =>
+      actual === path
+        ? jsonResponse({ error: message }, 404)
+        : jsonResponse({}, 404),
+    );
+  }
+
+  function expectExportPaths(calls: Array<{ path: string }>, paths: string[]) {
+    expect(calls.map((call) => call.path)).toEqual(paths);
+  }
+
   test("fetches the current export through the owner-scoped path", async () => {
     const { client, calls } = clientForExport(liveCurrentResponse);
 
     const result = await datasetExport(client, { dataset: "alice/cars" });
 
-    expect(calls.map((call) => call.path)).toEqual([
-      "/api/datasets/alice/cars/export",
-    ]);
+    expectExportPaths(calls, ["/api/datasets/alice/cars/export"]);
     expect(calls[0].params.get("v")).toBeNull();
     expect(result.summary).toBe(
       "Export link for dataset 'cars' for owner 'alice' (version latest, cached=false). " +
@@ -911,12 +921,12 @@ describe("datasetExport", () => {
       version: 1,
     });
 
-    expect(calls.map((call) => call.path)).toEqual([
-      "/api/datasets/alice/cars/export",
-    ]);
+    expectExportPaths(calls, ["/api/datasets/alice/cars/export"]);
     expect(calls[0].params.get("v")).toBe("1");
-    expect(result.summary).toContain("(version 1,");
-    expect(result.summary).toContain("time-limited");
+    expect(result.summary).toBe(
+      "Export link for dataset 'cars' for owner 'alice' (version 1). " +
+        "This link is time-limited and will expire.",
+    );
     expect(result.data).toEqual({
       downloadUrl:
         "https://storage.googleapis.com/example-exports/version-example/cars-v1.ndjson",
@@ -932,7 +942,7 @@ describe("datasetExport", () => {
 
     const result = await datasetExport(client, { dataset: "cars" });
 
-    expect(calls.map((call) => call.path)).toEqual([
+    expectExportPaths(calls, [
       "/api/account/summary",
       "/api/datasets/alice/cars/export",
     ]);
@@ -944,9 +954,7 @@ describe("datasetExport", () => {
 
     const result = await datasetExport(client, { dataset: "ul://alice/cars" });
 
-    expect(calls.map((call) => call.path)).toEqual([
-      "/api/datasets/alice/cars/export",
-    ]);
+    expectExportPaths(calls, ["/api/datasets/alice/cars/export"]);
     expect(result.summary).toContain("for owner 'alice'");
   });
 
@@ -970,24 +978,20 @@ describe("datasetExport", () => {
     "alice/missing",
     "ghost/cars",
   ])("surfaces the API message for %s", async (ref) => {
-    const { client } = routeClient((path) => {
-      if (path === `/api/datasets/${ref}/export`) {
-        return jsonResponse({ error: "Dataset not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
+    const { client } = clientForExportError(
+      `/api/datasets/${ref}/export`,
+      "Dataset not found",
+    );
     await expect(datasetExport(client, { dataset: ref })).rejects.toThrow(
       /Dataset not found/,
     );
   });
 
   test("surfaces the API message for a version that does not exist", async () => {
-    const { client } = routeClient((path) => {
-      if (path === "/api/datasets/alice/cars/export") {
-        return jsonResponse({ error: "Version not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
+    const { client } = clientForExportError(
+      "/api/datasets/alice/cars/export",
+      "Version not found",
+    );
     await expect(
       datasetExport(client, { dataset: "alice/cars", version: 999999 }),
     ).rejects.toThrow(/Version not found/);

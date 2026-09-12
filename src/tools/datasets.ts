@@ -908,18 +908,22 @@ export async function datasetExport(
       options.version !== undefined ? { v: options.version } : undefined,
     ),
   );
-  const versionLabel = String(options.version ?? data.version ?? "latest");
-  const cachedDisplay =
-    typeof data.cached === "boolean" ? String(data.cached) : "None";
+  const resolvedVersion = options.version ?? data.version ?? null;
+  const versionLabel =
+    resolvedVersion === null ? "latest" : String(resolvedVersion);
+  const detail =
+    typeof data.cached === "boolean"
+      ? `version ${versionLabel}, cached=${String(data.cached)}`
+      : `version ${versionLabel}`;
   return {
     summary:
       `Export link for dataset '${refSlug}' for owner '${resolvedOwner}' ` +
-      `(version ${versionLabel}, cached=${cachedDisplay}). ` +
+      `(${detail}). ` +
       `This link is time-limited and will expire.`,
     data: {
       downloadUrl: data.downloadUrl ?? null,
       cached: data.cached ?? null,
-      version: data.version ?? options.version ?? null,
+      version: resolvedVersion,
     },
   };
 }
