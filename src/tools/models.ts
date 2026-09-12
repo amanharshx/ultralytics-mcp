@@ -153,10 +153,10 @@ export async function modelsDelete(
       `project '${resolved.project}' (soft delete; restorable from trash; ` +
       `weights, training history, and exports removed only on permanent deletion).`,
     data: {
+      ...record,
       owner: resolvedOwner,
       project: resolved.project,
       model: resolved.model,
-      ...record,
     },
   };
 }
