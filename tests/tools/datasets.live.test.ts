@@ -1,4 +1,4 @@
-/** Live smoke test for the dataset resource tools.
+/** Live smoke test for the dataset tools.
  *
  * Fails when the platform changes its contract underneath us (paths,
  * statuses, or response field names). Skipped silently without a key so
@@ -13,9 +13,10 @@
  * ```
  *
  * The key is read from the `ULTRALYTICS_API_KEY` environment variable, the
- * same variable the server reads. Creates one disposable `mcp-smoke-ds-*`
- * dataset and deletes it again, even when an assertion fails. The recording
- * and cleanup harness is shared with the projects suite (live-harness.ts).
+ * same variable the server reads. Each test creates its own disposable
+ * `mcp-smoke-ds-*` dataset and deletes it again, even when an assertion
+ * fails. The recording and cleanup harness is shared with the projects
+ * suite (live-harness.ts).
  *
  * Version snapshots need ingested content, which a disposable dataset cannot
  * gain until the ingest tools land, so that coverage is a separate test
@@ -25,7 +26,18 @@
  * no intervening changes the create reuses the current version, but an
  * opted-in fixture that changed since its last snapshot gains an immutable,
  * non-destructive snapshot version that no endpoint can delete.
+ *
+ * The ingest coverage uploads two generated 128px PNGs through the folder
+ * tool, which exercises the shared signed-upload flow (signed URL, storage
+ * transfer, completion, ingest) that the file and video tools reuse. It
+ * stays fast by keeping the upload to two small images and polling the
+ * dataset until the submitted job id appears as the last completed one.
  */
+
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { deflateSync } from "node:zlib";
 
 import { describe, expect, test } from "vitest";
 import {
@@ -35,13 +47,16 @@ import {
   datasetsDelete,
   datasetsGet,
   datasetsList,
+  datasetUploadFolder,
   datasetVersionCreate,
 } from "../../src/tools/datasets.js";
 import {
   disposableSlug,
   lastStatus,
   type RecordedCall,
+  type RecordedUpload,
   recordingClient,
+  recordingClientWithUploads,
   withDisposableCleanup,
 } from "./live-harness.js";
 
@@ -56,8 +71,95 @@ const EXPECTED_STATUS = {
   images: 200,
   export: 200,
   versionCreate: 200,
+  signedUrl: 200,
+  complete: 200,
+  ingest: 201,
+  ingestGate: 400,
   delete: 200,
 } as const;
+
+/** PNG CRC table shared by the smoke-image generator below. */
+let smokeCrcTable: Uint32Array | null = null;
+
+function smokeCrc32(data: Uint8Array): number {
+  smokeCrcTable ??= (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      table[n] = c;
+    }
+    return table;
+  })();
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc = (smokeCrcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8)) >>> 0;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function smokePngChunk(type: string, data: Buffer): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(smokeCrc32(body));
+  return Buffer.concat([length, body, crc]);
+}
+
+/** Two generated images are enough to prove the ingest outcome fields.
+ *
+ * No ffmpeg or binary fixture is needed: a valid 128px truecolor PNG is
+ * built from Node's zlib. A 1px image ingests as skipped, so this stays at
+ * 128px, which the live API accepts as two added images.
+ */
+function makeSmokePng(
+  width: number,
+  height: number,
+  pixel: (x: number, y: number) => [number, number, number],
+): Buffer {
+  const stride = width * 3 + 1;
+  const raw = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * stride] = 0;
+    for (let x = 0; x < width; x++) {
+      const [r, g, b] = pixel(x, y);
+      raw[y * stride + 1 + x * 3] = r;
+      raw[y * stride + 1 + x * 3 + 1] = g;
+      raw[y * stride + 1 + x * 3 + 2] = b;
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    smokePngChunk("IHDR", ihdr),
+    smokePngChunk("IDAT", deflateSync(raw)),
+    smokePngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+/** Latest recorded status for one method and path suffix. */
+function statusFor(
+  records: RecordedCall[],
+  method: string,
+  pathSuffix: string,
+): number {
+  const match = records
+    .filter(
+      (record) => record.method === method && record.path.endsWith(pathSuffix),
+    )
+    .at(-1);
+  if (!match) {
+    throw new Error(`expected a recorded ${method} ${pathSuffix} call`);
+  }
+  return match.status;
+}
 
 describe.skipIf(!apiKey)("datasets live smoke", () => {
   test("version snapshots reuse the current version", async (ctx) => {
@@ -288,4 +390,226 @@ describe.skipIf(!apiKey)("datasets live smoke", () => {
       },
     );
   }, 120_000);
+
+  test("upload chain, completion gate, headers, and ingest outcome", async () => {
+    const records: RecordedCall[] = [];
+    const uploads: RecordedUpload[] = [];
+    const client = recordingClientWithUploads(
+      apiKey as string,
+      records,
+      uploads,
+    );
+    const owner = await client.getAccountOwner();
+    expect(lastStatus(records)).toBe(EXPECTED_STATUS.accountSummary);
+
+    // Two small images keep the check fast while proving the outcome fields.
+    const uploadDir = await mkdtemp(join(tmpdir(), "mcp-smoke-ds-up-"));
+    try {
+      await writeFile(
+        join(uploadDir, "smoke-a.png"),
+        makeSmokePng(128, 128, (x, y) => [
+          (x * 2) % 256,
+          (y * 2) % 256,
+          ((x + y) * 2) % 256,
+        ]),
+      );
+      await writeFile(
+        join(uploadDir, "smoke-b.png"),
+        makeSmokePng(128, 128, (x, y) => [
+          (x * 3 + 50) % 256,
+          (y * 3 + 80) % 256,
+          (x * y) % 256,
+        ]),
+      );
+
+      const slug = disposableSlug("mcp-smoke-ds-up");
+      const ref = `${owner}/${slug}`;
+      const encodedRef = `${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`;
+      await withDisposableCleanup(
+        "dataset",
+        ref,
+        async () => {
+          const cleanup = await datasetsDelete(client, ref);
+          const cleanupData = cleanup.data as Record<string, unknown>;
+          if (cleanupData.success !== true) {
+            throw new Error(
+              `cleanup delete reported success:false for '${ref}'`,
+            );
+          }
+        },
+        async () => {
+          const createdResult = await datasetsCreate(client, {
+            name: "MCP smoke dataset upload (disposable)",
+            dataset: slug,
+            task: "detect",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+          expect(createdResult.data).toMatchObject({
+            owner,
+            dataset: slug,
+          });
+
+          // The resolver does no I/O, so the signed-upload flow fetches the
+          // dataset to obtain its id first. Pin the id the flow depends on.
+          const rawDataset = (await client.get(`/datasets/${encodedRef}`)) as {
+            dataset?: unknown;
+          };
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
+          const datasetId = (rawDataset.dataset as Record<string, unknown>)?.id;
+          expect(typeof datasetId).toBe("string");
+
+          // A dedicated probe session keeps the gate assertion from
+          // consuming the session the upload tool later ingests. The
+          // platform exposes no session-delete endpoint: a signed URL
+          // without a transfer creates no GCS object and expires via
+          // expiresAt, so the dataset delete plus the local temp-dir
+          // removal is the complete cleanup.
+          const probeSigned = (await client.postJson("/upload/signed-url", {
+            assetType: "datasets",
+            assetId: datasetId,
+            filename: "smoke-probe.zip",
+            contentType: "application/zip",
+            totalBytes: 1024,
+          })) as Record<string, unknown>;
+          expect(statusFor(records, "POST", "/upload/signed-url")).toBe(
+            EXPECTED_STATUS.signedUrl,
+          );
+          expect(typeof probeSigned.sessionId).toBe("string");
+          expect((probeSigned.sessionId as string).length).toBeGreaterThan(0);
+          const probeUrl = String(
+            probeSigned.uploadUrl ?? probeSigned.url ?? "",
+          );
+          expect(probeUrl.startsWith("https://")).toBe(true);
+          expect(typeof probeSigned.expiresAt).toBe("string");
+          expect(
+            Number.isNaN(Date.parse(probeSigned.expiresAt as string)),
+          ).toBe(false);
+          expect(Date.parse(probeSigned.expiresAt as string) > Date.now()).toBe(
+            true,
+          );
+
+          // The runtime headers are what every upload tool sends with its
+          // storage transfer. A rename here breaks all three at once.
+          const probeHeaders = probeSigned.headers as Record<
+            string,
+            unknown
+          > | null;
+          expect(probeHeaders).not.toBeNull();
+          expect(typeof probeHeaders).toBe("object");
+          expect(probeHeaders?.["x-goog-if-generation-match"]).toBe("0");
+
+          // Completion gates ingest: a session that has not been completed
+          // is rejected with an explicit ordering message.
+          await expect(
+            client.postJson(`/datasets/${encodedRef}/ingest`, {
+              sessionId: probeSigned.sessionId,
+              conflictPolicy: "skip",
+            }),
+          ).rejects.toThrow(/not ready.*complete/i);
+          expect(statusFor(records, "POST", "/ingest")).toBe(
+            EXPECTED_STATUS.ingestGate,
+          );
+
+          // The probe ran no transfer, so it landed no asset: the dataset
+          // still holds no images before the real upload runs.
+          const beforeUpload = await datasetsGet(client, ref);
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
+          expect(
+            (beforeUpload.data as Record<string, unknown>).imageCount,
+          ).toBe(0);
+
+          // The full chain through the shared flow: signed URL, storage
+          // transfer, completion, and ingest.
+          const uploaded = await datasetUploadFolder(client, {
+            dataset: ref,
+            folderPath: uploadDir,
+            targetSplit: "train",
+          });
+          expect(statusFor(records, "POST", "/upload/signed-url")).toBe(
+            EXPECTED_STATUS.signedUrl,
+          );
+          expect(statusFor(records, "POST", "/upload/complete")).toBe(
+            EXPECTED_STATUS.complete,
+          );
+          expect(statusFor(records, "POST", "/ingest")).toBe(
+            EXPECTED_STATUS.ingest,
+          );
+
+          // The transfer actually sent both the runtime headers and the
+          // declared content type, without forwarding API credentials. A
+          // change here breaks every upload tool at once.
+          expect(uploads.length).toBeGreaterThan(0);
+          for (const upload of uploads) {
+            expect(upload.method).toBe("PUT");
+            expect(upload.url.startsWith("https://")).toBe(true);
+            expect(upload.contentType).toBe("application/zip");
+            expect(upload.generationMatch).toBe("0");
+            expect(upload.auth).toBeNull();
+          }
+          const uploadedData = uploaded.data as Record<string, unknown>;
+          expect(typeof uploadedData.jobId).toBe("string");
+          expect((uploadedData.jobId as string).length).toBeGreaterThan(0);
+          expect(uploadedData.status).toBe("queued");
+          expect(uploadedData.conflictPolicy).toBe("skip");
+          expect(uploadedData.targetSplit).toBe("train");
+          expect(typeof uploadedData.sessionId).toBe("string");
+          expect(typeof uploadedData.datasetStatus).toBe("string");
+          const jobId = uploadedData.jobId as string;
+
+          // Ingest runs asynchronously: the unambiguous completion signal
+          // is the submitted job id appearing as the last completed one.
+          const deadline = Date.now() + 150_000;
+          let terminal: Record<string, unknown> | null = null;
+          let polls = 0;
+          while (Date.now() < deadline) {
+            polls += 1;
+            const fetched = await datasetsGet(client, ref);
+            expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
+            const fields = fetched.data as Record<string, unknown>;
+            if (fields.lastIngestJobId === jobId) {
+              terminal = fields;
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 5_000));
+          }
+          if (terminal === null) {
+            throw new Error(
+              `ingest ${jobId} did not complete after ${polls} poll(s)`,
+            );
+          }
+          expect(terminal.status).toBe("ready");
+          expect(terminal.imageCount).toBe(2);
+          expect(terminal.errorCount).toBe(0);
+          // Absent when healthy: the API omits the field rather than
+          // sending an explicit null.
+          expect(terminal.processingError ?? null).toBeNull();
+          expect(terminal.lastIngestJobId).toBe(jobId);
+          expect(terminal.lastIngestSummary).toMatchObject({
+            added: 2,
+            errors: 0,
+          });
+
+          const imagesResult = await datasetImagesList(client, {
+            dataset: ref,
+            split: "train",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.images);
+          const imagesData = imagesResult.data as {
+            total: unknown;
+            images: unknown;
+          };
+          expect(imagesData.total).toBe(2);
+          expect(Array.isArray(imagesData.images)).toBe(true);
+          expect((imagesData.images as Array<unknown>).length).toBe(2);
+
+          const deleted = await datasetsDelete(client, ref);
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.delete);
+          const deletedData = deleted.data as Record<string, unknown>;
+          expect(deletedData.success).toBe(true);
+        },
+      );
+    } finally {
+      await rm(uploadDir, { recursive: true, force: true });
+    }
+  }, 180_000);
 });

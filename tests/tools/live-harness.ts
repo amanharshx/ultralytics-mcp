@@ -17,12 +17,18 @@ export interface RecordedCall {
   status: number;
 }
 
-/** Build a client that records one entry per HTTP call it makes. */
-export function recordingClient(
-  key: string,
-  records: RecordedCall[],
-): UltralyticsClient {
-  const recordingFetch = (async (url: string | URL, init: RequestInit = {}) => {
+export interface RecordedUpload {
+  url: string;
+  method: string;
+  contentType: string | null;
+  generationMatch: string | null;
+  contentLength: string | null;
+  auth: string | null;
+}
+
+/** One recording fetch shared by every live-smoke client. */
+function makeRecordingFetch(records: RecordedCall[]): typeof fetch {
+  return (async (url: string | URL, init: RequestInit = {}) => {
     const response = await fetch(url, init);
     records.push({
       method: (init.method ?? "GET").toUpperCase(),
@@ -31,7 +37,52 @@ export function recordingClient(
     });
     return response;
   }) as unknown as typeof fetch;
-  return new UltralyticsClient({ apiKey: key, fetchImpl: recordingFetch });
+}
+
+/** Build a client that records one entry per HTTP call it makes. */
+export function recordingClient(
+  key: string,
+  records: RecordedCall[],
+): UltralyticsClient {
+  return new UltralyticsClient({
+    apiKey: key,
+    fetchImpl: makeRecordingFetch(records),
+  });
+}
+
+/** Build a client that also records each storage PUT it makes.
+ *
+ * API calls are recorded exactly as `recordingClient` does. Storage
+ * transfers still run for real through the platform fetch, but their
+ * request headers are captured first so a live test can prove the runtime
+ * headers and content type were actually sent without forwarding API
+ * credentials.
+ */
+export function recordingClientWithUploads(
+  key: string,
+  records: RecordedCall[],
+  uploads: RecordedUpload[],
+): UltralyticsClient {
+  const recordingUploadFetch = (async (
+    url: string | URL,
+    init: RequestInit = {},
+  ) => {
+    const headers = new Headers(init.headers);
+    uploads.push({
+      url: String(url),
+      method: (init.method ?? "GET").toUpperCase(),
+      contentType: headers.get("Content-Type"),
+      generationMatch: headers.get("x-goog-if-generation-match"),
+      contentLength: headers.get("Content-Length"),
+      auth: headers.get("Authorization"),
+    });
+    return fetch(url, init);
+  }) as unknown as typeof fetch;
+  return new UltralyticsClient({
+    apiKey: key,
+    fetchImpl: makeRecordingFetch(records),
+    uploadFetchImpl: recordingUploadFetch,
+  });
 }
 
 /** Status of the most recent recorded call. */
