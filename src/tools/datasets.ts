@@ -615,7 +615,15 @@ const INGEST_CONFLICT_POLICIES: ReadonlySet<string> = new Set([
   "replace",
 ]);
 
-function validateIngestConflictPolicy(conflictPolicy?: string): string {
+/** Conflict policies the live ingest endpoint accepts. The platform default
+ * is undocumented, so tools always send one explicitly. Option inputs stay
+ * `string` because MCP arguments arrive unvalidated; this type names the
+ * validated value. */
+export type IngestConflictPolicy = "skip" | "keep_both" | "replace";
+
+function validateIngestConflictPolicy(
+  conflictPolicy?: string,
+): IngestConflictPolicy {
   const effective = conflictPolicy ?? "skip";
   if (!INGEST_CONFLICT_POLICIES.has(effective)) {
     const allowed = Array.from(INGEST_CONFLICT_POLICIES).sort().join(", ");
@@ -623,7 +631,7 @@ function validateIngestConflictPolicy(conflictPolicy?: string): string {
       `Unsupported conflictPolicy '${effective}'. Expected one of: ${allowed}.`,
     );
   }
-  return effective;
+  return effective as IngestConflictPolicy;
 }
 
 /** Start a remote URL ingest job for an existing dataset.
@@ -774,28 +782,23 @@ export async function datasetUploadFile(
     );
 
   let signed = await requestSigned();
-  let sessionId = String(signed.sessionId);
-  let uploadUrl = String(signed.uploadUrl ?? signed.url);
-  try {
+  const doUpload = async (upload: Record<string, unknown>): Promise<void> => {
     await client.uploadBytes(
-      uploadUrl,
+      String(upload.uploadUrl ?? upload.url),
       content,
       meta.contentType,
-      signedUploadHeaders(signed),
+      signedUploadHeaders(upload),
     );
+  };
+  try {
+    await doUpload(signed);
   } catch {
     // The storage precondition makes same-URL retry unreliable, so a fresh
     // session is correct either way.
     signed = await requestSigned();
-    sessionId = String(signed.sessionId);
-    uploadUrl = String(signed.uploadUrl ?? signed.url);
-    await client.uploadBytes(
-      uploadUrl,
-      content,
-      meta.contentType,
-      signedUploadHeaders(signed),
-    );
+    await doUpload(signed);
   }
+  const sessionId = String(signed.sessionId);
   await client.postJson("/upload/complete", { sessionId });
 
   const ingestPayload: Record<string, unknown> = {
@@ -812,15 +815,15 @@ export async function datasetUploadFile(
   // The ingest job is already queued at this point, so a transient failure
   // of the status lookup must not discard the issued job id and invite a
   // duplicate retry. Report the submission with unknown status instead.
-  let fields: Record<string, unknown> = {};
+  let statusFields: Record<string, unknown> = {};
   let statusLookupFailed = false;
   try {
     const statusRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
-    fields = asRecord(statusRecord.dataset);
+    statusFields = asRecord(statusRecord.dataset);
   } catch {
     statusLookupFailed = true;
   }
-  const datasetStatus = fields.status ?? null;
+  const datasetStatus = statusFields.status ?? null;
   const statusNote = statusLookupFailed
     ? `(dataset status: ${String(datasetStatus ?? "None")}; status lookup failed)`
     : `(dataset status: ${String(datasetStatus ?? "None")})`;
@@ -839,10 +842,10 @@ export async function datasetUploadFile(
       owner: resolvedOwner,
       dataset: refSlug,
       datasetStatus,
-      lastIngestJobId: fields.lastIngestJobId ?? null,
-      lastIngestSummary: fields.lastIngestSummary ?? null,
-      processingError: fields.processingError ?? null,
-      errorCount: fields.errorCount ?? null,
+      lastIngestJobId: statusFields.lastIngestJobId ?? null,
+      lastIngestSummary: statusFields.lastIngestSummary ?? null,
+      processingError: statusFields.processingError ?? null,
+      errorCount: statusFields.errorCount ?? null,
       filename: meta.filename,
       bytes: meta.totalBytes,
       sessionId,

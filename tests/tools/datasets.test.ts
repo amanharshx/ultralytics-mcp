@@ -2076,11 +2076,13 @@ describe("datasetUploadFile", () => {
       datasetResponse?: unknown;
       signedResponse?: unknown;
       completeResponse?: unknown;
+      completeStatus?: number;
       ingestResponse?: unknown;
       ingestStatus?: number;
       accountOwner?: string;
       uploadImpl?: typeof fetch;
       onUpload?: (headers: Headers, url: string) => void;
+      failStatusLookup?: boolean;
     } = {},
   ) {
     const calls: { url: string; method: string; body: unknown }[] = [];
@@ -2093,6 +2095,7 @@ describe("datasetUploadFile", () => {
       auth: string | null;
     }> = [];
     const signedResponse = options.signedResponse ?? liveSignedResponse;
+    let datasetGets = 0;
     const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
       let body: unknown;
       if (typeof init.body === "string") {
@@ -2111,13 +2114,26 @@ describe("datasetUploadFile", () => {
         return jsonResponse({ username: options.accountOwner });
       }
       if (parsed.pathname === "/api/datasets/alice/cars") {
+        datasetGets += 1;
+        if (options.failStatusLookup && datasetGets > 1) {
+          return jsonResponse({ error: "Server error" }, 500);
+        }
+        if (datasetGets === 1) {
+          const first = options.datasetResponse ?? {
+            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
+          };
+          return jsonResponse(first);
+        }
         return jsonResponse(options.datasetResponse ?? liveDatasetWithStatus);
       }
       if (parsed.pathname === "/api/upload/signed-url") {
         return jsonResponse(signedResponse);
       }
       if (parsed.pathname === "/api/upload/complete") {
-        return jsonResponse(options.completeResponse ?? liveCompleteResponse);
+        return jsonResponse(
+          options.completeResponse ?? liveCompleteResponse,
+          options.completeStatus ?? 200,
+        );
       }
       if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
         return jsonResponse(
@@ -2334,13 +2350,56 @@ describe("datasetUploadFile", () => {
     expect(result.data).toMatchObject({ sessionId: "session_new" });
   });
 
+  test("completes the upload session before starting ingest, in order", async () => {
+    const filePath = await writeArchive();
+    const { client, calls } = clientForUpload();
+    await datasetUploadFile(client, {
+      dataset: "alice/cars",
+      filePath,
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      `${BASE}/datasets/alice/cars`,
+      `${BASE}/upload/signed-url`,
+      `${BASE}/upload/complete`,
+      `${BASE}/datasets/alice/cars/ingest`,
+      `${BASE}/datasets/alice/cars`,
+    ]);
+  });
+
+  test("never starts ingest when completion is rejected", async () => {
+    const filePath = await writeArchive();
+    // Live capture: ingest on an uncompleted session is rejected with 400
+    // "Upload session not ready (status: pending). Call
+    // /api/upload/complete first." Completion is therefore a hard gate: when
+    // it fails, the tool surfaces the error instead of ingesting.
+    const { client, calls } = clientForUpload({
+      completeResponse: {
+        error:
+          "Upload session not ready (status: pending). Call /api/upload/complete first.",
+      },
+      completeStatus: 400,
+    });
+    await expect(
+      datasetUploadFile(client, {
+        dataset: "alice/cars",
+        filePath,
+      }),
+    ).rejects.toThrow(/Upload session not ready/);
+    expect(
+      calls.some((call) => call.url.endsWith("/datasets/alice/cars/ingest")),
+    ).toBe(false);
+  });
+
   test("warns rather than blocks when the archive exceeds the free-tier limit", async () => {
     const { archiveSizeWarning } = await import("../../src/tools/datasets.js");
-    const small = archiveSizeWarning("dataset.zip", 7);
-    expect(small).toBeNull();
-    const bigBytes = 10 * 1024 * 1024 * 1024 + 1;
+    const limitBytes = 10 * 1024 * 1024 * 1024;
+    expect(archiveSizeWarning("dataset.zip", 7)).toBeNull();
+    expect(archiveSizeWarning("dataset.zip", limitBytes)).toBeNull();
+    const bigBytes = limitBytes + 1;
     const warning = archiveSizeWarning("dataset.zip", bigBytes);
     expect(typeof warning).toBe("string");
+    expect(warning).toContain("dataset.zip");
+    expect(warning).toContain(String(bigBytes));
     expect(warning).toMatch(/10 GB/);
     expect(warning).toMatch(/20 GB/);
     expect(warning).toMatch(/50 GB/);
@@ -2354,71 +2413,19 @@ describe("datasetUploadFile", () => {
       filePath,
     });
     expect(result.data).toMatchObject({ sizeWarning: null });
+    expect(result.summary).not.toMatch(/Warning:/);
   });
 
   test("still returns the job id when the status lookup fails", async () => {
     const filePath = await writeArchive();
-    const calls: { url: string; method: string; body: unknown }[] = [];
-    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
-      let body: unknown;
-      if (typeof init.body === "string") {
-        body = JSON.parse(init.body);
-      }
-      calls.push({
-        url: String(url),
-        method: (init.method ?? "GET").toUpperCase(),
-        body,
-      });
-      const parsed = new URL(String(url));
-      if (
-        parsed.pathname === "/api/datasets/alice/cars" &&
-        init.method === undefined
-      ) {
-        // First GET (id lookup) succeeds; second GET (status) is distinguished
-        // by call order below.
-        const getCount = calls.filter(
-          (call) => call.url === `${BASE}/datasets/alice/cars`,
-        ).length;
-        if (getCount === 1) {
-          return jsonResponse({
-            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
-          });
-        }
-        return jsonResponse({ error: "Server error" }, 500);
-      }
-      if (parsed.pathname === "/api/datasets/alice/cars") {
-        const getCount = calls.filter(
-          (call) => call.url === `${BASE}/datasets/alice/cars`,
-        ).length;
-        if (getCount === 1) {
-          return jsonResponse({
-            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
-          });
-        }
-        return jsonResponse({ error: "Server error" }, 500);
-      }
-      if (parsed.pathname === "/api/upload/signed-url") {
-        return jsonResponse(liveSignedResponse);
-      }
-      if (parsed.pathname === "/api/upload/complete") {
-        return jsonResponse(liveCompleteResponse);
-      }
-      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
-        return jsonResponse(liveIngestResponse, 201);
-      }
-      return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const uploadClient = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl,
-      uploadFetchImpl: (async () =>
-        new Response("", { status: 200 })) as unknown as typeof fetch,
-    });
-    const result = await datasetUploadFile(uploadClient, {
+    const { client, calls } = clientForUpload({ failStatusLookup: true });
+    const result = await datasetUploadFile(client, {
       dataset: "alice/cars",
       filePath,
     });
+    expect(
+      calls.filter((call) => call.url === `${BASE}/datasets/alice/cars`),
+    ).toHaveLength(2);
     expect(result.data).toMatchObject({
       jobId: liveJobId,
       datasetStatus: null,
@@ -2523,11 +2530,8 @@ describe("datasetUploadFile", () => {
 
   test("surfaces the API message for a missing dataset", async () => {
     const filePath = await writeArchive();
-    const { client } = clientForUpload({
-      datasetResponse: { error: "Dataset not found" },
-    });
-    // The mocked dataset GET returns an error shape; the client surfaces the
-    // API message when the fetch itself 404s. Simulate that here.
+    // Live capture: GET /api/datasets/{owner}/{bad-slug} answers 404
+    // {"error":"Dataset not found"}; the client surfaces the API message.
     const missingClient = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -2545,6 +2549,5 @@ describe("datasetUploadFile", () => {
         filePath,
       }),
     ).rejects.toThrow(/Dataset not found/);
-    expect(client).toBeDefined();
   });
 });

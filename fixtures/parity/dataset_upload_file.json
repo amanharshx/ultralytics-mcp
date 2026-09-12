@@ -74,7 +74,7 @@
         "status": 200,
         "json": {
           "sessionId": "11111111-1111-4111-8111-111111111111",
-          "uploadUrl": "https://signed.example/upload",
+          "uploadUrl": "https://signed.example/upload?REDACTED",
           "expiresAt": "2026-09-12T04:00:00.000Z",
           "headers": {
             "x-goog-if-generation-match": "0"
@@ -151,7 +151,7 @@
     }
   ],
   "upload": {
-    "url": "https://signed.example/upload",
+    "url": "https://signed.example/upload?REDACTED",
     "content_type": "application/zip",
     "body_text": "archive"
   },
