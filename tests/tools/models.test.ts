@@ -321,17 +321,6 @@ describe("modelsGet", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test("surfaces the API message for a model that does not exist", async () => {
-    const { client } = routeClient((path) =>
-      path === "/api/models/alice/road/missing"
-        ? jsonResponse({ error: "Model not found" }, 404)
-        : jsonResponse({}, 404),
-    );
-    await expect(modelsGet(client, "alice/road/missing")).rejects.toThrow(
-      /Model not found/,
-    );
-  });
-
   test("attaches the static not-found hint through the tool", async () => {
     // Live capture: GET /api/models/{owner}/{project}/{bad-model} -> 404 {"error":"Model not found"}
     const { client } = routeClient((path) =>
