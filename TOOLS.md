@@ -186,13 +186,13 @@ Metadata: state-changing, non-idempotent
 
 ### datasets_delete
 
-Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI.
+Delete a dataset by slug, owner/slug, or dataset ul:// URI. Deleting a dataset moves its images and annotations to trash with it; models trained on it are not deleted. Trashed items remain restorable for a bounded window.
 
 Metadata: state-changing, destructive, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 
 ### dataset_ingest
 

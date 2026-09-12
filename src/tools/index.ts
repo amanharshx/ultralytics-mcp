@@ -443,11 +443,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI.",
+      "Delete a dataset by slug, owner/slug, or dataset ul:// URI. Deleting a dataset moves its images and annotations to trash with it; models trained on it are not deleted. Trashed items remain restorable for a bounded window.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
     },
     annotations: {
       readOnlyHint: false,
