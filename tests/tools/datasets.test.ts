@@ -1184,26 +1184,19 @@ describe("datasetsDelete", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test("surfaces the API message for a dataset that does not exist", async () => {
+  // Observed live: the delete path answers `Dataset not found` even for an
+  // unknown owner. The tool surfaces the API message verbatim either way.
+  test.each([
+    "alice/missing",
+    "ghost/cars",
+  ])("surfaces the API message for %s", async (ref) => {
     const { client } = routeClient((path) => {
-      if (path === "/api/datasets/alice/missing") {
+      if (path === `/api/datasets/${ref}`) {
         return jsonResponse({ error: "Dataset not found" }, 404);
       }
       return jsonResponse({}, 404);
     });
-    await expect(datasetsDelete(client, "alice/missing")).rejects.toThrow(
-      /Dataset not found/,
-    );
-  });
-
-  test("surfaces the API message verbatim for an owner that does not exist", async () => {
-    const { client } = routeClient((path) => {
-      if (path === "/api/datasets/ghost/cars") {
-        return jsonResponse({ error: "Dataset not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
-    await expect(datasetsDelete(client, "ghost/cars")).rejects.toThrow(
+    await expect(datasetsDelete(client, ref)).rejects.toThrow(
       /Dataset not found/,
     );
   });

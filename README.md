@@ -231,6 +231,7 @@ You should see `ultralytics` in configured MCP servers.
 - Create projects private by default (the platform defaults to public)
 - Create datasets private by default (the platform defaults to public)
 - Soft-delete projects to trash, restorable for 30 days, with the cascade count reported
+- Soft-delete datasets to trash, restorable for 30 days; images and annotations move with the dataset, models trained on it are unaffected
 - Start dataset ingest jobs and upload archive files, folders, or videos
 - Monitor training progress and inspect latest metrics or recent metric history
 - Run model prediction from image URL or base64 input
