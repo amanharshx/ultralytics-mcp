@@ -234,15 +234,16 @@ Notes: Uses a local archive file path and starts ingest into an existing dataset
 
 ### dataset_upload_folder
 
-Upload a local image folder as a zip and start ingest for an existing dataset.
+Upload a local image folder as a zip through the signed-upload flow for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.
 
 Metadata: state-changing, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `folder_path` | string | Yes | Local path to image folder. |
 | `targetSplit` | string | No |  |
+| `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 Notes: Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.
 
