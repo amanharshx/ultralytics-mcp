@@ -552,13 +552,19 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Upload a local image folder as a zip and start ingest for an existing dataset.",
+      "Upload a local image folder as a zip through the signed-upload flow for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       folder_path: z.string().describe("Local path to image folder."),
       targetSplit: z.string().optional(),
+      conflictPolicy: z
+        .string()
+        .optional()
+        .describe(
+          'Conflict policy "skip" (default), "keep_both", or "replace".',
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -571,7 +577,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       {
         title: "Upload image folder",
         input: {
-          dataset: "team/datasets/warehouse-items",
+          dataset: "team/warehouse-items",
           folder_path: "/data/warehouse-items",
           targetSplit: "train",
         },
@@ -579,12 +585,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     ],
     createHandler:
       (getClient) =>
-      async ({ dataset, folder_path, targetSplit }) =>
+      async ({ dataset, folder_path, targetSplit, conflictPolicy }) =>
         toMcpTextResult(
           await datasetUploadFolder(getClient(), {
             dataset: dataset as string,
             folderPath: folder_path as string,
             targetSplit: targetSplit as string | undefined,
+            conflictPolicy: conflictPolicy as string | undefined,
           }),
         ),
   }),

@@ -1,7 +1,7 @@
 import { closeSync, ftruncateSync, openSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
@@ -1282,96 +1282,489 @@ describe("datasetVersionCreate", () => {
 });
 
 describe("datasetUploadFolder", () => {
-  test("orchestrates folder zip upload and ingest", async () => {
+  const liveJobId = "c".repeat(24);
+  const liveDatasetId = "a".repeat(24);
+  const liveSignedHeaders = { "x-goog-if-generation-match": "0" };
+  const liveSignedResponse = {
+    sessionId: "session_123",
+    uploadUrl: "https://signed.example/upload",
+    expiresAt: "2026-09-12T04:00:00.000Z",
+    headers: liveSignedHeaders,
+  };
+  const liveCompleteResponse = {
+    success: true,
+    file: { size: 1234, contentType: "application/zip" },
+  };
+  const liveIngestResponse = { jobId: liveJobId, status: "queued" };
+  const liveDatasetWithStatus = {
+    dataset: {
+      id: liveDatasetId,
+      owner: "alice",
+      dataset: "cars",
+      name: "Cars",
+      visibility: "private",
+      task: "detect",
+      imageCount: 0,
+      status: "processing",
+      lastIngestJobId: null,
+      lastIngestSummary: null,
+      processingError: null,
+      errorCount: 0,
+    },
+  };
+
+  async function writeImageFolder(
+    files: Record<string, string> = {
+      "bird.jpg": "jpg",
+      "bird.png": "png",
+      "nested/bird.webp": "webp",
+    },
+  ) {
     const dir = await mkdtemp(join(tmpdir(), "ul-dataset-folder-"));
-    await writeFile(join(dir, "bird.jpg"), "jpg");
-    await writeFile(join(dir, "bird.png"), "png");
-    await writeFile(join(dir, ".DS_Store"), "junk");
-    await writeFile(join(dir, "notes.txt"), "ignore");
-    const nested = join(dir, "nested");
-    await mkdir(nested);
-    await writeFile(join(nested, "bird.webp"), "webp");
+    for (const [relativePath, content] of Object.entries(files)) {
+      const path = join(dir, relativePath);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content);
+    }
+    return dir;
+  }
 
-    const uploadCalls: { url: string; init: RequestInit }[] = [];
-    const uploadImpl = (async (url: string | URL, init: RequestInit = {}) => {
-      uploadCalls.push({ url: String(url), init });
-      return new Response("", { status: 200 });
-    }) as unknown as typeof fetch;
-
-    const apiCalls: { url: string; method: string; body: unknown }[] = [];
-    const apiImpl = (async (url: string | URL, init: RequestInit = {}) => {
+  function clientForFolderUpload(
+    options: {
+      datasetResponse?: unknown;
+      signedResponse?: unknown;
+      completeResponse?: unknown;
+      completeStatus?: number;
+      ingestResponse?: unknown;
+      ingestStatus?: number;
+      accountOwner?: string;
+      uploadImpl?: typeof fetch;
+      onUpload?: (headers: Headers, url: string) => void;
+      failStatusLookup?: boolean;
+    } = {},
+  ) {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const uploadCalls: Array<{
+      url: string;
+      method: string;
+      contentType: string | null;
+      contentLength: string | null;
+      generationMatch: string | null;
+      auth: string | null;
+    }> = [];
+    const signedResponse = options.signedResponse ?? liveSignedResponse;
+    let datasetGets = 0;
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
       let body: unknown;
       if (typeof init.body === "string") {
         body = JSON.parse(init.body);
       }
-      apiCalls.push({
+      calls.push({
         url: String(url),
         method: (init.method ?? "GET").toUpperCase(),
         body,
       });
       const parsed = new URL(String(url));
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        datasetGets += 1;
+        if (options.failStatusLookup && datasetGets > 1) {
+          return jsonResponse({ error: "Server error" }, 500);
+        }
+        if (datasetGets === 1) {
+          const first = options.datasetResponse ?? {
+            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
+          };
+          return jsonResponse(first);
+        }
+        return jsonResponse(options.datasetResponse ?? liveDatasetWithStatus);
       }
       if (parsed.pathname === "/api/upload/signed-url") {
-        return jsonResponse({
-          sessionId: "session_123",
-          uploadUrl: "https://signed.example/upload",
-        });
+        return jsonResponse(signedResponse);
       }
       if (parsed.pathname === "/api/upload/complete") {
-        return jsonResponse({ ok: true });
+        return jsonResponse(
+          options.completeResponse ?? liveCompleteResponse,
+          options.completeStatus ?? 200,
+        );
       }
-      return jsonResponse({
-        jobId: "job_123",
-        datasetId: "d".repeat(24),
-        status: "queued",
-      });
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(
+          options.ingestResponse ?? liveIngestResponse,
+          options.ingestStatus ?? 201,
+        );
+      }
+      return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
-
-    const client = new UltralyticsClient({
+    const uploadFetch =
+      options.uploadImpl ??
+      ((async (url: string | URL, init: RequestInit = {}) => {
+        const headers = new Headers(init.headers);
+        options.onUpload?.(headers, String(url));
+        uploadCalls.push({
+          url: String(url),
+          method: (init.method ?? "GET").toUpperCase(),
+          contentType: headers.get("Content-Type"),
+          contentLength: headers.get("Content-Length"),
+          generationMatch: headers.get("x-goog-if-generation-match"),
+          auth: headers.get("Authorization"),
+        });
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch);
+    const uploadClient = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
-      fetchImpl: apiImpl,
-      uploadFetchImpl: uploadImpl,
+      fetchImpl,
+      uploadFetchImpl: uploadFetch,
     });
+    return { client: uploadClient, calls, uploadCalls };
+  }
 
+  function findIngestCall(calls: { url: string; body: unknown }[]) {
+    return calls.find((call) =>
+      call.url.endsWith("/datasets/alice/cars/ingest"),
+    );
+  }
+
+  test("uploads through the owner-scoped flow with both storage headers and reports ingest status", async () => {
+    const dir = await writeImageFolder();
+    const { client, calls, uploadCalls } = clientForFolderUpload();
     const result = await datasetUploadFolder(client, {
-      dataset: "user/data",
+      dataset: "alice/cars",
       folderPath: dir,
       targetSplit: "train",
     });
 
-    expect(apiCalls[1]).toMatchObject({
-      url: `${BASE}/upload/signed-url`,
-      method: "POST",
-      body: {
-        assetType: "datasets",
-        assetId: "d".repeat(24),
-        contentType: "application/zip",
-      },
+    expect(calls.map((call) => call.url)).toEqual([
+      `${BASE}/datasets/alice/cars`,
+      `${BASE}/upload/signed-url`,
+      `${BASE}/upload/complete`,
+      `${BASE}/datasets/alice/cars/ingest`,
+      `${BASE}/datasets/alice/cars`,
+    ]);
+    const signedCall = calls[1];
+    expect(signedCall.method).toBe("POST");
+    expect(signedCall.body).toMatchObject({
+      assetType: "datasets",
+      assetId: liveDatasetId,
+      contentType: "application/zip",
     });
-    expect(uploadCalls[0].url).toBe("https://signed.example/upload");
+    expect(typeof (signedCall.body as Record<string, unknown>).filename).toBe(
+      "string",
+    );
     expect(
-      (uploadCalls[0].init.headers as Record<string, string>).Authorization,
-    ).toBeUndefined();
-    expect(apiCalls[2]).toEqual({
+      (
+        (signedCall.body as Record<string, unknown>).filename as string
+      ).endsWith(".zip"),
+    ).toBe(true);
+    expect(typeof (signedCall.body as Record<string, unknown>).totalBytes).toBe(
+      "number",
+    );
+    expect(uploadCalls).toHaveLength(1);
+    expect(uploadCalls[0]).toMatchObject({
+      url: "https://signed.example/upload",
+      method: "PUT",
+      contentType: "application/zip",
+      generationMatch: "0",
+      auth: null,
+    });
+    expect(calls[2]).toEqual({
       url: `${BASE}/upload/complete`,
       method: "POST",
       body: { sessionId: "session_123" },
     });
-    expect(apiCalls[3]).toEqual({
-      url: `${BASE}/datasets/ingest`,
+    expect(calls[3]).toEqual({
+      url: `${BASE}/datasets/alice/cars/ingest`,
       method: "POST",
       body: {
-        datasetId: "d".repeat(24),
         sessionId: "session_123",
+        conflictPolicy: "skip",
         targetSplit: "train",
       },
     });
     expect(result.summary).toContain("Zipped 3 image(s)");
+    expect(result.summary).toContain(liveJobId);
+    expect(result.summary).toContain("datasets_get");
+    expect(result.data).toMatchObject({
+      jobId: liveJobId,
+      status: "queued",
+      conflictPolicy: "skip",
+      targetSplit: "train",
+      owner: "alice",
+      dataset: "cars",
+      datasetStatus: "processing",
+      imageCount: 3,
+      sessionId: "session_123",
+    });
+    expect(typeof (result.data as Record<string, unknown>).bytes).toBe(
+      "number",
+    );
+  });
+
+  test("keeps client-side zipping filters: skips dotfiles and non-images", async () => {
+    const dir = await writeImageFolder({
+      "bird.jpg": "jpg",
+      ".DS_Store": "junk",
+      "notes.txt": "ignore",
+      ".hidden/secret.jpg": "hidden",
+      "nested/bird.webp": "webp",
+    });
+    const seenBodies: Uint8Array[] = [];
+    const { client } = clientForFolderUpload({
+      onUpload: undefined,
+      uploadImpl: (async (_url: string | URL, init: RequestInit = {}) => {
+        seenBodies.push(
+          new Uint8Array(await new Response(init.body).arrayBuffer()),
+        );
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    const result = await datasetUploadFolder(client, {
+      dataset: "alice/cars",
+      folderPath: dir,
+    });
+    expect(result.data).toMatchObject({ imageCount: 2 });
+    expect(seenBodies).toHaveLength(1);
+    const { unzipSync } = await import("fflate");
+    const files = Object.keys(unzipSync(seenBodies[0])).sort();
+    expect(files).toEqual(["bird.jpg", "nested/bird.webp"]);
+  });
+
+  test("sends an explicit replace policy and omits targetSplit when absent", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload();
+    const result = await datasetUploadFolder(client, {
+      dataset: "alice/cars",
+      folderPath: dir,
+      conflictPolicy: "replace",
+    });
+    const ingestCall = findIngestCall(calls);
+    expect(ingestCall?.body).toEqual({
+      sessionId: "session_123",
+      conflictPolicy: "replace",
+    });
+    expect(result.data).toMatchObject({
+      conflictPolicy: "replace",
+      targetSplit: null,
+    });
+  });
+
+  test("sends the keep_both policy the live API accepts", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload();
+    const result = await datasetUploadFolder(client, {
+      dataset: "alice/cars",
+      folderPath: dir,
+      conflictPolicy: "keep_both",
+    });
+    const ingestCall = findIngestCall(calls);
+    expect(ingestCall?.body).toMatchObject({ conflictPolicy: "keep_both" });
+    expect(result.data).toMatchObject({ conflictPolicy: "keep_both" });
+  });
+
+  test("never sends class mapping, image metadata, or a dataset id to ingest", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload();
+    await datasetUploadFolder(client, {
+      dataset: "alice/cars",
+      folderPath: dir,
+    });
+    const ingestCall = findIngestCall(calls);
+    // Without targetSplit the ingest payload carries only the session and policy.
+    expect(ingestCall?.body).toEqual({
+      sessionId: "session_123",
+      conflictPolicy: "skip",
+    });
+  });
+
+  test("starts a fresh signed-url session when the first upload fails", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const signedResponses = [
+      {
+        sessionId: "session_old",
+        uploadUrl: "https://signed.example/old",
+        expiresAt: "2026-09-12T04:00:00.000Z",
+        headers: liveSignedHeaders,
+      },
+      {
+        sessionId: "session_new",
+        uploadUrl: "https://signed.example/new",
+        expiresAt: "2026-09-12T04:01:00.000Z",
+        headers: liveSignedHeaders,
+      },
+    ];
+    let signedCount = 0;
+    const putUrls: string[] = [];
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        return jsonResponse(liveDatasetWithStatus);
+      }
+      if (parsed.pathname === "/api/upload/signed-url") {
+        return jsonResponse(signedResponses[Math.min(signedCount++, 1)]);
+      }
+      if (parsed.pathname === "/api/upload/complete") {
+        return jsonResponse(liveCompleteResponse);
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(liveIngestResponse, 201);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const uploadFetch = (async () => {
+      putUrls.push("called");
+      if (putUrls.length === 1) {
+        return new Response("precondition failed", { status: 412 });
+      }
+      return new Response("", { status: 200 });
+    }) as unknown as typeof fetch;
+    // Track URLs separately since the body is consumed on retry.
+    const seenUrls: string[] = [];
+    const trackingUploadFetch = (async (
+      url: string | URL,
+      init: RequestInit = {},
+    ) => {
+      seenUrls.push(String(url));
+      return (
+        uploadFetch as (u: string | URL, i: RequestInit) => Promise<Response>
+      )(url, init);
+    }) as unknown as typeof fetch;
+    const uploadClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+      uploadFetchImpl: trackingUploadFetch,
+    });
+
+    const result = await datasetUploadFolder(uploadClient, {
+      dataset: "alice/cars",
+      folderPath: dir,
+    });
+
+    expect(seenUrls).toEqual([
+      "https://signed.example/old",
+      "https://signed.example/new",
+    ]);
+    const completeCall = calls.find((call) =>
+      call.url.endsWith("/upload/complete"),
+    );
+    expect(completeCall?.body).toEqual({ sessionId: "session_new" });
+    const ingestCall = findIngestCall(calls);
+    expect(ingestCall?.body).toMatchObject({ sessionId: "session_new" });
+    expect(result.data).toMatchObject({ sessionId: "session_new" });
+  });
+
+  test("completes the upload session before starting ingest, in order", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload();
+    await datasetUploadFolder(client, {
+      dataset: "alice/cars",
+      folderPath: dir,
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      `${BASE}/datasets/alice/cars`,
+      `${BASE}/upload/signed-url`,
+      `${BASE}/upload/complete`,
+      `${BASE}/datasets/alice/cars/ingest`,
+      `${BASE}/datasets/alice/cars`,
+    ]);
+  });
+
+  test("never starts ingest when completion is rejected", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload({
+      completeResponse: {
+        error:
+          "Upload session not ready (status: pending). Call /api/upload/complete first.",
+      },
+      completeStatus: 400,
+    });
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "alice/cars",
+        folderPath: dir,
+      }),
+    ).rejects.toThrow(/Upload session not ready/);
+    expect(
+      calls.some((call) => call.url.endsWith("/datasets/alice/cars/ingest")),
+    ).toBe(false);
+  });
+
+  test("still returns the job id when the status lookup fails", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload({ failStatusLookup: true });
+    const result = await datasetUploadFolder(client, {
+      dataset: "alice/cars",
+      folderPath: dir,
+    });
+    expect(
+      calls.filter((call) => call.url === `${BASE}/datasets/alice/cars`),
+    ).toHaveLength(2);
+    expect(result.data).toMatchObject({
+      jobId: liveJobId,
+      datasetStatus: null,
+      lastIngestJobId: null,
+    });
+    expect(result.summary).toContain("status lookup failed");
+    expect(result.summary).toContain("datasets_get");
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload({ accountOwner: "alice" });
+    const result = await datasetUploadFolder(client, {
+      dataset: "cars",
+      folderPath: dir,
+    });
+    expect(calls[0].url).toBe(`${BASE}/account/summary`);
+    expect(calls[1].url).toBe(`${BASE}/datasets/alice/cars`);
+    expect(result.data).toMatchObject({ owner: "alice", dataset: "cars" });
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload();
+    const result = await datasetUploadFolder(client, {
+      dataset: "ul://alice/cars",
+      folderPath: dir,
+    });
+    expect(
+      calls.map((call) => `${call.method} ${new URL(call.url).pathname}`),
+    ).toEqual([
+      "GET /api/datasets/alice/cars",
+      "POST /api/upload/signed-url",
+      "POST /api/upload/complete",
+      "POST /api/datasets/alice/cars/ingest",
+      "GET /api/datasets/alice/cars",
+    ]);
+    expect(result.data).toMatchObject({ owner: "alice" });
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client, calls } = clientForFolderUpload();
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "a".repeat(24),
+        folderPath: dir,
+      }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
   });
 
   test("rejects targetSplit when folder already has split dirs", async () => {
@@ -1390,11 +1783,84 @@ describe("datasetUploadFolder", () => {
 
     await expect(
       datasetUploadFolder(client, {
-        dataset: "d".repeat(24),
+        dataset: "alice/cars",
         folderPath: dir,
         targetSplit: "train",
       }),
     ).rejects.toThrow(/Folder has split directories/);
+  });
+
+  test("validates folder path, conflict policy, and target split before network", async () => {
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async () => {
+        throw new Error("network should not be called");
+      }) as unknown as typeof fetch,
+    });
+
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "alice/cars",
+        folderPath: "",
+      }),
+    ).rejects.toThrow(/`folderPath` is required/);
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "alice/cars",
+        folderPath: join(tmpdir(), "missing-folder-xyz"),
+      }),
+    ).rejects.toThrow(/does not exist/);
+
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "alice/cars",
+        folderPath: dir,
+        targetSplit: "bad",
+      }),
+    ).rejects.toThrow(/Unsupported targetSplit/);
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "alice/cars",
+        folderPath: dir,
+        conflictPolicy: "bogus",
+      }),
+    ).rejects.toThrow(/Unsupported conflictPolicy/);
+  });
+
+  test("surfaces the API message for a missing dataset", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const missingClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        if (parsed.pathname === "/api/datasets/alice/missing") {
+          return jsonResponse({ error: "Dataset not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch,
+    });
+    await expect(
+      datasetUploadFolder(missingClient, {
+        dataset: "alice/missing",
+        folderPath: dir,
+      }),
+    ).rejects.toThrow(/Dataset not found/);
+  });
+
+  test("errors when the dataset record has no id for the signed-url step", async () => {
+    const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client } = clientForFolderUpload({
+      datasetResponse: { dataset: { owner: "alice", dataset: "cars" } },
+    });
+    await expect(
+      datasetUploadFolder(client, {
+        dataset: "alice/cars",
+        folderPath: dir,
+      }),
+    ).rejects.toThrow(/did not include an id/);
   });
 });
 
