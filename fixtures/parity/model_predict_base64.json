@@ -1,0 +1,233 @@
+{
+  "tool": "model_predict",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1",
+    "source": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHigjKE4rK06kbl1upKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKT/wAARCABAADADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwC63+rbHUDiqdjcPMWEmMr6ClSbfC4VGb/d7mobS1ukmf8Ad7ASCNzDNZxWhTepZvZIYnUSxbww646Uk8EAttuTHHnJ5qPULe7k2hIwyjrgiori2uWiLkykk/cHSqS2C5PBEY7d1jkDqy4WixWSIMkikAnOQeKSHzVtdhicELjGKjjkkgBjcEEdM9qeohIZ0hjZIJRtH3SVySajk1C5t8N5oY9du0c1Fb2gYyLuDKp6AUt/aukiKoDbhxzijqHQfHq1ywYssRwP7gqRdXmx/qov++cf1qnIw3sQp5HI9DjpVcF2x8jY+laW0TIvZtG9HrKgAmL8h/8AXqG6v7e7GDD+8PCt0x+tUYJWWEx+Qzgtlh0yKZcM23f5ARRStqO+hoRKIjK8RADsGBqvrTvOkW4q7YIBA75xj9KiRbxooY0yvBYe69c0kdtcXNjK5ZNkRJYNncT14pLe43tYjsiIiiMmdz4Y9wR2rVuRvhIwo5GOR17njj0qC10ctCjyzOpJ3AJyfzq3DpEBz56tJg/Luft7471XPYXJcoFo1ADTICOwPNULl2cHMjEA4xmul+wWqjalvEmRjhcn8zVXUkFzc2tiAAg/ePtHIA4o52xKCQkat5kbG2bakZQB24waekZM0u4iKOQc7GAB4xUZjkkxh2lX1bj+dHlnB2yrn0NQXcvNKI0AV1wOOTUTXZzwysfQc1WEX7tc7s559DQSUBCLx3xRYLlp7oouQpZj26VWtg0dxI7ShXkAzlwxAHbNV2Ziec4oPHRMZGM0WA//2Q==",
+    "conf": 0.25
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/predict",
+      "response": {
+        "status": 200,
+        "json": {
+          "images": [
+            {
+              "shape": [
+                64,
+                48
+              ],
+              "speed": {
+                "preprocess": 3.86056,
+                "inference": 173.92984,
+                "postprocess": 2.3316
+              },
+              "results": [
+                {
+                  "name": "trunk",
+                  "class": 21,
+                  "confidence": 0.669,
+                  "box": {
+                    "x1": 15.76717,
+                    "y1": 19.80379,
+                    "x2": 47.87982,
+                    "y2": 41.82807
+                  },
+                  "segments": {
+                    "x": [
+                      16,
+                      16,
+                      17,
+                      18,
+                      18,
+                      21,
+                      21,
+                      22,
+                      22,
+                      23,
+                      31,
+                      32,
+                      38,
+                      39,
+                      45,
+                      47,
+                      47
+                    ],
+                    "y": [
+                      20,
+                      26,
+                      26,
+                      27,
+                      31,
+                      34,
+                      36,
+                      37,
+                      40,
+                      41,
+                      41,
+                      40,
+                      40,
+                      39,
+                      39,
+                      37,
+                      20
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "metadata": {
+            "imageCount": 1,
+            "classNames": [
+              "back_bumper",
+              "back_door",
+              "back_glass",
+              "back_left_door",
+              "back_left_light",
+              "back_light",
+              "back_right_door",
+              "back_right_light",
+              "front_bumper",
+              "front_door",
+              "front_glass",
+              "front_left_door",
+              "front_left_light",
+              "front_light",
+              "front_right_door",
+              "front_right_light",
+              "hood",
+              "left_mirror",
+              "object",
+              "right_mirror",
+              "tailgate",
+              "trunk",
+              "wheel"
+            ],
+            "functionTimeAlive": 17310.368,
+            "functionTimeCall": 0.186,
+            "task": "segment",
+            "version": {
+              "ultralytics": "8.4.150",
+              "torch": "2.14.0+cpu",
+              "torchvision": "0.29.0+cpu",
+              "python": "3.14.7"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': 1 image(s), 1 detection(s).",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-model-1",
+      "images": [
+        {
+          "shape": [
+            64,
+            48
+          ],
+          "speed": {
+            "preprocess": 3.86056,
+            "inference": 173.92984,
+            "postprocess": 2.3316
+          },
+          "results": [
+            {
+              "name": "trunk",
+              "class": 21,
+              "confidence": 0.669,
+              "box": {
+                "x1": 15.76717,
+                "y1": 19.80379,
+                "x2": 47.87982,
+                "y2": 41.82807
+              },
+              "segments": {
+                "x": [
+                  16,
+                  16,
+                  17,
+                  18,
+                  18,
+                  21,
+                  21,
+                  22,
+                  22,
+                  23,
+                  31,
+                  32,
+                  38,
+                  39,
+                  45,
+                  47,
+                  47
+                ],
+                "y": [
+                  20,
+                  26,
+                  26,
+                  27,
+                  31,
+                  34,
+                  36,
+                  37,
+                  40,
+                  41,
+                  41,
+                  40,
+                  40,
+                  39,
+                  39,
+                  37,
+                  20
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "imageCount": 1,
+        "classNames": [
+          "back_bumper",
+          "back_door",
+          "back_glass",
+          "back_left_door",
+          "back_left_light",
+          "back_light",
+          "back_right_door",
+          "back_right_light",
+          "front_bumper",
+          "front_door",
+          "front_glass",
+          "front_left_door",
+          "front_left_light",
+          "front_light",
+          "front_right_door",
+          "front_right_light",
+          "hood",
+          "left_mirror",
+          "object",
+          "right_mirror",
+          "tailgate",
+          "trunk",
+          "wheel"
+        ],
+        "functionTimeAlive": 17310.368,
+        "functionTimeCall": 0.186,
+        "task": "segment",
+        "version": {
+          "ultralytics": "8.4.150",
+          "torch": "2.14.0+cpu",
+          "torchvision": "0.29.0+cpu",
+          "python": "3.14.7"
+        }
+      }
+    }
+  }
+}

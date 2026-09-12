@@ -330,9 +330,9 @@ Metadata: read-only, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `model` | string | Yes | Model id, or slug when project is also provided. |
-| `source` | string | Yes | Image URL or base64 input string. Local file paths are not supported. |
-| `project` | string | No |  |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `source` | string | Yes | Image URL, raw base64-encoded image, or base64 data: URI (data:<mime>;base64,<payload>). Local file paths are not supported. |
+| `project` | string | No | Project ref required when model is given by slug. |
 | `conf` | number | No |  |
 | `iou` | number | No |  |
 | `imgsz` | number | No |  |
