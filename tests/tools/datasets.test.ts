@@ -1111,6 +1111,30 @@ describe("datasetVersionCreate", () => {
     });
   });
 
+  test("does not claim a new version when the reuse flag is missing", async () => {
+    const { client } = clientForVersionCreate({
+      version: 1,
+      downloadUrl:
+        "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+    });
+
+    const result = await datasetVersionCreate(client, {
+      dataset: "alice/cars",
+    });
+
+    expect(result.summary).toBe(
+      "Dataset version 1 for dataset 'cars' for owner 'alice'. " +
+        "This link is time-limited and will expire.",
+    );
+    expect(result.summary).not.toMatch(/Created/);
+    expect(result.data).toEqual({
+      version: 1,
+      downloadUrl:
+        "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+      reused: null,
+    });
+  });
+
   test("fills a missing owner from the account summary for a bare slug", async () => {
     const { client, calls } = clientForVersionCreate(liveNewResponse, {
       accountOwner: "alice",
