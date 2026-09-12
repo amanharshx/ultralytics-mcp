@@ -1135,6 +1135,79 @@ describe("datasetVersionCreate", () => {
     });
   });
 
+  test("returns the same version when created twice with no changes", async () => {
+    let posts = 0;
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      if (
+        parsed.pathname === "/api/datasets/alice/cars/export" &&
+        (init.method ?? "GET").toUpperCase() === "POST"
+      ) {
+        posts += 1;
+        return jsonResponse(
+          posts === 1 ? liveNewResponse : liveReusedResponse,
+        );
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    const first = await datasetVersionCreate(client, {
+      dataset: "alice/cars",
+    });
+    const second = await datasetVersionCreate(client, {
+      dataset: "alice/cars",
+    });
+
+    expect(first.data).toMatchObject({ version: 1, reused: false });
+    expect(second.data).toMatchObject({ version: 1, reused: true });
+    expect(second.data).toMatchObject({ version: first.data.version });
+    expect(first.summary).toMatch(/Created/);
+    expect(second.summary).not.toMatch(/Created/);
+  });
+
+  test("the created version downloads through the export tool", async () => {
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      const method = (init.method ?? "GET").toUpperCase();
+      if (
+        parsed.pathname === "/api/datasets/alice/cars/export" &&
+        method === "POST"
+      ) {
+        return jsonResponse(liveNewResponse);
+      }
+      if (
+        parsed.pathname === "/api/datasets/alice/cars/export" &&
+        method === "GET"
+      ) {
+        expect(parsed.searchParams.get("v")).toBe("1");
+        return jsonResponse({ downloadUrl: liveDownloadUrl, version: 1 });
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    const created = await datasetVersionCreate(client, {
+      dataset: "alice/cars",
+    });
+    const exported = await datasetExport(client, {
+      dataset: "alice/cars",
+      version: created.data.version as number,
+    });
+
+    expect(created.data).toMatchObject({ version: 1 });
+    expect(exported.summary).toContain("(version 1)");
+    expect(exported.data).toMatchObject({ downloadUrl: liveDownloadUrl });
+  });
+
   test("fills a missing owner from the account summary for a bare slug", async () => {
     const { client, calls } = clientForVersionCreate(liveNewResponse, {
       accountOwner: "alice",
