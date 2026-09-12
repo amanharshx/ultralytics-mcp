@@ -1865,136 +1865,260 @@ describe("datasetUploadFolder", () => {
 });
 
 describe("datasetUploadVideo", () => {
-  test("extracts frames and uploads them", async () => {
+  const liveJobId = "c".repeat(24);
+  const liveDatasetId = "a".repeat(24);
+  const liveSignedHeaders = { "x-goog-if-generation-match": "0" };
+  const liveSignedResponse = {
+    sessionId: "session_123",
+    uploadUrl: "https://signed.example/upload",
+    expiresAt: "2026-09-12T04:00:00.000Z",
+    headers: liveSignedHeaders,
+  };
+  const liveCompleteResponse = {
+    success: true,
+    file: { size: 1234, contentType: "application/zip" },
+  };
+  const liveIngestResponse = { jobId: liveJobId, status: "queued" };
+  const liveDatasetWithStatus = {
+    dataset: {
+      id: liveDatasetId,
+      owner: "alice",
+      dataset: "cars",
+      name: "Cars",
+      visibility: "private",
+      task: "detect",
+      imageCount: 0,
+      status: "processing",
+      lastIngestJobId: null,
+      lastIngestSummary: null,
+      processingError: null,
+      errorCount: 0,
+    },
+  };
+
+  async function writeVideoFile(name = "birds.mp4"): Promise<string> {
     const dir = await mkdtemp(join(tmpdir(), "ul-video-"));
-    const videoPath = join(dir, "birds.mp4");
+    const videoPath = join(dir, name);
     await writeFile(videoPath, "video");
+    return videoPath;
+  }
 
-    const uploadCalls: { url: string; init: RequestInit }[] = [];
-    const uploadImpl = (async (url: string | URL, init: RequestInit = {}) => {
-      uploadCalls.push({ url: String(url), init });
-      return new Response("", { status: 200 });
-    }) as unknown as typeof fetch;
+  function writeThreeFrames() {
+    return async ({
+      outputDir,
+      ffmpegPath,
+      rate,
+      maxFrames,
+    }: {
+      outputDir: string;
+      ffmpegPath: string;
+      rate: number;
+      maxFrames: number;
+    }) => {
+      expect(ffmpegPath).toBe("/usr/bin/ffmpeg");
+      expect(rate).toBe(0.5);
+      expect(maxFrames).toBe(100);
+      await writeFile(join(outputDir, "frame_000001.jpg"), "jpg");
+      await writeFile(join(outputDir, "frame_000002.jpg"), "jpg");
+      await writeFile(join(outputDir, "frame_000003.jpg"), "jpg");
+    };
+  }
 
-    const apiCalls: { url: string; method: string; body: unknown }[] = [];
-    const apiImpl = (async (url: string | URL, init: RequestInit = {}) => {
+  function writeSingleFrame() {
+    return async ({ outputDir }: { outputDir: string }) => {
+      await writeFile(join(outputDir, "frame_000001.jpg"), "jpg");
+    };
+  }
+
+  function clientForVideoUpload(
+    options: {
+      datasetResponse?: unknown;
+      signedResponse?: unknown;
+      completeResponse?: unknown;
+      completeStatus?: number;
+      ingestResponse?: unknown;
+      ingestStatus?: number;
+      accountOwner?: string;
+      uploadImpl?: typeof fetch;
+      failStatusLookup?: boolean;
+      signedResponses?: unknown[];
+    } = {},
+  ) {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const uploadCalls: Array<{
+      url: string;
+      method: string;
+      contentType: string | null;
+      contentLength: string | null;
+      generationMatch: string | null;
+      auth: string | null;
+    }> = [];
+    const signedResponse = options.signedResponse ?? liveSignedResponse;
+    let datasetGets = 0;
+    let signedCount = 0;
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
       let body: unknown;
       if (typeof init.body === "string") {
         body = JSON.parse(init.body);
       }
-      apiCalls.push({
+      calls.push({
         url: String(url),
         method: (init.method ?? "GET").toUpperCase(),
         body,
       });
       const parsed = new URL(String(url));
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        datasetGets += 1;
+        if (options.failStatusLookup && datasetGets > 1) {
+          return jsonResponse({ error: "Server error" }, 500);
+        }
+        if (datasetGets === 1) {
+          const first = options.datasetResponse ?? {
+            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
+          };
+          return jsonResponse(first);
+        }
+        return jsonResponse(options.datasetResponse ?? liveDatasetWithStatus);
       }
       if (parsed.pathname === "/api/upload/signed-url") {
-        return jsonResponse({
-          sessionId: "session_123",
-          uploadUrl: "https://signed.example/upload",
-        });
+        if (options.signedResponses !== undefined) {
+          const next =
+            options.signedResponses[
+              Math.min(signedCount++, options.signedResponses.length - 1)
+            ];
+          return jsonResponse(next);
+        }
+        return jsonResponse(signedResponse);
       }
       if (parsed.pathname === "/api/upload/complete") {
-        return jsonResponse({ ok: true });
+        return jsonResponse(
+          options.completeResponse ?? liveCompleteResponse,
+          options.completeStatus ?? 200,
+        );
       }
-      return jsonResponse({
-        jobId: "job_123",
-        datasetId: "d".repeat(24),
-        status: "queued",
-      });
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(
+          options.ingestResponse ?? liveIngestResponse,
+          options.ingestStatus ?? 201,
+        );
+      }
+      return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
-
-    const client = new UltralyticsClient({
+    const uploadFetch =
+      options.uploadImpl ??
+      ((async (url: string | URL, init: RequestInit = {}) => {
+        const headers = new Headers(init.headers);
+        uploadCalls.push({
+          url: String(url),
+          method: (init.method ?? "GET").toUpperCase(),
+          contentType: headers.get("Content-Type"),
+          contentLength: headers.get("Content-Length"),
+          generationMatch: headers.get("x-goog-if-generation-match"),
+          auth: headers.get("Authorization"),
+        });
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch);
+    const uploadClient = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
-      fetchImpl: apiImpl,
-      uploadFetchImpl: uploadImpl,
+      fetchImpl,
+      uploadFetchImpl: uploadFetch,
     });
+    return { client: uploadClient, calls, uploadCalls };
+  }
 
+  function findIngestCall(calls: { url: string; body: unknown }[]) {
+    return calls.find((call) =>
+      call.url.endsWith("/datasets/alice/cars/ingest"),
+    );
+  }
+
+  test("uploads extracted frames through the owner-scoped flow with both storage headers and reports ingest status", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls, uploadCalls } = clientForVideoUpload();
     const result = await datasetUploadVideo(client, {
-      dataset: "user/data",
+      dataset: "alice/cars",
       videoPath,
       targetSplit: "train",
       _findTool: (name) => `/usr/bin/${name}`,
       _probeDuration: async () => 200,
-      _extractFrames: async ({ outputDir, ffmpegPath, rate, maxFrames }) => {
-        expect(ffmpegPath).toBe("/usr/bin/ffmpeg");
-        expect(rate).toBe(0.5);
-        expect(maxFrames).toBe(100);
-        await writeFile(join(outputDir, "frame_000001.jpg"), "jpg");
-        await writeFile(join(outputDir, "frame_000002.jpg"), "jpg");
-        await writeFile(join(outputDir, "frame_000003.jpg"), "jpg");
-      },
+      _extractFrames: writeThreeFrames(),
     });
 
-    expect(apiCalls[1]).toMatchObject({
-      url: `${BASE}/upload/signed-url`,
+    expect(calls.map((call) => call.url)).toEqual([
+      `${BASE}/datasets/alice/cars`,
+      `${BASE}/upload/signed-url`,
+      `${BASE}/upload/complete`,
+      `${BASE}/datasets/alice/cars/ingest`,
+      `${BASE}/datasets/alice/cars`,
+    ]);
+    const signedCall = calls[1];
+    expect(signedCall.method).toBe("POST");
+    expect(signedCall.body).toMatchObject({
+      assetType: "datasets",
+      assetId: liveDatasetId,
+      filename: "birds.zip",
+      contentType: "application/zip",
+    });
+    expect(typeof (signedCall.body as Record<string, unknown>).totalBytes).toBe(
+      "number",
+    );
+    expect(uploadCalls).toHaveLength(1);
+    expect(uploadCalls[0]).toMatchObject({
+      url: "https://signed.example/upload",
+      method: "PUT",
+      contentType: "application/zip",
+      generationMatch: "0",
+      auth: null,
+    });
+    expect(calls[2]).toEqual({
+      url: `${BASE}/upload/complete`,
+      method: "POST",
+      body: { sessionId: "session_123" },
+    });
+    expect(calls[3]).toEqual({
+      url: `${BASE}/datasets/alice/cars/ingest`,
       method: "POST",
       body: {
-        assetType: "datasets",
-        assetId: "d".repeat(24),
-        filename: "birds.zip",
-        contentType: "application/zip",
+        sessionId: "session_123",
+        conflictPolicy: "skip",
+        targetSplit: "train",
       },
     });
-    expect(uploadCalls[0].url).toBe("https://signed.example/upload");
-    expect(
-      (uploadCalls[0].init.headers as Record<string, string>).Authorization,
-    ).toBeUndefined();
-    expect(result.summary).toBe(
-      `Extracted 3 frame(s) at ~0.5 fps from ${videoPath}; started ingest job job_123 for dataset ${"d".repeat(24)}.`,
-    );
+    expect(result.summary).toContain("Extracted 3 frame(s)");
+    expect(result.summary).toContain(liveJobId);
+    expect(result.summary).toContain("datasets_get");
     expect(result.data).toMatchObject({
-      datasetId: "d".repeat(24),
+      jobId: liveJobId,
+      status: "queued",
+      conflictPolicy: "skip",
+      targetSplit: "train",
+      owner: "alice",
+      dataset: "cars",
+      datasetStatus: "processing",
       frameCount: 3,
       fps: 1,
       maxFrames: 100,
       filename: "birds.zip",
       sessionId: "session_123",
     });
+    expect(typeof (result.data as Record<string, unknown>).bytes).toBe(
+      "number",
+    );
   });
 
   test("falls back when probe fails", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "ul-video-"));
-    const videoPath = join(dir, "birds.mp4");
-    await writeFile(videoPath, "video");
-
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: (async (url: string | URL) => {
-        const parsed = new URL(String(url));
-        if (parsed.pathname === "/api/datasets") {
-          return jsonResponse({
-            datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-          });
-        }
-        if (parsed.pathname === "/api/upload/signed-url") {
-          return jsonResponse({
-            sessionId: "session_123",
-            uploadUrl: "https://signed.example/upload",
-          });
-        }
-        if (parsed.pathname === "/api/upload/complete") {
-          return jsonResponse({ ok: true });
-        }
-        return jsonResponse({
-          jobId: "job_123",
-          datasetId: "d".repeat(24),
-          status: "queued",
-        });
-      }) as unknown as typeof fetch,
-      uploadFetchImpl: (async () =>
-        new Response("", { status: 200 })) as unknown as typeof fetch,
-    });
+    const videoPath = await writeVideoFile();
+    const { client } = clientForVideoUpload();
 
     const result = await datasetUploadVideo(client, {
-      dataset: "user/data",
+      dataset: "alice/cars",
       videoPath,
       _findTool: (name) => `/usr/bin/${name}`,
       _probeDuration: async () => {
@@ -2008,6 +2132,236 @@ describe("datasetUploadVideo", () => {
     });
 
     expect(result.summary).toContain("probe fallback");
+    expect(result.summary).toContain("datasets_get");
+    expect(result.data).toMatchObject({
+      owner: "alice",
+      dataset: "cars",
+      frameCount: 1,
+      jobId: liveJobId,
+    });
+  });
+
+  test("sends an explicit replace policy and omits targetSplit when absent", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload();
+    const result = await datasetUploadVideo(client, {
+      dataset: "alice/cars",
+      videoPath,
+      conflictPolicy: "replace",
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+    const ingestCall = findIngestCall(calls);
+    expect(ingestCall?.body).toEqual({
+      sessionId: "session_123",
+      conflictPolicy: "replace",
+    });
+    expect(result.data).toMatchObject({
+      conflictPolicy: "replace",
+      targetSplit: null,
+    });
+  });
+
+  test("sends the keep_both policy the live API accepts", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload();
+    const result = await datasetUploadVideo(client, {
+      dataset: "alice/cars",
+      videoPath,
+      conflictPolicy: "keep_both",
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+    const ingestCall = findIngestCall(calls);
+    expect(ingestCall?.body).toMatchObject({ conflictPolicy: "keep_both" });
+    expect(result.data).toMatchObject({ conflictPolicy: "keep_both" });
+  });
+
+  test("never sends class mapping, image metadata, or a dataset id to ingest", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload();
+    await datasetUploadVideo(client, {
+      dataset: "alice/cars",
+      videoPath,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+    const ingestCall = findIngestCall(calls);
+    // Without targetSplit the ingest payload carries only the session and policy.
+    expect(ingestCall?.body).toEqual({
+      sessionId: "session_123",
+      conflictPolicy: "skip",
+    });
+  });
+
+  test("starts a fresh signed-url session when the first upload fails", async () => {
+    const videoPath = await writeVideoFile();
+    const seenUrls: string[] = [];
+    let putCount = 0;
+    const failFirstUpload = (async (url: string | URL) => {
+      seenUrls.push(String(url));
+      putCount += 1;
+      if (putCount === 1) {
+        return new Response("precondition failed", { status: 412 });
+      }
+      return new Response("", { status: 200 });
+    }) as unknown as typeof fetch;
+    const { client, calls } = clientForVideoUpload({
+      signedResponses: [
+        {
+          sessionId: "session_old",
+          uploadUrl: "https://signed.example/old",
+          expiresAt: "2026-09-12T04:00:00.000Z",
+          headers: liveSignedHeaders,
+        },
+        {
+          sessionId: "session_new",
+          uploadUrl: "https://signed.example/new",
+          expiresAt: "2026-09-12T04:01:00.000Z",
+          headers: liveSignedHeaders,
+        },
+      ],
+      uploadImpl: failFirstUpload,
+    });
+
+    const result = await datasetUploadVideo(client, {
+      dataset: "alice/cars",
+      videoPath,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+
+    expect(seenUrls).toEqual([
+      "https://signed.example/old",
+      "https://signed.example/new",
+    ]);
+    const completeCall = calls.find((call) =>
+      call.url.endsWith("/upload/complete"),
+    );
+    expect(completeCall?.body).toEqual({ sessionId: "session_new" });
+    const ingestCall = findIngestCall(calls);
+    expect(ingestCall?.body).toMatchObject({ sessionId: "session_new" });
+    expect(result.data).toMatchObject({ sessionId: "session_new" });
+  });
+
+  test("completes the upload session before starting ingest, in order", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload();
+    await datasetUploadVideo(client, {
+      dataset: "alice/cars",
+      videoPath,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      `${BASE}/datasets/alice/cars`,
+      `${BASE}/upload/signed-url`,
+      `${BASE}/upload/complete`,
+      `${BASE}/datasets/alice/cars/ingest`,
+      `${BASE}/datasets/alice/cars`,
+    ]);
+  });
+
+  test("never starts ingest when completion is rejected", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload({
+      completeResponse: {
+        error:
+          "Upload session not ready (status: pending). Call /api/upload/complete first.",
+      },
+      completeStatus: 400,
+    });
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "alice/cars",
+        videoPath,
+        _findTool: (name) => `/usr/bin/${name}`,
+        _probeDuration: async () => 200,
+        _extractFrames: writeSingleFrame(),
+      }),
+    ).rejects.toThrow(/Upload session not ready/);
+    expect(
+      calls.some((call) => call.url.endsWith("/datasets/alice/cars/ingest")),
+    ).toBe(false);
+  });
+
+  test("still returns the job id when the status lookup fails", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload({ failStatusLookup: true });
+    const result = await datasetUploadVideo(client, {
+      dataset: "alice/cars",
+      videoPath,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+    expect(
+      calls.filter((call) => call.url === `${BASE}/datasets/alice/cars`),
+    ).toHaveLength(2);
+    expect(result.data).toMatchObject({
+      jobId: liveJobId,
+      datasetStatus: null,
+      lastIngestJobId: null,
+    });
+    expect(result.summary).toContain("status lookup failed");
+    expect(result.summary).toContain("datasets_get");
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload({ accountOwner: "alice" });
+    const result = await datasetUploadVideo(client, {
+      dataset: "cars",
+      videoPath,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+    expect(calls[0].url).toBe(`${BASE}/account/summary`);
+    expect(calls[1].url).toBe(`${BASE}/datasets/alice/cars`);
+    expect(result.data).toMatchObject({ owner: "alice", dataset: "cars" });
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload();
+    const result = await datasetUploadVideo(client, {
+      dataset: "ul://alice/cars",
+      videoPath,
+      _findTool: (name) => `/usr/bin/${name}`,
+      _probeDuration: async () => 200,
+      _extractFrames: writeSingleFrame(),
+    });
+    expect(
+      calls.map((call) => `${call.method} ${new URL(call.url).pathname}`),
+    ).toEqual([
+      "GET /api/datasets/alice/cars",
+      "POST /api/upload/signed-url",
+      "POST /api/upload/complete",
+      "POST /api/datasets/alice/cars/ingest",
+      "GET /api/datasets/alice/cars",
+    ]);
+    expect(result.data).toMatchObject({ owner: "alice" });
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const videoPath = await writeVideoFile();
+    const { client, calls } = clientForVideoUpload();
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "a".repeat(24),
+        videoPath,
+        _findTool: (name) => `/usr/bin/${name}`,
+        _probeDuration: async () => 200,
+        _extractFrames: writeSingleFrame(),
+      }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
   });
 
   test("validates inputs and missing ffmpeg before network", async () => {
@@ -2026,41 +2380,95 @@ describe("datasetUploadVideo", () => {
     });
 
     await expect(
-      datasetUploadVideo(client, { dataset: "d".repeat(24), videoPath: "" }),
+      datasetUploadVideo(client, { dataset: "alice/cars", videoPath: "" }),
     ).rejects.toThrow(/videoPath/);
     await expect(
       datasetUploadVideo(client, {
-        dataset: "d".repeat(24),
+        dataset: "alice/cars",
         videoPath: join(dir, "missing.mp4"),
       }),
     ).rejects.toThrow(/does not exist/);
     await expect(
       datasetUploadVideo(client, {
-        dataset: "d".repeat(24),
+        dataset: "alice/cars",
         videoPath: badPath,
       }),
     ).rejects.toThrow(/Unsupported video file type/);
     await expect(
       datasetUploadVideo(client, {
-        dataset: "d".repeat(24),
+        dataset: "alice/cars",
         videoPath,
         fps: 0,
       }),
     ).rejects.toThrow(/fps/);
     await expect(
       datasetUploadVideo(client, {
-        dataset: "d".repeat(24),
+        dataset: "alice/cars",
         videoPath,
         maxFrames: 0,
       }),
     ).rejects.toThrow(/maxFrames/);
     await expect(
       datasetUploadVideo(client, {
-        dataset: "d".repeat(24),
+        dataset: "alice/cars",
+        videoPath,
+        targetSplit: "bad",
+      }),
+    ).rejects.toThrow(/Unsupported targetSplit/);
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "alice/cars",
+        videoPath,
+        conflictPolicy: "bogus",
+      }),
+    ).rejects.toThrow(/Unsupported conflictPolicy/);
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "alice/cars",
         videoPath,
         _findTool: () => null,
       }),
     ).rejects.toThrow(/ffmpeg\/ffprobe not found on PATH/);
+  });
+
+  test("surfaces the API message for a missing dataset", async () => {
+    const videoPath = await writeVideoFile();
+    const missingClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        if (parsed.pathname === "/api/datasets/alice/missing") {
+          return jsonResponse({ error: "Dataset not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch,
+    });
+    await expect(
+      datasetUploadVideo(missingClient, {
+        dataset: "alice/missing",
+        videoPath,
+        _findTool: (name) => `/usr/bin/${name}`,
+        _probeDuration: async () => 200,
+        _extractFrames: writeSingleFrame(),
+      }),
+    ).rejects.toThrow(/Dataset not found/);
+  });
+
+  test("errors when the dataset record has no id for the signed-url step", async () => {
+    const videoPath = await writeVideoFile();
+    const { client } = clientForVideoUpload({
+      datasetResponse: { dataset: { owner: "alice", dataset: "cars" } },
+    });
+    await expect(
+      datasetUploadVideo(client, {
+        dataset: "alice/cars",
+        videoPath,
+        _findTool: (name) => `/usr/bin/${name}`,
+        _probeDuration: async () => 200,
+        _extractFrames: writeSingleFrame(),
+      }),
+    ).rejects.toThrow(/did not include an id/);
   });
 });
 

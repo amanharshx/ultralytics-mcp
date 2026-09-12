@@ -1,7 +1,7 @@
 {
   "tool": "dataset_upload_video",
   "args": {
-    "dataset": "user/data",
+    "dataset": "example-dataset-1",
     "video_path": "__TMP__/birds.mp4",
     "fps": 1,
     "max_frames": 100,
@@ -10,20 +10,54 @@
   "api": [
     {
       "method": "GET",
-      "path": "/api/datasets",
-      "query": {
-        "username": "user"
-      },
+      "path": "/api/account/summary",
       "response": {
         "status": 200,
         "json": {
-          "datasets": [
-            {
-              "_id": "dddddddddddddddddddddddd",
-              "slug": "data",
-              "username": "user"
-            }
-          ]
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "dataset": {
+            "id": "000000000000000000000001",
+            "owner": "example-owner",
+            "dataset": "example-dataset-1",
+            "name": "Example dataset 1",
+            "visibility": "private",
+            "task": "detect",
+            "imageCount": 0,
+            "format": "yolo",
+            "splits": {
+              "train": 0,
+              "val": 0,
+              "test": 0,
+              "labeled": 0
+            },
+            "annotationCount": 0,
+            "starCount": 0,
+            "isStarred": false,
+            "sampleImages": [],
+            "region": "eu",
+            "createdAt": "2026-09-12T03:52:00.000Z",
+            "updatedAt": "2026-09-12T03:52:10.000Z",
+            "metadata": {}
+          }
         }
       }
     },
@@ -32,16 +66,20 @@
       "path": "/api/upload/signed-url",
       "json": {
         "assetType": "datasets",
-        "assetId": "dddddddddddddddddddddddd",
+        "assetId": "000000000000000000000001",
         "filename": "birds.zip",
         "contentType": "application/zip",
-        "totalBytes": "__ANY_NUMBER__"
+        "totalBytes": 361
       },
       "response": {
         "status": 200,
         "json": {
-          "sessionId": "session_123",
-          "uploadUrl": "https://signed.example/upload"
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "uploadUrl": "https://signed.example/upload?REDACTED",
+          "expiresAt": "2026-09-12T04:00:00.000Z",
+          "headers": {
+            "x-goog-if-generation-match": "0"
+          }
         }
       }
     },
@@ -49,35 +87,72 @@
       "method": "POST",
       "path": "/api/upload/complete",
       "json": {
-        "sessionId": "session_123"
+        "sessionId": "11111111-1111-4111-8111-111111111111"
       },
       "response": {
         "status": 200,
         "json": {
-          "ok": true
+          "success": true,
+          "file": {
+            "size": 361,
+            "contentType": "application/zip"
+          }
         }
       }
     },
     {
       "method": "POST",
-      "path": "/api/datasets/ingest",
+      "path": "/api/datasets/example-owner/example-dataset-1/ingest",
       "json": {
-        "datasetId": "dddddddddddddddddddddddd",
-        "sessionId": "session_123",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "conflictPolicy": "skip",
         "targetSplit": "train"
       },
       "response": {
+        "status": 201,
+        "json": {
+          "jobId": "000000000000000000000009",
+          "status": "queued"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1",
+      "response": {
         "status": 200,
         "json": {
-          "jobId": "job_123",
-          "datasetId": "dddddddddddddddddddddddd",
-          "status": "queued"
+          "dataset": {
+            "id": "000000000000000000000001",
+            "owner": "example-owner",
+            "dataset": "example-dataset-1",
+            "name": "Example dataset 1",
+            "visibility": "private",
+            "task": "detect",
+            "imageCount": 0,
+            "format": "yolo",
+            "splits": {
+              "train": 0,
+              "val": 0,
+              "test": 0,
+              "labeled": 0
+            },
+            "annotationCount": 0,
+            "starCount": 0,
+            "isStarred": false,
+            "sampleImages": [],
+            "region": "eu",
+            "createdAt": "2026-09-12T03:52:00.000Z",
+            "updatedAt": "2026-09-12T03:52:10.000Z",
+            "metadata": {},
+            "status": "processing"
+          }
         }
       }
     }
   ],
   "upload": {
-    "url": "https://signed.example/upload",
+    "url": "https://signed.example/upload?REDACTED",
     "content_type": "application/zip",
     "zip_files": {
       "frame_000001.jpg": "jpg",
@@ -86,20 +161,25 @@
     }
   },
   "expected": {
-    "summary": "Extracted 3 frame(s) at ~0.5 fps from __TMP__/birds.mp4; started ingest job job_123 for dataset dddddddddddddddddddddddd.",
+    "summary": "Extracted 3 frame(s) at ~0.5 fps from __TMP__/birds.mp4 as birds.zip (361 bytes) and started dataset ingest job 000000000000000000000009 for dataset 'example-dataset-1' for owner 'example-owner' (dataset status: processing). Use datasets_get to follow up; ingest completes when lastIngestJobId matches 000000000000000000000009.",
     "data": {
-      "datasetId": "dddddddddddddddddddddddd",
+      "jobId": "000000000000000000000009",
+      "status": "queued",
+      "conflictPolicy": "skip",
+      "targetSplit": "train",
+      "owner": "example-owner",
+      "dataset": "example-dataset-1",
+      "datasetStatus": "processing",
+      "lastIngestJobId": null,
+      "lastIngestSummary": null,
+      "processingError": null,
+      "errorCount": null,
       "frameCount": 3,
       "fps": 1,
       "maxFrames": 100,
       "filename": "birds.zip",
-      "bytes": "__ANY_NUMBER__",
-      "sessionId": "session_123",
-      "ingest": {
-        "jobId": "job_123",
-        "datasetId": "dddddddddddddddddddddddd",
-        "status": "queued"
-      }
+      "bytes": 361,
+      "sessionId": "11111111-1111-4111-8111-111111111111"
     }
   }
 }

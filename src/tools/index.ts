@@ -600,15 +600,21 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Upload a local video by extracting JPEG frames with ffmpeg, then start dataset ingest for an existing dataset.",
+      "Upload a local video as extracted frames through the signed-upload flow for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       video_path: z.string().describe("Local path to source video file."),
       fps: z.number().optional(),
       max_frames: z.number().int().optional(),
       targetSplit: z.string().optional(),
+      conflictPolicy: z
+        .string()
+        .optional()
+        .describe(
+          'Conflict policy "skip" (default), "keep_both", or "replace".',
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -616,12 +622,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       idempotentHint: false,
     },
     docNote:
-      "Uses a local video path, extracts JPEG frames with ffmpeg, and starts ingest into an existing dataset.",
+      "Uses a local video path, extracts JPEG frames with ffmpeg, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.",
     examples: [
       {
         title: "Upload video for frame extraction",
         input: {
-          dataset: "team/datasets/factory-lines",
+          dataset: "team/factory-lines",
           video_path: "/videos/factory-shift.mp4",
           fps: 2,
           max_frames: 500,
@@ -631,7 +637,14 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     ],
     createHandler:
       (getClient) =>
-      async ({ dataset, video_path, fps, max_frames, targetSplit }) =>
+      async ({
+        dataset,
+        video_path,
+        fps,
+        max_frames,
+        targetSplit,
+        conflictPolicy,
+      }) =>
         toMcpTextResult(
           await datasetUploadVideo(getClient(), {
             dataset: dataset as string,
@@ -639,6 +652,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             fps: fps as number | undefined,
             maxFrames: max_frames as number | undefined,
             targetSplit: targetSplit as string | undefined,
+            conflictPolicy: conflictPolicy as string | undefined,
           }),
         ),
   }),

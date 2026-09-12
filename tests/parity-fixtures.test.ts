@@ -245,6 +245,7 @@ const TOOL_RUNNERS: Record<
       fps: args.fps as number | undefined,
       maxFrames: args.max_frames as number | undefined,
       targetSplit: args.targetSplit as string | undefined,
+      conflictPolicy: args.conflictPolicy as string | undefined,
       _findTool: (name) => `/usr/bin/${name}`,
       _probeDuration: async () => 200,
       _extractFrames: async ({ outputDir, ffmpegPath, rate, maxFrames }) => {
