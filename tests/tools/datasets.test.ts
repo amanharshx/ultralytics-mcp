@@ -1705,38 +1705,229 @@ describe("datasetsDelete", () => {
 });
 
 describe("datasetsIngest", () => {
-  test("resolves a dataset and posts the ingest payload", async () => {
-    const { client, calls } = captureClient((url) => {
+  const liveJobId = "c".repeat(24);
+  const liveIngestResponse = { jobId: liveJobId, status: "queued" };
+  const liveDatasetReady = {
+    dataset: {
+      id: "a".repeat(24),
+      owner: "alice",
+      dataset: "cars",
+      name: "Cars",
+      visibility: "private",
+      task: "detect",
+      imageCount: 8,
+      classCount: 12,
+      status: "ready",
+      lastIngestJobId: liveJobId,
+      lastIngestSummary: { added: 8, errors: 0, skippedCounts: {} },
+      processingError: null,
+      errorCount: 0,
+    },
+  };
+
+  function clientForIngest(
+    options: {
+      ingestResponse?: unknown;
+      ingestStatus?: number;
+      datasetResponse?: unknown;
+      accountOwner?: string;
+    } = {},
+  ) {
+    const ingestResponse = options.ingestResponse ?? liveIngestResponse;
+    const datasetResponse = options.datasetResponse ?? liveDatasetReady;
+    return captureClient((url) => {
       const parsed = new URL(url);
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
       }
-      return jsonResponse({
-        jobId: "job_123",
-        datasetId: "d".repeat(24),
-        status: "queued",
-      });
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(ingestResponse, options.ingestStatus ?? 201);
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        return jsonResponse(datasetResponse);
+      }
+      return jsonResponse({}, 404);
     });
+  }
+
+  test("posts through the owner-scoped path with default skip and surfaces ingest status", async () => {
+    const { client, calls } = clientForIngest();
     const result = await datasetsIngest(client, {
-      dataset: "user/data",
+      dataset: "alice/cars",
       sourceUrl: "https://example.com/dataset.zip",
       targetSplit: "train",
     });
-    expect(calls.at(-1)).toEqual({
-      url: `${BASE}/datasets/ingest`,
-      method: "POST",
-      body: {
-        datasetId: "d".repeat(24),
-        sourceUrl: "https://example.com/dataset.zip",
-        targetSplit: "train",
+    expect(calls).toEqual([
+      {
+        url: `${BASE}/datasets/alice/cars/ingest`,
+        method: "POST",
+        body: {
+          sourceUrl: "https://example.com/dataset.zip",
+          conflictPolicy: "skip",
+          targetSplit: "train",
+        },
+      },
+      {
+        url: `${BASE}/datasets/alice/cars`,
+        method: "GET",
+        body: undefined,
+      },
+    ]);
+    expect(result.summary).toBe(
+      `Started dataset ingest job ${liveJobId} for dataset 'cars' for owner 'alice' ` +
+        `(dataset status: ready). Use datasets_get to follow up; ` +
+        `ingest completes when lastIngestJobId matches ${liveJobId}.`,
+    );
+    expect(result.data).toEqual({
+      jobId: liveJobId,
+      status: "queued",
+      conflictPolicy: "skip",
+      targetSplit: "train",
+      owner: "alice",
+      dataset: "cars",
+      datasetStatus: "ready",
+      lastIngestJobId: liveJobId,
+      lastIngestSummary: { added: 8, errors: 0, skippedCounts: {} },
+      processingError: null,
+      errorCount: 0,
+    });
+  });
+
+  test("sends an explicit replace policy and omits targetSplit when absent", async () => {
+    const { client, calls } = clientForIngest();
+    const result = await datasetsIngest(client, {
+      dataset: "alice/cars",
+      sourceUrl: "https://example.com/dataset.zip",
+      conflictPolicy: "replace",
+    });
+    expect(calls[0].body).toEqual({
+      sourceUrl: "https://example.com/dataset.zip",
+      conflictPolicy: "replace",
+    });
+    expect(result.data).toMatchObject({
+      jobId: liveJobId,
+      conflictPolicy: "replace",
+      targetSplit: null,
+    });
+  });
+
+  test("never sends class mapping or image metadata", async () => {
+    const { client, calls } = clientForIngest();
+    await datasetsIngest(client, {
+      dataset: "alice/cars",
+      sourceUrl: "https://example.com/dataset.zip",
+    });
+    expect(
+      Object.keys(calls[0].body as Record<string, unknown>).sort(),
+    ).toEqual(["conflictPolicy", "sourceUrl"]);
+  });
+
+  test("tells a running ingest from a finished one via the dataset fields", async () => {
+    const runningJobId = "d".repeat(24);
+    const { client } = clientForIngest({
+      ingestResponse: { jobId: runningJobId, status: "queued" },
+      datasetResponse: {
+        dataset: {
+          status: "processing",
+          lastIngestJobId: liveJobId,
+          lastIngestSummary: null,
+          processingError: null,
+          errorCount: 0,
+        },
       },
     });
-    expect(result.summary).toBe(
-      `Started dataset ingest job job_123 for dataset ${"d".repeat(24)}.`,
+    const result = await datasetsIngest(client, {
+      dataset: "alice/cars",
+      sourceUrl: "https://example.com/dataset.zip",
+    });
+    expect(result.data).toMatchObject({
+      jobId: runningJobId,
+      datasetStatus: "processing",
+      lastIngestJobId: liveJobId,
+    });
+    expect(result.summary).toContain(
+      `ingest completes when lastIngestJobId matches ${runningJobId}`,
     );
-    expect((result.data as Record<string, unknown>).status).toBe("queued");
+    expect(result.summary).not.toMatch(/completed/i);
+  });
+
+  test("surfaces a failed ingest outcome instead of hiding it", async () => {
+    const failedJobId = "e".repeat(24);
+    const { client } = clientForIngest({
+      ingestResponse: { jobId: failedJobId, status: "queued" },
+      datasetResponse: {
+        dataset: {
+          status: "ready",
+          lastIngestJobId: failedJobId,
+          lastIngestSummary: null,
+          processingError: {
+            message: "HTTP 404",
+            timestamp: "2026-09-12T03:51:31.425Z",
+          },
+          errorCount: 0,
+        },
+      },
+    });
+    const result = await datasetsIngest(client, {
+      dataset: "alice/cars",
+      sourceUrl: "https://example.com/missing.zip",
+    });
+    expect(result.data).toMatchObject({
+      jobId: failedJobId,
+      datasetStatus: "ready",
+      lastIngestJobId: failedJobId,
+      processingError: {
+        message: "HTTP 404",
+        timestamp: "2026-09-12T03:51:31.425Z",
+      },
+    });
+    expect(result.summary).toContain(failedJobId);
+    expect(result.summary).toContain("datasets_get");
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForIngest({ accountOwner: "alice" });
+    const result = await datasetsIngest(client, {
+      dataset: "cars",
+      sourceUrl: "https://example.com/dataset.zip",
+    });
+    expect(
+      calls.map((call) => `${call.method} ${new URL(call.url).pathname}`),
+    ).toEqual([
+      "GET /api/account/summary",
+      "POST /api/datasets/alice/cars/ingest",
+      "GET /api/datasets/alice/cars",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const { client, calls } = clientForIngest();
+    const result = await datasetsIngest(client, {
+      dataset: "ul://alice/cars",
+      sourceUrl: "https://example.com/dataset.zip",
+    });
+    expect(
+      calls.map((call) => `${call.method} ${new URL(call.url).pathname}`),
+    ).toEqual([
+      "POST /api/datasets/alice/cars/ingest",
+      "GET /api/datasets/alice/cars",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForIngest();
+    await expect(
+      datasetsIngest(client, {
+        dataset: "a".repeat(24),
+        sourceUrl: "https://example.com/dataset.zip",
+      }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
   });
 
   test("validates inputs before network", async () => {
@@ -1749,17 +1940,44 @@ describe("datasetsIngest", () => {
     });
     await expect(
       datasetsIngest(client, {
-        dataset: "user/data",
+        dataset: "alice/cars",
         sourceUrl: "",
       }),
     ).rejects.toThrow(/`sourceUrl` is required/);
     await expect(
       datasetsIngest(client, {
-        dataset: "user/data",
+        dataset: "alice/cars",
         sourceUrl: "https://example.com/dataset.zip",
         targetSplit: "bad",
       }),
     ).rejects.toThrow(/Unsupported targetSplit/);
+    await expect(
+      datasetsIngest(client, {
+        dataset: "alice/cars",
+        sourceUrl: "https://example.com/dataset.zip",
+        conflictPolicy: "bogus",
+      }),
+    ).rejects.toThrow(/Unsupported conflictPolicy/);
+  });
+
+  test.each([
+    "alice/missing",
+    "ghost/cars",
+  ])("surfaces the API message for %s", async (ref) => {
+    const [owner, slug] = ref.split("/");
+    const { client } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === `/api/datasets/${owner}/${slug}/ingest`) {
+        return jsonResponse({ error: "Dataset not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(
+      datasetsIngest(client, {
+        dataset: ref,
+        sourceUrl: "https://example.com/dataset.zip",
+      }),
+    ).rejects.toThrow(/Dataset not found/);
   });
 });
 

@@ -267,6 +267,7 @@ const TOOL_RUNNERS: Record<
       dataset: args.dataset as string,
       sourceUrl: args.sourceUrl as string,
       targetSplit: args.targetSplit as string | undefined,
+      conflictPolicy: args.conflictPolicy as string | undefined,
     }),
   dataset_upload_file: (client, args) =>
     datasetUploadFile(client, {

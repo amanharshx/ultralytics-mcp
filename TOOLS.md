@@ -196,15 +196,16 @@ Metadata: state-changing, destructive, non-idempotent
 
 ### dataset_ingest
 
-Start a remote URL ingest job for an existing dataset.
+Start a remote URL ingest job for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.
 
 Metadata: state-changing, non-idempotent, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `sourceUrl` | string | Yes |  |
 | `targetSplit` | string | No |  |
+| `conflictPolicy` | string | No | Conflict policy "skip" (default) or "replace". |
 
 ### dataset_upload_file
 
