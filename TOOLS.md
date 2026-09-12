@@ -175,13 +175,13 @@ Metadata: read-only
 
 ### dataset_version_create
 
-Create a frozen dataset version snapshot.
+Create a frozen dataset version snapshot by slug, owner/slug, or dataset ul:// URI. If the dataset is unchanged since the previous snapshot the existing version is returned instead of a new one.
 
 Metadata: state-changing, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `description` | string | No |  |
 
 ### datasets_delete

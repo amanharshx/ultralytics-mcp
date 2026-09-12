@@ -418,11 +418,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "dataset_version_create",
     registrationGroup: "write",
     stateChanging: true,
-    description: "Create a frozen dataset version snapshot.",
+    description:
+      "Create a frozen dataset version snapshot by slug, owner/slug, or dataset ul:// URI. If the dataset is unchanged since the previous snapshot the existing version is returned instead of a new one.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by id, slug, username/slug, or ul:// URI."),
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       description: z.string().optional(),
     },
     annotations: {
