@@ -147,13 +147,13 @@ Metadata: state-changing, non-idempotent
 
 ### dataset_images_list
 
-List images in a dataset with optional filtering.
+List images in a dataset by slug, owner/slug, or dataset ul:// URI with optional filtering.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset` | string | Yes | Dataset ref by id, slug, username/slug, or ul:// URI. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `split` | string | No |  |
 | `search` | string | No |  |
 | `hasLabel` | boolean | No |  |

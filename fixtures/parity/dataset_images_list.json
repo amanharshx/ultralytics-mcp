@@ -1,92 +1,107 @@
 {
   "tool": "dataset_images_list",
   "args": {
-    "dataset": "user/data",
+    "dataset": "example-dataset-1",
     "split": "train",
-    "search": "frame",
+    "search": "000000000034",
     "hasLabel": true,
-    "classIds": ["car", "person"],
-    "limit": 25,
-    "offset": 50,
-    "includeImageUrls": true
+    "classIds": [
+      "0",
+      "1"
+    ],
+    "limit": 10,
+    "offset": 0,
+    "includeImageUrls": false
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/datasets",
-      "query": {
-        "username": "user"
-      },
+      "path": "/api/account/summary",
       "response": {
         "status": 200,
         "json": {
-          "datasets": [
-            {
-              "_id": "dddddddddddddddddddddddd",
-              "slug": "data",
-              "username": "user"
-            }
-          ]
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
         }
       }
     },
     {
       "method": "GET",
-      "path": "/api/datasets/dddddddddddddddddddddddd/images",
+      "path": "/api/datasets/example-owner/example-dataset-1/images",
       "query": {
         "split": "train",
-        "search": "frame",
+        "search": "000000000034",
         "hasLabel": "true",
-        "classIds": "car,person",
-        "limit": "25",
-        "offset": "50",
-        "includeImageUrls": "true"
+        "classIds": "0,1",
+        "limit": "10",
+        "offset": "0",
+        "includeImageUrls": "false"
       },
       "response": {
         "status": 200,
         "json": {
           "images": [
             {
-              "_id": "iiiiiiiiiiiiiiiiiiiiiiii",
-              "name": "frame-001",
-              "ext": ".jpg",
+              "id": "000000000000000000000001",
+              "hash": "00000000000000000000000000000001",
+              "ext": "jpg",
+              "width": 640,
+              "height": 425,
               "split": "train",
-              "width": 1280,
-              "height": 720,
-              "labelCount": 3,
-              "bytes": 12345,
-              "imageUrl": "https://cdn.example.com/frame-001.jpg",
-              "thumbnailUrl": "https://cdn.example.com/frame-001-thumb.jpg",
-              "hash": "omitted"
+              "labelCount": 1,
+              "name": "000000000034",
+              "bytes": 147010
             }
           ],
-          "total": 10,
-          "hasMore": true,
-          "classes": [],
-          "errorCount": 0,
-          "nextCursor": "cursor_2"
+          "total": 1,
+          "hasMore": false,
+          "classes": [
+            "Zebra",
+            "Giraffe",
+            "brocolli",
+            "bread",
+            "vase",
+            "flowers"
+          ],
+          "errorCount": 0
         }
       }
     }
   ],
   "expected": {
-    "summary": "1 image(s) (total 10)",
+    "summary": "1 image(s) (total 1)",
     "data": {
-      "total": 10,
-      "hasMore": true,
-      "nextCursor": "cursor_2",
+      "total": 1,
+      "hasMore": false,
+      "classes": [
+        "Zebra",
+        "Giraffe",
+        "brocolli",
+        "bread",
+        "vase",
+        "flowers"
+      ],
+      "errorCount": 0,
+      "nextCursor": null,
       "images": [
         {
-          "id": "iiiiiiiiiiiiiiiiiiiiiiii",
-          "name": "frame-001",
-          "ext": ".jpg",
+          "id": "000000000000000000000001",
+          "name": "000000000034",
+          "ext": "jpg",
           "split": "train",
-          "width": 1280,
-          "height": 720,
-          "labelCount": 3,
-          "bytes": 12345,
-          "imageUrl": "https://cdn.example.com/frame-001.jpg",
-          "thumbnailUrl": "https://cdn.example.com/frame-001-thumb.jpg"
+          "width": 640,
+          "height": 425,
+          "labelCount": 1,
+          "bytes": 147010
         }
       ]
     }

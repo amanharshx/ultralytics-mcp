@@ -407,76 +407,224 @@ describe("datasetsGet", () => {
 });
 
 describe("datasetImagesList", () => {
-  test("resolves dataset, builds query, and normalizes images", async () => {
-    const { client, calls } = captureClient((url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+  const liveImagesResponse = {
+    images: [
+      {
+        id: "a".repeat(24),
+        hash: "omit",
+        name: "000000000034",
+        ext: "jpg",
+        split: "train",
+        width: 640,
+        height: 425,
+        labelCount: 1,
+        bytes: 147010,
+        thumbnailUrl: "https://cdn.example.com/t-1.webp",
+        imageUrl: "https://cdn.example.com/i-1.jpg",
+      },
+    ],
+    total: 4,
+    hasMore: false,
+    classes: ["Zebra", "Giraffe"],
+    errorCount: 0,
+  };
+
+  function clientForImagesList(
+    response: unknown,
+    options: { accountOwner?: string } = {},
+  ) {
+    return routeClient((path) => {
+      if (options.accountOwner && path === "/api/account/summary") {
+        return jsonResponse({ username: options.accountOwner });
       }
-      return jsonResponse({
-        images: [
-          {
-            _id: "i".repeat(24),
-            name: "frame-001",
-            ext: ".jpg",
-            split: "train",
-            width: 1280,
-            height: 720,
-            labelCount: 3,
-            bytes: 12345,
-            imageUrl: "https://cdn.example.com/frame-001.jpg",
-            thumbnailUrl: "https://cdn.example.com/frame-001-thumb.jpg",
-            hash: "omit",
-          },
-        ],
-        total: 10,
-        hasMore: true,
-        classes: [],
-        errorCount: 0,
-        nextCursor: "cursor_2",
-      });
+      return path === "/api/datasets/alice/cars/images"
+        ? jsonResponse(response)
+        : jsonResponse({}, 404);
     });
+  }
+
+  test("fetches through the owner-scoped path and reads live field names", async () => {
+    const { client, calls } = clientForImagesList(liveImagesResponse);
 
     const result = await datasetImagesList(client, {
-      dataset: "user/data",
-      split: "train",
-      search: "frame",
-      hasLabel: true,
-      classIds: ["car", "person"],
-      limit: 25,
-      offset: 50,
-      includeImageUrls: true,
+      dataset: "alice/cars",
     });
 
-    expect(calls[1]).toEqual({
-      url:
-        `${BASE}/datasets/${"d".repeat(24)}/images` +
-        "?split=train&search=frame&hasLabel=true&classIds=car%2Cperson&limit=25&offset=50&includeImageUrls=true",
-      method: "GET",
-      body: undefined,
-    });
-    expect(result.summary).toBe("1 image(s) (total 10)");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars/images",
+    ]);
+    expect(result.summary).toBe("1 image(s) (total 4)");
     expect(result.data).toEqual({
-      total: 10,
-      hasMore: true,
-      nextCursor: "cursor_2",
+      total: 4,
+      hasMore: false,
+      classes: ["Zebra", "Giraffe"],
+      errorCount: 0,
+      nextCursor: null,
       images: [
         {
-          id: "i".repeat(24),
-          name: "frame-001",
-          ext: ".jpg",
+          id: "a".repeat(24),
+          name: "000000000034",
+          ext: "jpg",
           split: "train",
-          width: 1280,
-          height: 720,
-          labelCount: 3,
-          bytes: 12345,
-          imageUrl: "https://cdn.example.com/frame-001.jpg",
-          thumbnailUrl: "https://cdn.example.com/frame-001-thumb.jpg",
+          width: 640,
+          height: 425,
+          labelCount: 1,
+          bytes: 147010,
+          imageUrl: "https://cdn.example.com/i-1.jpg",
+          thumbnailUrl: "https://cdn.example.com/t-1.webp",
         },
       ],
     });
+  });
+
+  test("surfaces the pagination cursor the live API returns with a limit", async () => {
+    const { client } = clientForImagesList({
+      images: [],
+      total: 4,
+      hasMore: true,
+      classes: ["Zebra"],
+      errorCount: 0,
+      nextCursor: "b".repeat(24),
+    });
+    const result = await datasetImagesList(client, {
+      dataset: "alice/cars",
+      limit: 1,
+    });
+    expect(result.data).toMatchObject({
+      total: 4,
+      hasMore: true,
+      nextCursor: "b".repeat(24),
+    });
+  });
+
+  test.each([
+    [{ split: "train" }, "split", "train"],
+    [{ search: "000000000034" }, "search", "000000000034"],
+    [{ hasLabel: true }, "hasLabel", "true"],
+    [{ hasLabel: false }, "hasLabel", "false"],
+    [{ classIds: ["0"] }, "classIds", "0"],
+    [{ classIds: ["0", "1"] }, "classIds", "0,1"],
+    [{ limit: 1 }, "limit", "1"],
+    [{ offset: 1 }, "offset", "1"],
+    [{ includeImageUrls: true }, "includeImageUrls", "true"],
+  ])("passes filter %j as %s", async (filter, key, expected) => {
+    const { client, calls } = clientForImagesList(liveImagesResponse);
+    await datasetImagesList(client, {
+      dataset: "alice/cars",
+      ...filter,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].path).toBe("/api/datasets/alice/cars/images");
+    expect(calls[0].params.get(key)).toBe(expected);
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForImagesList(liveImagesResponse, {
+      accountOwner: "alice",
+    });
+    const result = await datasetImagesList(client, { dataset: "cars" });
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/datasets/alice/cars/images",
+    ]);
+    expect(result.summary).toBe("1 image(s) (total 4)");
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const { client, calls } = clientForImagesList(liveImagesResponse);
+    const result = await datasetImagesList(client, {
+      dataset: "ul://alice/cars",
+    });
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars/images",
+    ]);
+    expect(result.summary).toBe("1 image(s) (total 4)");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForImagesList(liveImagesResponse);
+    await expect(
+      datasetImagesList(client, { dataset: "a".repeat(24) }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("returns an empty result with classes and error count for a dataset with no images", async () => {
+    const { client } = clientForImagesList({
+      images: [],
+      total: 0,
+      hasMore: false,
+      classes: [],
+      errorCount: 0,
+    });
+    const result = await datasetImagesList(client, { dataset: "alice/cars" });
+    expect(result.summary).toBe("0 image(s) (total 0)");
+    expect(result.data).toEqual({
+      total: 0,
+      hasMore: false,
+      classes: [],
+      errorCount: 0,
+      nextCursor: null,
+      images: [],
+    });
+  });
+
+  test("omits image URLs the API did not return", async () => {
+    const { client } = clientForImagesList({
+      images: [
+        {
+          id: "a".repeat(24),
+          name: "000000000034",
+          ext: "jpg",
+          split: "train",
+          width: 640,
+          height: 425,
+          labelCount: 1,
+          bytes: 147010,
+          thumbnailUrl: "https://cdn.example.com/t-1.webp",
+        },
+      ],
+      total: 1,
+      hasMore: false,
+      classes: ["Zebra"],
+      errorCount: 0,
+    });
+    const result = await datasetImagesList(client, { dataset: "alice/cars" });
+    expect(result.data).toEqual({
+      total: 1,
+      hasMore: false,
+      classes: ["Zebra"],
+      errorCount: 0,
+      nextCursor: null,
+      images: [
+        {
+          id: "a".repeat(24),
+          name: "000000000034",
+          ext: "jpg",
+          split: "train",
+          width: 640,
+          height: 425,
+          labelCount: 1,
+          bytes: 147010,
+          thumbnailUrl: "https://cdn.example.com/t-1.webp",
+        },
+      ],
+    });
+  });
+
+  test.each([
+    "alice/missing",
+    "ghost/cars",
+  ])("surfaces the API message for %s", async (ref) => {
+    const { client } = routeClient((path) => {
+      if (path === `/api/datasets/${ref}/images`) {
+        return jsonResponse({ error: "Dataset not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(datasetImagesList(client, { dataset: ref })).rejects.toThrow(
+      /Dataset not found/,
+    );
   });
 
   test("validates split, limit, and offset before network", async () => {
