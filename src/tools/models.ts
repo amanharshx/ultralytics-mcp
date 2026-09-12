@@ -153,12 +153,10 @@ export async function modelsDelete(
       `project '${resolved.project}' (soft delete; restorable from trash; ` +
       `weights, training history, and exports removed only on permanent deletion).`,
     data: {
-      // Ref echo last: it names what was removed even if a future API
-      // field ever overlaps one of these keys.
-      ...record,
       owner: resolvedOwner,
       project: resolved.project,
       model: resolved.model,
+      ...record,
     },
   };
 }

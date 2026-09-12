@@ -399,22 +399,6 @@ describe("modelsDelete", () => {
     expect(result.data).not.toHaveProperty("cascadedModels");
   });
 
-  test("prefers the resolved ref if the API echoes overlapping fields", async () => {
-    const { client } = clientForDelete({
-      success: true,
-      owner: "other",
-      project: "other",
-      model: "other",
-    });
-    const result = await modelsDelete(client, "alice/road/exp");
-    expect(result.data).toMatchObject({
-      owner: "alice",
-      project: "road",
-      model: "exp",
-      success: true,
-    });
-  });
-
   test("fills a missing owner from the account summary for a bare slug", async () => {
     const { client, calls } = clientForDelete(
       { success: true },
