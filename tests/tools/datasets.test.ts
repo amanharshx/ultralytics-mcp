@@ -1097,23 +1097,107 @@ describe("datasetUploadVideo", () => {
 });
 
 describe("datasetsDelete", () => {
-  test("resolves a reference and deletes the dataset", async () => {
-    const { client, calls } = captureClient((url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+  function clientForDelete(
+    deleteResponse: unknown,
+    options: { accountOwner?: string } = {},
+  ) {
+    const calls: { path: string; method: string }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+      });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
       }
-      return jsonResponse({ deleted: true });
+      if (
+        parsed.pathname === "/api/datasets/alice/cars" &&
+        (init.method ?? "GET").toUpperCase() === "DELETE"
+      ) {
+        return jsonResponse(deleteResponse);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
     });
-    const result = await datasetsDelete(client, "user/data");
-    expect(calls.at(-1)).toMatchObject({
-      url: `${BASE}/datasets/${"d".repeat(24)}`,
-      method: "DELETE",
-    });
+    return { client, calls };
+  }
+
+  test("deletes through the owner-scoped path and reports what the API returns", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    const result = await datasetsDelete(client, "alice/cars");
+    expect(calls).toEqual([
+      { path: "/api/datasets/alice/cars", method: "DELETE" },
+    ]);
     expect(result.summary).toBe(
-      `Deleted dataset ${"d".repeat(24)} (soft delete).`,
+      "Deleted dataset 'cars' for owner 'alice' (soft delete; images and annotations moved to trash with the dataset; models trained on it are unaffected; restorable from trash).",
+    );
+    expect(result.data).toEqual({
+      owner: "alice",
+      dataset: "cars",
+      success: true,
+    });
+  });
+
+  test("claims no cascade summary", async () => {
+    const { client } = clientForDelete({ success: true });
+    const result = await datasetsDelete(client, "alice/cars");
+    expect(result.summary).not.toMatch(/model\(s\) removed/i);
+    expect(result.summary).not.toMatch(/cascad/i);
+    expect(result.data).not.toHaveProperty("cascadedModels");
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForDelete(
+      { success: true },
+      { accountOwner: "alice" },
+    );
+    const result = await datasetsDelete(client, "cars");
+    expect(calls).toEqual([
+      { path: "/api/account/summary", method: "GET" },
+      { path: "/api/datasets/alice/cars", method: "DELETE" },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    const result = await datasetsDelete(client, "ul://alice/cars");
+    expect(calls).toEqual([
+      { path: "/api/datasets/alice/cars", method: "DELETE" },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForDelete({ success: true });
+    await expect(datasetsDelete(client, "a".repeat(24))).rejects.toThrow(
+      /not addressable.*slug.*owner\/slug.*ul:\/\//s,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  // Observed live: the delete path answers `Dataset not found` even for an
+  // unknown owner. The tool surfaces the API message verbatim either way.
+  test.each([
+    "alice/missing",
+    "ghost/cars",
+  ])("surfaces the API message for %s", async (ref) => {
+    const { client } = routeClient((path) => {
+      if (path === `/api/datasets/${ref}`) {
+        return jsonResponse({ error: "Dataset not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(datasetsDelete(client, ref)).rejects.toThrow(
+      /Dataset not found/,
     );
   });
 });

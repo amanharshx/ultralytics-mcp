@@ -602,16 +602,35 @@ export async function datasetImagesList(
   };
 }
 
-/** Soft-delete a dataset by id, slug, username/slug, or dataset ul:// URI. */
+/** Delete a dataset by slug, owner/slug, or dataset ul:// URI.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and deletes through the
+ * live owner-scoped endpoint. The API reports only `{success: true}` with no
+ * cascade summary; both the returned fields and the ref are surfaced so the
+ * caller can tell what was removed. Deleting a dataset moves its images and
+ * annotations to trash with it; models trained on it are unaffected.
+ */
 export async function datasetsDelete(
   client: UltralyticsClient,
   dataset: string,
 ): Promise<NormalizedToolResult> {
-  const datasetId = await resolveLegacyDatasetId(client, dataset);
-  const data = await client.delete(`/datasets/${datasetId}`);
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = await client.delete(
+    `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`,
+  );
+  const record = asRecord(data);
   return {
-    summary: `Deleted dataset ${datasetId} (soft delete).`,
-    data: { id: datasetId, response: data },
+    summary:
+      `Deleted dataset '${refSlug}' for owner '${resolvedOwner}' ` +
+      `(soft delete; images and annotations moved to trash with the dataset; ` +
+      `models trained on it are unaffected; restorable from trash).`,
+    data: {
+      owner: resolvedOwner,
+      dataset: refSlug,
+      ...record,
+    },
   };
 }
 

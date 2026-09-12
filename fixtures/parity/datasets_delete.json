@@ -1,46 +1,46 @@
 {
   "tool": "datasets_delete",
   "args": {
-    "dataset": "user/data"
+    "dataset": "example-dataset-delete"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/datasets",
-      "query": {
-        "username": "user"
-      },
+      "path": "/api/account/summary",
       "response": {
         "status": 200,
         "json": {
-          "datasets": [
-            {
-              "_id": "dddddddddddddddddddddddd",
-              "slug": "data",
-              "username": "user"
-            }
-          ]
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
         }
       }
     },
     {
       "method": "DELETE",
-      "path": "/api/datasets/dddddddddddddddddddddddd",
+      "path": "/api/datasets/example-owner/example-dataset-delete",
       "response": {
         "status": 200,
         "json": {
-          "deleted": true
+          "success": true
         }
       }
     }
   ],
   "expected": {
-    "summary": "Deleted dataset dddddddddddddddddddddddd (soft delete).",
+    "summary": "Deleted dataset 'example-dataset-delete' for owner 'example-owner' (soft delete; images and annotations moved to trash with the dataset; models trained on it are unaffected; restorable from trash).",
     "data": {
-      "id": "dddddddddddddddddddddddd",
-      "response": {
-        "deleted": true
-      }
+      "owner": "example-owner",
+      "dataset": "example-dataset-delete",
+      "success": true
     }
   }
 }
