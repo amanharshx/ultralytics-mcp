@@ -226,7 +226,7 @@ Notes: Uses a local archive file path and starts ingest into an existing dataset
 
 ```json
 {
-  "dataset": "team/datasets/warehouse-items",
+  "dataset": "team/warehouse-items",
   "file_path": "/data/warehouse-items.zip",
   "targetSplit": "train"
 }

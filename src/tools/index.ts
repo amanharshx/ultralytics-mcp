@@ -529,7 +529,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       {
         title: "Upload dataset archive",
         input: {
-          dataset: "team/datasets/warehouse-items",
+          dataset: "team/warehouse-items",
           file_path: "/data/warehouse-items.zip",
           targetSplit: "train",
         },

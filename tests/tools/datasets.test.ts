@@ -1,3 +1,4 @@
+import { closeSync, ftruncateSync, openSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -2071,6 +2072,25 @@ describe("datasetUploadFile", () => {
     return filePath;
   }
 
+  const OVERSIZE_BYTES = 10 * 1024 * 1024 * 1024 + 1;
+
+  /** A sparse archive with oversize logical bytes but no disk cost.
+   *
+   * `readFile` rejects such files outright, so this only works because the
+   * tool streams the file instead of buffering it.
+   */
+  async function writeSparseArchive(name = "dataset.zip") {
+    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-upload-"));
+    const filePath = join(tmp, name);
+    const fd = openSync(filePath, "w");
+    try {
+      ftruncateSync(fd, OVERSIZE_BYTES);
+    } finally {
+      closeSync(fd);
+    }
+    return { filePath, bytes: OVERSIZE_BYTES };
+  }
+
   function clientForUpload(
     options: {
       datasetResponse?: unknown;
@@ -2091,6 +2111,7 @@ describe("datasetUploadFile", () => {
       method: string;
       body: string;
       contentType: string | null;
+      contentLength: string | null;
       generationMatch: string | null;
       auth: string | null;
     }> = [];
@@ -2153,6 +2174,7 @@ describe("datasetUploadFile", () => {
           method: (init.method ?? "GET").toUpperCase(),
           body: await new Response(init.body).text(),
           contentType: headers.get("Content-Type"),
+          contentLength: headers.get("Content-Length"),
           generationMatch: headers.get("x-goog-if-generation-match"),
           auth: headers.get("Authorization"),
         });
@@ -2200,6 +2222,7 @@ describe("datasetUploadFile", () => {
         method: "PUT",
         body: "archive",
         contentType: "application/zip",
+        contentLength: "7",
         generationMatch: "0",
         auth: null,
       },
@@ -2316,8 +2339,10 @@ describe("datasetUploadFile", () => {
       }
       return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
-    const uploadFetch = (async (url: string | URL) => {
+    const uploadFetch = (async (url: string | URL, init: RequestInit = {}) => {
       putUrls.push(String(url));
+      // Release the file stream without reading it.
+      await (init.body as ReadableStream | undefined)?.cancel?.();
       if (putUrls.length === 1) {
         return new Response("precondition failed", { status: 412 });
       }
@@ -2348,6 +2373,152 @@ describe("datasetUploadFile", () => {
     );
     expect(ingestCall?.body).toMatchObject({ sessionId: "session_new" });
     expect(result.data).toMatchObject({ sessionId: "session_new" });
+  });
+
+  test("streams an oversize archive without buffering and warns", async () => {
+    const { filePath, bytes } = await writeSparseArchive();
+    const putHeaders: Array<{
+      contentType: string | null;
+      contentLength: string | null;
+      generationMatch: string | null;
+      auth: string | null;
+    }> = [];
+    let putCount = 0;
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        const getCount = calls.filter(
+          (call) => call.url === `${BASE}/datasets/alice/cars`,
+        ).length;
+        if (getCount === 1) {
+          return jsonResponse({
+            dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
+          });
+        }
+        return jsonResponse(liveDatasetWithStatus);
+      }
+      if (parsed.pathname === "/api/upload/signed-url") {
+        return jsonResponse(liveSignedResponse);
+      }
+      if (parsed.pathname === "/api/upload/complete") {
+        return jsonResponse({
+          success: true,
+          file: { size: bytes, contentType: "application/zip" },
+        });
+      }
+      if (parsed.pathname === "/api/datasets/alice/cars/ingest") {
+        return jsonResponse(liveIngestResponse, 201);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const uploadFetch = (async (url: string | URL, init: RequestInit = {}) => {
+      putCount += 1;
+      const headers = new Headers(init.headers);
+      putHeaders.push({
+        contentType: headers.get("Content-Type"),
+        contentLength: headers.get("Content-Length"),
+        generationMatch: headers.get("x-goog-if-generation-match"),
+        auth: headers.get("Authorization"),
+      });
+      // Never read the stream: the archive is larger than memory.
+      await (init.body as ReadableStream | undefined)?.cancel?.();
+      expect(String(url)).toBe("https://signed.example/upload");
+      return new Response("", { status: 200 });
+    }) as unknown as typeof fetch;
+    const uploadClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+      uploadFetchImpl: uploadFetch,
+    });
+
+    const result = await datasetUploadFile(uploadClient, {
+      dataset: "alice/cars",
+      filePath,
+    });
+
+    expect(putCount).toBe(1);
+    expect(putHeaders).toEqual([
+      {
+        contentType: "application/zip",
+        contentLength: String(bytes),
+        generationMatch: "0",
+        auth: null,
+      },
+    ]);
+    const warning = (result.data as Record<string, unknown>).sizeWarning;
+    expect(typeof warning).toBe("string");
+    expect(warning as string).toMatch(/10 GB/);
+    expect(warning as string).toMatch(/20 GB/);
+    expect(warning as string).toMatch(/50 GB/);
+    expect(warning as string).toMatch(/dataset_ingest/);
+    expect(warning as string).toMatch(/cloud/i);
+    expect(result.summary).toContain("Warning:");
+    expect(result.summary).toContain(liveJobId);
+  });
+
+  test("keeps the size guidance when an oversize upload fails", async () => {
+    const { filePath } = await writeSparseArchive();
+    let signedCount = 0;
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        url: String(url),
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/api/datasets/alice/cars") {
+        return jsonResponse({
+          dataset: { id: liveDatasetId, owner: "alice", dataset: "cars" },
+        });
+      }
+      if (parsed.pathname === "/api/upload/signed-url") {
+        signedCount += 1;
+        return jsonResponse({
+          ...liveSignedResponse,
+          sessionId: `session_${signedCount}`,
+        });
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const uploadFetch = (async (_url: string | URL, init: RequestInit = {}) => {
+      await (init.body as ReadableStream | undefined)?.cancel?.();
+      return new Response("storage unreachable", { status: 500 });
+    }) as unknown as typeof fetch;
+    const uploadClient = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+      uploadFetchImpl: uploadFetch,
+    });
+
+    const error = await datasetUploadFile(uploadClient, {
+      dataset: "alice/cars",
+      filePath,
+    }).catch((e) => e as Error);
+    expect(signedCount).toBe(2);
+    expect(calls.some((call) => call.url.endsWith("/upload/complete"))).toBe(
+      false,
+    );
+    expect(error.message).toMatch(/10 GB/);
+    expect(error.message).toMatch(/20 GB/);
+    expect(error.message).toMatch(/50 GB/);
+    expect(error.message).toMatch(/dataset_ingest/);
   });
 
   test("completes the upload session before starting ingest, in order", async () => {

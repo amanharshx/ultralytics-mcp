@@ -229,6 +229,73 @@ describe("UltralyticsClient.getAccountOwner", () => {
   });
 });
 
+describe("UltralyticsClient signed upload", () => {
+  function uploadClient(uploadImpl: typeof fetch) {
+    const api = makeFetch([new Response("{}", { status: 200 })]);
+    return {
+      owned: new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: api.impl,
+        uploadFetchImpl: uploadImpl,
+      }),
+    };
+  }
+
+  test("sends runtime headers with the declared content type and no auth", async () => {
+    const upload = makeFetch([new Response("", { status: 200 })]);
+    const { owned } = uploadClient(upload.impl);
+    await owned.putSignedBytes(
+      "https://signed.example/upload?REDACTED",
+      new TextEncoder().encode("archive"),
+      "application/zip",
+      { "x-goog-if-generation-match": "0", "Content-Length": "7" },
+    );
+    expect(upload.calls[0].url).toBe("https://signed.example/upload?REDACTED");
+    const headers = headersOf(upload.calls[0].init);
+    expect(headers["Content-Type"]).toBe("application/zip");
+    expect(headers["x-goog-if-generation-match"]).toBe("0");
+    expect(headers["Content-Length"]).toBe("7");
+    expect(headers.Authorization).toBeUndefined();
+    expect("duplex" in upload.calls[0].init).toBe(false);
+  });
+
+  test("sets duplex half for stream bodies without buffering them", async () => {
+    const upload = makeFetch([new Response("", { status: 200 })]);
+    const { owned } = uploadClient(upload.impl);
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("archive"));
+        controller.close();
+      },
+    });
+    await owned.putSignedBytes(
+      "https://signed.example/upload?REDACTED",
+      stream,
+      "application/zip",
+      { "Content-Length": "7" },
+    );
+    const init = upload.calls[0].init as RequestInit & { duplex?: string };
+    expect(init.duplex).toBe("half");
+    expect(headersOf(init)["Content-Length"]).toBe("7");
+  });
+
+  test("uploadBytes keeps sending bytes with no auth", async () => {
+    const upload = makeFetch([new Response("", { status: 200 })]);
+    const { owned } = uploadClient(upload.impl);
+    await owned.uploadBytes(
+      "https://signed.example/upload",
+      new TextEncoder().encode("archive"),
+      "application/zip",
+      { "x-goog-if-generation-match": "0" },
+    );
+    const headers = headersOf(upload.calls[0].init);
+    expect(headers["Content-Type"]).toBe("application/zip");
+    expect(headers["x-goog-if-generation-match"]).toBe("0");
+    expect(headers.Authorization).toBeUndefined();
+  });
+});
+
 describe("UltralyticsClient.downloadBytes", () => {
   test("fetches a signed URL without forwarding Authorization", async () => {
     const api = makeFetch([new Response("{}", { status: 200 })]);

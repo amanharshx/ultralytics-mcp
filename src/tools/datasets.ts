@@ -1,9 +1,10 @@
 /** Read-only dataset tools. */
 
 import { execFile as execFileCb } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 
 import { zipSync } from "fflate";
@@ -269,6 +270,76 @@ async function buildDatasetFolderZip(
   return zipBytes;
 }
 
+/** Open a fresh request body for one PUT attempt.
+ *
+ * A PUT consumes its body, so the factory runs again on retry: a consumed
+ * stream cannot be re-read, while in-memory bytes return the same content.
+ */
+export type UploadBodyOpener = () => BodyInit;
+
+/** Run one signed-upload session: PUT the content, then complete the session.
+ *
+ * Shared by every dataset upload tool. The PUT sends the runtime headers
+ * from the signed-url response together with the declared content type and
+ * the known content length, without buffering the content. On PUT failure
+ * the retry requests a fresh signed-url session rather than reusing the same
+ * URL, whose storage precondition makes same-URL retry unreliable.
+ * Completion stays inside the session: a failed PUT is never completed.
+ * Returns the session id whose bytes actually landed, so ingest always
+ * references the live session.
+ */
+async function uploadThroughSignedSession(
+  client: UltralyticsClient,
+  options: {
+    requestSigned: () => Promise<Record<string, unknown>>;
+    openBody: UploadBodyOpener;
+    contentType: string;
+    contentLength: number;
+  },
+): Promise<{ sessionId: string }> {
+  let signed = await options.requestSigned();
+  const doUpload = async (upload: Record<string, unknown>): Promise<void> => {
+    await client.putSignedBytes(
+      String(upload.uploadUrl ?? upload.url),
+      options.openBody(),
+      options.contentType,
+      {
+        ...signedUploadHeaders(upload),
+        "Content-Length": String(options.contentLength),
+      },
+    );
+  };
+  try {
+    await doUpload(signed);
+  } catch {
+    signed = await options.requestSigned();
+    await doUpload(signed);
+  }
+  const sessionId = String(signed.sessionId);
+  await client.postJson("/upload/complete", { sessionId });
+  return { sessionId };
+}
+
+/** Attach the oversize-archive guidance to an upload failure.
+ *
+ * Large archives usually fail at the storage or ingest layer with errors
+ * that say nothing about plan limits. When the archive already exceeded the
+ * free-tier limit, the original error keeps its text and gains the
+ * plan-limit and alternative-upload guidance.
+ */
+function withSizeWarning(error: unknown, sizeWarning: string | null): unknown {
+  if (sizeWarning === null || !(error instanceof Error)) {
+    return error;
+  }
+  return new Error(`${error.message} ${sizeWarning}`, { cause: error });
+}
+
+/** Legacy signed-upload wrapper for the unmigrated folder/video tools.
+ *
+ * Runs the shared session lifecycle but keeps the legacy id-based ingest
+ * call. The folder/video tickets migrate the ingest half with their own
+ * live verification; do not extend this for new code.
+ */
 async function uploadDatasetContent(
   client: UltralyticsClient,
   options: {
@@ -281,19 +352,21 @@ async function uploadDatasetContent(
     classMapping?: Record<string, string>;
   },
 ): Promise<{ sessionId: string; ingest: Record<string, unknown> }> {
-  const signed = asRecord(
-    await client.postJson("/upload/signed-url", {
-      assetType: "datasets",
-      assetId: options.datasetId,
-      filename: options.filename,
-      contentType: options.contentType,
-      totalBytes: options.totalBytes,
-    }),
-  );
-  const sessionId = String(signed.sessionId);
-  const uploadUrl = String(signed.uploadUrl ?? signed.url);
-  await client.uploadBytes(uploadUrl, options.content, options.contentType);
-  await client.postJson("/upload/complete", { sessionId });
+  const { sessionId } = await uploadThroughSignedSession(client, {
+    requestSigned: async () =>
+      asRecord(
+        await client.postJson("/upload/signed-url", {
+          assetType: "datasets",
+          assetId: options.datasetId,
+          filename: options.filename,
+          contentType: options.contentType,
+          totalBytes: options.totalBytes,
+        }),
+      ),
+    openBody: () => new Uint8Array(options.content),
+    contentType: options.contentType,
+    contentLength: options.totalBytes,
+  });
 
   const ingestPayload: Record<string, unknown> = {
     datasetId: options.datasetId,
@@ -735,8 +808,9 @@ function signedUploadHeaders(
  * fills a missing owner from the account summary, fetches the dataset to
  * obtain its id, then runs the signed-upload flow: request a signed URL with
  * the dataset asset type and the file's real name, content type, and byte
- * size; send the bytes with both the runtime headers and the declared
- * content type; complete the session before ingest; and start ingest from
+ * size; stream the file with both the runtime headers and the declared
+ * content type, so archives larger than the in-memory limit still upload;
+ * complete the session before ingest; and start ingest from
  * the completed session through the live owner-scoped endpoint. The conflict
  * policy is always sent explicitly, defaulting to the non-destructive `skip`
  * (the platform default is undocumented). The queued job id is returned with
@@ -744,7 +818,8 @@ function signedUploadHeaders(
  * up, since ingest runs asynchronously and this tool does not poll to
  * completion. On upload failure a fresh signed-url session is started rather
  * than retrying the same URL. Archives larger than the free-tier limit warn
- * instead of blocking, since the caller's plan is not visible.
+ * instead of blocking, since the caller's plan is not visible; when such an
+ * upload fails, the error keeps that guidance.
  */
 export async function datasetUploadFile(
   client: UltralyticsClient,
@@ -769,7 +844,6 @@ export async function datasetUploadFile(
     );
   }
 
-  const content = await readFile(options.filePath);
   const requestSigned = async (): Promise<Record<string, unknown>> =>
     asRecord(
       await client.postJson("/upload/signed-url", {
@@ -780,37 +854,34 @@ export async function datasetUploadFile(
         totalBytes: meta.totalBytes,
       }),
     );
+  // The file stays on disk: each PUT attempt opens a fresh stream, so
+  // archives larger than the in-memory limit upload without buffering.
+  const openBody = (): BodyInit =>
+    Readable.toWeb(createReadStream(options.filePath)) as BodyInit;
 
-  let signed = await requestSigned();
-  const doUpload = async (upload: Record<string, unknown>): Promise<void> => {
-    await client.uploadBytes(
-      String(upload.uploadUrl ?? upload.url),
-      content,
-      meta.contentType,
-      signedUploadHeaders(upload),
-    );
-  };
+  let sessionId: string;
+  let ingest: Record<string, unknown>;
   try {
-    await doUpload(signed);
-  } catch {
-    // The storage precondition makes same-URL retry unreliable, so a fresh
-    // session is correct either way.
-    signed = await requestSigned();
-    await doUpload(signed);
-  }
-  const sessionId = String(signed.sessionId);
-  await client.postJson("/upload/complete", { sessionId });
+    ({ sessionId } = await uploadThroughSignedSession(client, {
+      requestSigned,
+      openBody,
+      contentType: meta.contentType,
+      contentLength: meta.totalBytes,
+    }));
 
-  const ingestPayload: Record<string, unknown> = {
-    sessionId,
-    conflictPolicy,
-  };
-  if (options.targetSplit !== undefined) {
-    ingestPayload.targetSplit = options.targetSplit;
+    const ingestPayload: Record<string, unknown> = {
+      sessionId,
+      conflictPolicy,
+    };
+    if (options.targetSplit !== undefined) {
+      ingestPayload.targetSplit = options.targetSplit;
+    }
+    ingest = asRecord(
+      await client.postJson(`/datasets/${encodedRef}/ingest`, ingestPayload),
+    );
+  } catch (error) {
+    throw withSizeWarning(error, sizeWarning);
   }
-  const ingest = asRecord(
-    await client.postJson(`/datasets/${encodedRef}/ingest`, ingestPayload),
-  );
   const jobId = ingest.jobId ?? ingest.id ?? null;
   // The ingest job is already queued at this point, so a transient failure
   // of the status lookup must not discard the issued job id and invite a
