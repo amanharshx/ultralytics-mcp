@@ -948,7 +948,9 @@ export interface DatasetUploadFolderOptions {
  * ingest status fields; use `datasets_get` to follow up, since ingest runs
  * asynchronously and this tool does not poll to completion. On upload
  * failure a fresh signed-url session is started rather than retrying the
- * same URL.
+ * same URL. Zips larger than the free-tier limit warn instead of blocking,
+ * since the caller's plan is not visible; when such an upload fails, the
+ * error keeps that guidance.
  */
 export async function datasetUploadFolder(
   client: UltralyticsClient,
@@ -968,9 +970,11 @@ export async function datasetUploadFolder(
   const resolvedOwner = refOwner ?? (await client.getAccountOwner());
   const encodedRef = `${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`;
   const datasetRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
-  const idFields = asRecord(datasetRecord.dataset);
+  const datasetFields = asRecord(datasetRecord.dataset);
   const datasetId =
-    typeof idFields.id === "string" && idFields.id.trim() ? idFields.id : null;
+    typeof datasetFields.id === "string" && datasetFields.id.trim()
+      ? datasetFields.id
+      : null;
   if (datasetId === null) {
     throw new Error(
       `Dataset '${refSlug}' for owner '${resolvedOwner}' did not include an id; cannot request an upload session.`,
@@ -979,6 +983,7 @@ export async function datasetUploadFolder(
 
   const content = await buildDatasetFolderZip(folder.files);
   const filename = `${basename(folder.folderPath)}.zip`;
+  const sizeWarning = archiveSizeWarning(filename, content.byteLength);
 
   const requestSigned = async (): Promise<Record<string, unknown>> =>
     asRecord(
@@ -994,23 +999,29 @@ export async function datasetUploadFolder(
   // consumed body cannot be re-read on retry.
   const openBody = (): BodyInit => new Uint8Array(content);
 
-  const { sessionId } = await uploadThroughSignedSession(client, {
-    requestSigned,
-    openBody,
-    contentType: "application/zip",
-    contentLength: content.byteLength,
-  });
+  let sessionId: string;
+  let ingest: Record<string, unknown>;
+  try {
+    ({ sessionId } = await uploadThroughSignedSession(client, {
+      requestSigned,
+      openBody,
+      contentType: "application/zip",
+      contentLength: content.byteLength,
+    }));
 
-  const ingestPayload: Record<string, unknown> = {
-    sessionId,
-    conflictPolicy,
-  };
-  if (options.targetSplit !== undefined) {
-    ingestPayload.targetSplit = options.targetSplit;
+    const ingestPayload: Record<string, unknown> = {
+      sessionId,
+      conflictPolicy,
+    };
+    if (options.targetSplit !== undefined) {
+      ingestPayload.targetSplit = options.targetSplit;
+    }
+    ingest = asRecord(
+      await client.postJson(`/datasets/${encodedRef}/ingest`, ingestPayload),
+    );
+  } catch (error) {
+    throw withSizeWarning(error, sizeWarning);
   }
-  const ingest = asRecord(
-    await client.postJson(`/datasets/${encodedRef}/ingest`, ingestPayload),
-  );
   const jobId = ingest.jobId ?? ingest.id ?? null;
   // The ingest job is already queued at this point, so a transient failure
   // of the status lookup must not discard the issued job id and invite a
@@ -1027,13 +1038,14 @@ export async function datasetUploadFolder(
   const statusNote = statusLookupFailed
     ? `(dataset status: ${String(datasetStatus ?? "None")}; status lookup failed)`
     : `(dataset status: ${String(datasetStatus ?? "None")})`;
+  const warningNote = sizeWarning === null ? "" : ` Warning: ${sizeWarning}`;
   return {
     summary:
       `Zipped ${folder.files.length} image(s) from ${folder.folderPath} as ${filename} ` +
       `(${content.byteLength} bytes) and started dataset ingest job ` +
       `${String(jobId ?? "None")} for dataset '${refSlug}' for owner '${resolvedOwner}' ` +
       `${statusNote}. ` +
-      `Use datasets_get to follow up; ingest completes when lastIngestJobId matches ${String(jobId ?? "None")}.`,
+      `Use datasets_get to follow up; ingest completes when lastIngestJobId matches ${String(jobId ?? "None")}.${warningNote}`,
     data: {
       jobId,
       status: ingest.status ?? null,
@@ -1050,6 +1062,7 @@ export async function datasetUploadFolder(
       filename,
       bytes: content.byteLength,
       sessionId,
+      sizeWarning,
     },
   };
 }

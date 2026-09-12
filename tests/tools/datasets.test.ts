@@ -1425,6 +1425,12 @@ describe("datasetUploadFolder", () => {
     return { client: uploadClient, calls, uploadCalls };
   }
 
+  function findIngestCall(calls: { url: string; body: unknown }[]) {
+    return calls.find((call) =>
+      call.url.endsWith("/datasets/alice/cars/ingest"),
+    );
+  }
+
   test("uploads through the owner-scoped flow with both storage headers and reports ingest status", async () => {
     const dir = await writeImageFolder();
     const { client, calls, uploadCalls } = clientForFolderUpload();
@@ -1494,7 +1500,9 @@ describe("datasetUploadFolder", () => {
       datasetStatus: "processing",
       imageCount: 3,
       sessionId: "session_123",
+      sizeWarning: null,
     });
+    expect(result.summary).not.toMatch(/Warning:/);
     expect(typeof (result.data as Record<string, unknown>).bytes).toBe(
       "number",
     );
@@ -1537,9 +1545,7 @@ describe("datasetUploadFolder", () => {
       folderPath: dir,
       conflictPolicy: "replace",
     });
-    const ingestCall = calls.find((call) =>
-      call.url.endsWith("/datasets/alice/cars/ingest"),
-    );
+    const ingestCall = findIngestCall(calls);
     expect(ingestCall?.body).toEqual({
       sessionId: "session_123",
       conflictPolicy: "replace",
@@ -1558,9 +1564,7 @@ describe("datasetUploadFolder", () => {
       folderPath: dir,
       conflictPolicy: "keep_both",
     });
-    const ingestCall = calls.find((call) =>
-      call.url.endsWith("/datasets/alice/cars/ingest"),
-    );
+    const ingestCall = findIngestCall(calls);
     expect(ingestCall?.body).toMatchObject({ conflictPolicy: "keep_both" });
     expect(result.data).toMatchObject({ conflictPolicy: "keep_both" });
   });
@@ -1572,9 +1576,7 @@ describe("datasetUploadFolder", () => {
       dataset: "alice/cars",
       folderPath: dir,
     });
-    const ingestCall = calls.find((call) =>
-      call.url.endsWith("/datasets/alice/cars/ingest"),
-    );
+    const ingestCall = findIngestCall(calls);
     // Without targetSplit the ingest payload carries only the session and policy.
     expect(ingestCall?.body).toEqual({
       sessionId: "session_123",
@@ -1664,9 +1666,7 @@ describe("datasetUploadFolder", () => {
       call.url.endsWith("/upload/complete"),
     );
     expect(completeCall?.body).toEqual({ sessionId: "session_new" });
-    const ingestCall = calls.find((call) =>
-      call.url.endsWith("/datasets/alice/cars/ingest"),
-    );
+    const ingestCall = findIngestCall(calls);
     expect(ingestCall?.body).toMatchObject({ sessionId: "session_new" });
     expect(result.data).toMatchObject({ sessionId: "session_new" });
   });
