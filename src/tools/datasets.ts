@@ -652,9 +652,16 @@ export interface DatasetsIngestOptions {
   conflictPolicy?: string;
 }
 
-const INGEST_CONFLICT_POLICIES = new Set(["skip", "replace"]);
+export type DatasetIngestConflictPolicy = "skip" | "replace";
 
-function validateIngestConflictPolicy(conflictPolicy?: string): string {
+const INGEST_CONFLICT_POLICIES: ReadonlySet<string> = new Set([
+  "skip",
+  "replace",
+]);
+
+function validateIngestConflictPolicy(
+  conflictPolicy?: string,
+): DatasetIngestConflictPolicy {
   const effective = conflictPolicy ?? "skip";
   if (!INGEST_CONFLICT_POLICIES.has(effective)) {
     const allowed = Array.from(INGEST_CONFLICT_POLICIES).sort().join(", ");
@@ -662,7 +669,7 @@ function validateIngestConflictPolicy(conflictPolicy?: string): string {
       `Unsupported conflictPolicy '${effective}'. Expected one of: ${allowed}.`,
     );
   }
-  return effective;
+  return effective as DatasetIngestConflictPolicy;
 }
 
 /** Start a remote URL ingest job for an existing dataset.
@@ -687,6 +694,7 @@ export async function datasetsIngest(
 
   const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
   const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const encodedRef = `${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`;
   const payload: Record<string, unknown> = {
     sourceUrl: options.sourceUrl,
     conflictPolicy,
@@ -696,17 +704,10 @@ export async function datasetsIngest(
   }
 
   const ingest = asRecord(
-    await client.postJson(
-      `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}/ingest`,
-      payload,
-    ),
+    await client.postJson(`/datasets/${encodedRef}/ingest`, payload),
   );
   const jobId = ingest.jobId ?? ingest.id ?? null;
-  const datasetRecord = asRecord(
-    await client.get(
-      `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`,
-    ),
-  );
+  const datasetRecord = asRecord(await client.get(`/datasets/${encodedRef}`));
   const fields = asRecord(datasetRecord.dataset);
   const datasetStatus = fields.status ?? null;
   return {
