@@ -1144,9 +1144,7 @@ describe("datasetVersionCreate", () => {
         (init.method ?? "GET").toUpperCase() === "POST"
       ) {
         posts += 1;
-        return jsonResponse(
-          posts === 1 ? liveNewResponse : liveReusedResponse,
-        );
+        return jsonResponse(posts === 1 ? liveNewResponse : liveReusedResponse);
       }
       return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
