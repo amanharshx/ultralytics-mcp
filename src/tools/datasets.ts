@@ -652,16 +652,12 @@ export interface DatasetsIngestOptions {
   conflictPolicy?: string;
 }
 
-export type DatasetIngestConflictPolicy = "skip" | "replace";
-
 const INGEST_CONFLICT_POLICIES: ReadonlySet<string> = new Set([
   "skip",
   "replace",
 ]);
 
-function validateIngestConflictPolicy(
-  conflictPolicy?: string,
-): DatasetIngestConflictPolicy {
+function validateIngestConflictPolicy(conflictPolicy?: string): string {
   const effective = conflictPolicy ?? "skip";
   if (!INGEST_CONFLICT_POLICIES.has(effective)) {
     const allowed = Array.from(INGEST_CONFLICT_POLICIES).sort().join(", ");
@@ -669,7 +665,7 @@ function validateIngestConflictPolicy(
       `Unsupported conflictPolicy '${effective}'. Expected one of: ${allowed}.`,
     );
   }
-  return effective as DatasetIngestConflictPolicy;
+  return effective;
 }
 
 /** Start a remote URL ingest job for an existing dataset.
