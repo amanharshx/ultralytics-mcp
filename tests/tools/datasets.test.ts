@@ -996,16 +996,16 @@ describe("datasetExport", () => {
 });
 
 describe("datasetVersionCreate", () => {
+  const liveDownloadUrl =
+    "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson";
   const liveNewResponse = {
     version: 1,
-    downloadUrl:
-      "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+    downloadUrl: liveDownloadUrl,
     reused: false,
   };
   const liveReusedResponse = {
     version: 1,
-    downloadUrl:
-      "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+    downloadUrl: liveDownloadUrl,
     reused: true,
   };
 
