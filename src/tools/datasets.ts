@@ -931,25 +931,48 @@ export interface DatasetVersionCreateOptions {
   description?: string;
 }
 
-/** Create frozen dataset export version. */
+/** Create a frozen dataset version snapshot.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and creates the version
+ * through the live owner-scoped endpoint. The API returns the version number
+ * with a signed, time-limited download URL; when the dataset is unchanged
+ * since the previous snapshot it returns the existing version with
+ * `reused: true` instead of creating a new one, which the summary reports
+ * without claiming a new version was created.
+ */
 export async function datasetVersionCreate(
   client: UltralyticsClient,
   options: DatasetVersionCreateOptions,
 ): Promise<NormalizedToolResult> {
-  const datasetId = await resolveLegacyDatasetId(client, options.dataset);
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
   const payload: Record<string, unknown> = {};
   if (options.description !== undefined) {
     payload.description = options.description;
   }
 
   const data = asRecord(
-    await client.postJson(`/datasets/${datasetId}/export`, payload),
+    await client.postJson(
+      `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}/export`,
+      payload,
+    ),
   );
+  const version = data.version ?? null;
+  const reused = data.reused ?? null;
+  const summary =
+    reused === true
+      ? `Dataset version ${String(version)} for dataset '${refSlug}' for owner '${resolvedOwner}' ` +
+        `already existed (no changes since the previous snapshot). ` +
+        `This link is time-limited and will expire.`
+      : `Created dataset version ${String(version)} for dataset '${refSlug}' for owner '${resolvedOwner}'. ` +
+        `This link is time-limited and will expire.`;
   return {
-    summary: `Created dataset version ${String(data.version ?? null)}`,
+    summary,
     data: {
-      version: data.version ?? null,
+      version,
       downloadUrl: data.downloadUrl ?? null,
+      reused,
     },
   };
 }

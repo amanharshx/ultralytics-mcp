@@ -996,37 +996,193 @@ describe("datasetExport", () => {
 });
 
 describe("datasetVersionCreate", () => {
-  test("resolves dataset and posts version snapshot payload", async () => {
-    const { client, calls } = captureClient((url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === "/api/datasets") {
-        return jsonResponse({
-          datasets: [{ _id: "d".repeat(24), slug: "data", username: "user" }],
-        });
+  const liveNewResponse = {
+    version: 1,
+    downloadUrl:
+      "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+    reused: false,
+  };
+  const liveReusedResponse = {
+    version: 1,
+    downloadUrl:
+      "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+    reused: true,
+  };
+
+  function clientForVersionCreate(
+    response: unknown,
+    options: { accountOwner?: string; status?: number } = {},
+  ) {
+    const calls: { path: string; method: string; body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
       }
-      return jsonResponse({
-        version: 4,
-        downloadUrl: "https://cdn.example.com/data-v4.ndjson",
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
       });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (
+        parsed.pathname === "/api/datasets/alice/cars/export" &&
+        (init.method ?? "GET").toUpperCase() === "POST"
+      ) {
+        return jsonResponse(response, options.status ?? 200);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
     });
+    return { client, calls };
+  }
+
+  test("creates a version through the owner-scoped path and reports it", async () => {
+    const { client, calls } = clientForVersionCreate(liveNewResponse);
 
     const result = await datasetVersionCreate(client, {
-      dataset: "user/data",
+      dataset: "alice/cars",
+    });
+
+    expect(calls).toEqual([
+      { path: "/api/datasets/alice/cars/export", method: "POST", body: {} },
+    ]);
+    expect(result.summary).toBe(
+      "Created dataset version 1 for dataset 'cars' for owner 'alice'. " +
+        "This link is time-limited and will expire.",
+    );
+    expect(result.data).toEqual({
+      version: 1,
+      downloadUrl:
+        "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+      reused: false,
+    });
+  });
+
+  test("sends the description when provided", async () => {
+    const { client, calls } = clientForVersionCreate(liveNewResponse);
+
+    const result = await datasetVersionCreate(client, {
+      dataset: "alice/cars",
       description: "Quarterly snapshot",
     });
 
-    expect(calls[1]).toEqual({
-      url: `${BASE}/datasets/${"d".repeat(24)}/export`,
-      method: "POST",
-      body: {
-        description: "Quarterly snapshot",
+    expect(calls).toEqual([
+      {
+        path: "/api/datasets/alice/cars/export",
+        method: "POST",
+        body: { description: "Quarterly snapshot" },
       },
+    ]);
+    expect(result.data).toMatchObject({ version: 1, reused: false });
+  });
+
+  test("reports an unchanged dataset without claiming a new version", async () => {
+    const { client, calls } = clientForVersionCreate(liveReusedResponse);
+
+    const result = await datasetVersionCreate(client, {
+      dataset: "alice/cars",
     });
-    expect(result.summary).toBe("Created dataset version 4");
+
+    expect(calls).toEqual([
+      { path: "/api/datasets/alice/cars/export", method: "POST", body: {} },
+    ]);
+    expect(result.summary).toBe(
+      "Dataset version 1 for dataset 'cars' for owner 'alice' already existed " +
+        "(no changes since the previous snapshot). " +
+        "This link is time-limited and will expire.",
+    );
+    expect(result.summary).not.toMatch(/Created/);
     expect(result.data).toEqual({
-      version: 4,
-      downloadUrl: "https://cdn.example.com/data-v4.ndjson",
+      version: 1,
+      downloadUrl:
+        "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+      reused: true,
     });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForVersionCreate(liveNewResponse, {
+      accountOwner: "alice",
+    });
+
+    const result = await datasetVersionCreate(client, { dataset: "cars" });
+
+    expect(calls).toEqual([
+      { path: "/api/account/summary", method: "GET", body: undefined },
+      { path: "/api/datasets/alice/cars/export", method: "POST", body: {} },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("accepts a ul:// dataset URI without an account lookup", async () => {
+    const { client, calls } = clientForVersionCreate(liveNewResponse);
+
+    const result = await datasetVersionCreate(client, {
+      dataset: "ul://alice/cars",
+    });
+
+    expect(calls).toEqual([
+      { path: "/api/datasets/alice/cars/export", method: "POST", body: {} },
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForVersionCreate(liveNewResponse);
+    await expect(
+      datasetVersionCreate(client, { dataset: "a".repeat(24) }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
+  });
+
+  test.each([
+    "alice/missing",
+    "ghost/cars",
+  ])("surfaces the API message for %s", async (ref) => {
+    const calls: { path: string; method: string }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+      });
+      if (
+        parsed.pathname === `/api/datasets/${ref}/export` &&
+        (init.method ?? "GET").toUpperCase() === "POST"
+      ) {
+        return jsonResponse({ error: "Dataset not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+    await expect(
+      datasetVersionCreate(client, { dataset: ref }),
+    ).rejects.toThrow(/Dataset not found/);
+  });
+
+  test("surfaces the API message when the dataset is not ready", async () => {
+    const { client } = clientForVersionCreate(
+      { error: "Dataset must be ready to create a version" },
+      { status: 409 },
+    );
+    await expect(
+      datasetVersionCreate(client, { dataset: "alice/cars" }),
+    ).rejects.toThrow(/Dataset must be ready to create a version/);
   });
 });
 

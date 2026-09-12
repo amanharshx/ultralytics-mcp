@@ -1,49 +1,49 @@
 {
   "tool": "dataset_version_create",
   "args": {
-    "dataset": "user/data",
-    "description": "Quarterly snapshot"
+    "dataset": "example-dataset-1"
   },
   "api": [
     {
       "method": "GET",
-      "path": "/api/datasets",
-      "query": {
-        "username": "user"
-      },
+      "path": "/api/account/summary",
       "response": {
         "status": 200,
         "json": {
-          "datasets": [
-            {
-              "_id": "dddddddddddddddddddddddd",
-              "slug": "data",
-              "username": "user"
-            }
-          ]
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
         }
       }
     },
     {
       "method": "POST",
-      "path": "/api/datasets/dddddddddddddddddddddddd/export",
-      "json": {
-        "description": "Quarterly snapshot"
-      },
+      "path": "/api/datasets/example-owner/example-dataset-1/export",
+      "json": {},
       "response": {
         "status": 200,
         "json": {
-          "version": 4,
-          "downloadUrl": "https://cdn.example.com/data-v4.ndjson"
+          "version": 1,
+          "downloadUrl": "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+          "reused": false
         }
       }
     }
   ],
   "expected": {
-    "summary": "Created dataset version 4",
+    "summary": "Created dataset version 1 for dataset 'example-dataset-1' for owner 'example-owner'. This link is time-limited and will expire.",
     "data": {
-      "version": 4,
-      "downloadUrl": "https://cdn.example.com/data-v4.ndjson"
+      "version": 1,
+      "downloadUrl": "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+      "reused": false
     }
   }
 }
