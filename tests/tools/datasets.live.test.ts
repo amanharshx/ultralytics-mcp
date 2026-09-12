@@ -19,12 +19,12 @@
  *
  * Version snapshots need ingested content, which a disposable dataset cannot
  * gain until the ingest tools land, so that coverage is a separate test
- * running against a pre-existing ready dataset. It skips when the workspace
- * has none, without skipping the disposable round-trip. With no intervening
- * changes the create reuses the current version, so it performs no workspace
- * mutation; the repeat-create check proves the reuse. In the unlikely event
- * the chosen dataset changed since its last snapshot, the API mints an
- * immutable, non-destructive snapshot version that no endpoint can delete.
+ * running against an explicitly configured ready dataset,
+ * `ULTRALYTICS_SMOKE_DATASET_REF=owner/slug`. It skips when the variable is
+ * absent, so the suite never selects or mutates an arbitrary dataset: with
+ * no intervening changes the create reuses the current version, but an
+ * opted-in fixture that changed since its last snapshot gains an immutable,
+ * non-destructive snapshot version that no endpoint can delete.
  */
 
 import { describe, expect, test } from "vitest";
@@ -61,37 +61,16 @@ const EXPECTED_STATUS = {
 
 describe.skipIf(!apiKey)("datasets live smoke", () => {
   test("version snapshots reuse the current version", async (ctx) => {
-    const records: RecordedCall[] = [];
-    const client = recordingClient(apiKey as string, records);
-    const owner = await client.getAccountOwner();
-    expect(lastStatus(records)).toBe(EXPECTED_STATUS.accountSummary);
-
-    const rawList = (await client.get(
-      `/datasets/${encodeURIComponent(owner)}`,
-    )) as { datasets?: unknown };
-    expect(lastStatus(records)).toBe(EXPECTED_STATUS.list);
-    expect(Array.isArray(rawList.datasets)).toBe(true);
-    const rawEntries = rawList.datasets as Array<Record<string, unknown>>;
-    // Prefer the smallest ready dataset so that, in the unlikely event it
-    // changed since its last snapshot, a new snapshot touches the least
-    // content. Never pick a disposable prefix from this or another run.
-    const versionCandidate = rawEntries
-      .filter(
-        (entry) =>
-          typeof entry.dataset === "string" &&
-          !entry.dataset.startsWith("mcp-") &&
-          entry.status === "ready" &&
-          typeof entry.imageCount === "number" &&
-          entry.imageCount > 0,
-      )
-      .sort((a, b) => (a.imageCount as number) - (b.imageCount as number))[0];
-    if (!versionCandidate) {
+    // Explicit fixture only: never auto-select a dataset to write to.
+    const versionRef = process.env.ULTRALYTICS_SMOKE_DATASET_REF?.trim();
+    if (!versionRef) {
       ctx.skip(
-        "datasets live smoke needs one ready dataset with ingested images " +
-          "for the version snapshot coverage; ingest a dataset and rerun.",
+        "version snapshot coverage needs ULTRALYTICS_SMOKE_DATASET_REF=" +
+          "owner/slug pointing at a ready dataset with ingested images.",
       );
     }
-    const versionRef = `${owner}/${versionCandidate.dataset}`;
+    const records: RecordedCall[] = [];
+    const client = recordingClient(apiKey as string, records);
     const versioned = await datasetVersionCreate(client, {
       dataset: versionRef,
     });
@@ -120,6 +99,54 @@ describe.skipIf(!apiKey)("datasets live smoke", () => {
     expect((versionedExportData.downloadUrl as string).length).toBeGreaterThan(
       0,
     );
+
+    // Read-only drift coverage on non-empty data: the disposable round-trip
+    // below only sees a fresh dataset, which carries no class summary and
+    // no images. These calls mutate nothing.
+    const fixtureFetched = await datasetsGet(client, versionRef);
+    expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
+    const fixtureData = fixtureFetched.data as Record<string, unknown>;
+    expect(typeof fixtureData.id).toBe("string");
+    expect(typeof fixtureData.owner).toBe("string");
+    expect(typeof fixtureData.dataset).toBe("string");
+    expect(typeof fixtureData.name).toBe("string");
+    expect(typeof fixtureData.visibility).toBe("string");
+    expect(typeof fixtureData.task).toBe("string");
+    expect(typeof fixtureData.imageCount).toBe("number");
+    expect(typeof fixtureData.classCount).toBe("number");
+    expect(Array.isArray(fixtureData.classNames)).toBe(true);
+    expect(typeof fixtureData.status).toBe("string");
+    expect(typeof fixtureData.errorCount).toBe("number");
+
+    const fixtureImages = await datasetImagesList(client, {
+      dataset: versionRef,
+    });
+    expect(lastStatus(records)).toBe(EXPECTED_STATUS.images);
+    const fixtureImagesData = fixtureImages.data as {
+      total: unknown;
+      hasMore: unknown;
+      classes: unknown;
+      errorCount: unknown;
+      images: unknown;
+    };
+    expect(typeof fixtureImagesData.total).toBe("number");
+    expect(typeof fixtureImagesData.hasMore).toBe("boolean");
+    expect(Array.isArray(fixtureImagesData.classes)).toBe(true);
+    expect(typeof fixtureImagesData.errorCount).toBe("number");
+    expect(Array.isArray(fixtureImagesData.images)).toBe(true);
+    const fixtureItems = fixtureImagesData.images as Array<
+      Record<string, unknown>
+    >;
+    expect(fixtureItems.length).toBeGreaterThan(0);
+    const firstItem = fixtureItems[0];
+    expect(typeof firstItem.id).toBe("string");
+    expect(typeof firstItem.name).toBe("string");
+    expect(typeof firstItem.ext).toBe("string");
+    expect(typeof firstItem.split).toBe("string");
+    expect(typeof firstItem.width).toBe("number");
+    expect(typeof firstItem.height).toBe("number");
+    expect(typeof firstItem.labelCount).toBe("number");
+    expect(typeof firstItem.bytes).toBe("number");
   }, 120_000);
 
   test("create, get, images, export, list, and delete round-trip", async () => {
