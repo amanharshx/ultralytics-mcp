@@ -865,7 +865,6 @@ describe("datasetExport", () => {
   const liveVersionedResponse = {
     downloadUrl:
       "https://storage.googleapis.com/example-exports/version-example/cars-v1.ndjson",
-    version: 1,
   };
 
   function clientForExport(
@@ -909,7 +908,6 @@ describe("datasetExport", () => {
     expect(result.data).toEqual({
       downloadUrl: "https://storage.googleapis.com/example-exports/cars.ndjson",
       cached: false,
-      version: null,
     });
   });
 
@@ -931,7 +929,6 @@ describe("datasetExport", () => {
       downloadUrl:
         "https://storage.googleapis.com/example-exports/version-example/cars-v1.ndjson",
       cached: null,
-      version: 1,
     });
   });
 

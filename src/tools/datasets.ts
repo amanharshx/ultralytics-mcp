@@ -908,9 +908,8 @@ export async function datasetExport(
       options.version !== undefined ? { v: options.version } : undefined,
     ),
   );
-  const resolvedVersion = options.version ?? data.version ?? null;
   const versionLabel =
-    resolvedVersion === null ? "latest" : String(resolvedVersion);
+    options.version === undefined ? "latest" : String(options.version);
   const detail =
     typeof data.cached === "boolean"
       ? `version ${versionLabel}, cached=${String(data.cached)}`
@@ -923,7 +922,6 @@ export async function datasetExport(
     data: {
       downloadUrl: data.downloadUrl ?? null,
       cached: data.cached ?? null,
-      version: resolvedVersion,
     },
   };
 }
