@@ -733,9 +733,34 @@ describe("exportCancel", () => {
 
     await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
       new RegExp(
-        `has status '${status}' and is no longer active.*only cancels running exports`,
+        `has status '${status}' and is not active.*only cancels queued or running exports`,
         "s",
       ),
+    );
+    expect(calls).toEqual([{ method: "GET", path: EXPORT_PATH }]);
+  });
+
+  test("refuses an unrecognized status without sending the cancellation", async () => {
+    const { client, calls } = sequenceClient([
+      () => jsonResponse(exportStatusBody("archived")),
+    ]);
+
+    await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
+      /has status 'archived' and is not active.*only cancels queued or running exports/s,
+    );
+    expect(calls).toEqual([{ method: "GET", path: EXPORT_PATH }]);
+  });
+
+  test("refuses a missing status without sending the cancellation", async () => {
+    const { client, calls } = sequenceClient([
+      () =>
+        jsonResponse({
+          export: { id: EXPORT_ID, format: "onnx" },
+        }),
+    ]);
+
+    await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
+      /has status 'None' and is not active/,
     );
     expect(calls).toEqual([{ method: "GET", path: EXPORT_PATH }]);
   });

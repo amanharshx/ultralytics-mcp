@@ -362,6 +362,12 @@ const TOOL_RUNNERS: Record<
       dynamic: args.dynamic as boolean | undefined,
       confirmCost: args.confirm_cost as boolean | undefined,
     }),
+  // export_cancel.json: live capture, DELETE .../exports/{exportId} on a
+  // GPU `engine` export while `running` -> 200 {success:true,
+  // action:"cancelled"}. A `queued` capture was not reachable live: onnx
+  // (cheapest format) completed before the status GET landed, and this
+  // `engine`/`l4` job moved queued -> running just as fast. The exported
+  // record showed no artifact fields after cancelling.
   export_cancel: (client, args) =>
     exportCancel(
       client,

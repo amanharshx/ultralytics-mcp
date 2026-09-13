@@ -5,10 +5,20 @@ import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
 
-/** Export statuses that are no longer active. Cancelling a terminal export
- * deletes its artifact instead of stopping it, so `exportCancel` refuses
- * rather than sending the request. */
-const TERMINAL_EXPORT_STATUSES = new Set(["completed", "failed", "cancelled"]);
+/** Export statuses `exportCancel` treats as still active. Anything else —
+ * `completed`, `failed`, `cancelled`, or a status this client doesn't
+ * recognize yet — is refused: cancelling a non-active export deletes its
+ * artifact instead of stopping it, and an unrecognized status is exactly the
+ * kind of platform-behaviour cache that should fail closed rather than
+ * assume it is safe to proceed. */
+const ACTIVE_EXPORT_STATUSES = new Set(["queued", "running"]);
+
+/** Unwrap an export API response, which nests the job as `{export}` on some
+ * endpoints and returns it flat on others. */
+function exportFields(data: unknown): Record<string, unknown> {
+  const record = asRecord(data);
+  return asRecord("export" in record ? record.export : data);
+}
 
 /** List exports for a model.
  *
@@ -81,9 +91,7 @@ export async function exportStatus(
   const data = await client.get(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports/${encodeURIComponent(exportId)}`,
   );
-  const record = asRecord(data);
-  const item = "export" in record ? record.export : data;
-  const fields = asRecord(item);
+  const fields = exportFields(data);
   const file = asRecord(fields.file);
   const args =
     fields.args && typeof fields.args === "object" ? fields.args : null;
@@ -192,9 +200,7 @@ export async function exportCreate(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports`,
     payload,
   );
-  const record = asRecord(data);
-  const item = "export" in record ? record.export : data;
-  const fields = asRecord(item);
+  const fields = exportFields(data);
   const id = fields.id ?? null;
   const status = fields.status ?? null;
   const returnedFormat = fields.format ?? null;
@@ -219,13 +225,14 @@ export async function exportCreate(
  * before acting. The cancel verb is dual-purpose: sent to an active export it
  * cancels the job, but sent to a finished one it deletes the produced
  * artifact irreversibly, with no trash recovery. This tool sends the request
- * only while the export is still active (not `completed`, `failed`, or
- * `cancelled`) and otherwise refuses, explaining that it cancels running
- * exports and does not delete finished ones. The status check cannot be
- * atomic: an export that finishes between the check and the cancel request
- * will still have its artifact deleted rather than cancelled, and that
- * deletion is irreversible. The action the API reports is surfaced verbatim
- * rather than assumed.
+ * only while the export is affirmatively active (`queued` or `running`) and
+ * otherwise refuses — including for a status it doesn't recognize, so an
+ * unexpected future value fails closed instead of falling through to the
+ * destructive path — explaining that it cancels running exports and does not
+ * delete finished ones. The status check cannot be atomic: an export that
+ * finishes between the check and the cancel request will still have its
+ * artifact deleted rather than cancelled, and that deletion is irreversible.
+ * The action the API reports is surfaced verbatim rather than assumed.
  */
 export async function exportCancel(
   client: UltralyticsClient,
@@ -238,16 +245,12 @@ export async function exportCancel(
   const path = `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports/${encodeURIComponent(exportId)}`;
 
   const statusData = await client.get(path);
-  const statusRecord = asRecord(statusData);
-  const statusFields = asRecord(
-    "export" in statusRecord ? statusRecord.export : statusData,
-  );
-  const status = statusFields.status;
-  if (typeof status === "string" && TERMINAL_EXPORT_STATUSES.has(status)) {
+  const status = exportFields(statusData).status;
+  if (typeof status !== "string" || !ACTIVE_EXPORT_STATUSES.has(status)) {
     throw new Error(
       `Export '${exportId}' for model '${resolved.model}' for owner '${resolvedOwner}' ` +
-        `project '${resolved.project}' has status '${status}' and is no longer active. ` +
-        "export_cancel only cancels running exports; it does not delete finished ones.",
+        `project '${resolved.project}' has status '${pyField(status)}' and is not active. ` +
+        "export_cancel only cancels queued or running exports; it does not delete finished ones.",
     );
   }
 

@@ -40,6 +40,6 @@
   ],
   "expectedError": {
     "status": 200,
-    "message": "Export '000000000000000000000001' for model 'example-model-2' for owner 'example-owner' project 'example-project-1' has status 'completed' and is no longer active. export_cancel only cancels running exports; it does not delete finished ones."
+    "message": "Export '000000000000000000000001' for model 'example-model-2' for owner 'example-owner' project 'example-project-1' has status 'completed' and is not active. export_cancel only cancels queued or running exports; it does not delete finished ones."
   }
 }
