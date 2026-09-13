@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import {
+  exportCancel,
   exportCreate,
   exportStatus,
   exportsList,
@@ -28,6 +29,34 @@ function captureClient(responder: (url: string) => Response) {
       body,
     });
     return responder(String(url));
+  }) as unknown as typeof fetch;
+  return {
+    client: new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    }),
+    calls,
+  };
+}
+
+/** Client that replies to successive requests with queued responders, in
+ * order, recording each call's method and path for assertions. */
+function sequenceClient(responders: ((path: string) => Response)[]) {
+  const calls: { method: string; path: string }[] = [];
+  let index = 0;
+  const impl = (async (url: string | URL, init: RequestInit = {}) => {
+    const parsed = new URL(String(url));
+    calls.push({
+      method: (init.method ?? "GET").toUpperCase(),
+      path: parsed.pathname,
+    });
+    const responder = responders[index];
+    index += 1;
+    if (!responder) {
+      return jsonResponse({ error: "unexpected extra call" }, 500);
+    }
+    return responder(parsed.pathname);
   }) as unknown as typeof fetch;
   return {
     client: new UltralyticsClient({
@@ -582,5 +611,153 @@ describe("exportCreate", () => {
     await expect(
       exportCreate(client, REF, "bogus", { confirmCost: true }),
     ).rejects.toThrow(/Invalid format 'bogus'/);
+  });
+});
+
+describe("exportCancel", () => {
+  const OWNER = "alice";
+  const PROJECT = "road";
+  const MODEL = "exp";
+  const REF = `${OWNER}/${PROJECT}/${MODEL}`;
+  const EXPORT_PATH = `/api/models/${OWNER}/${PROJECT}/${MODEL}/exports/${EXPORT_ID}`;
+
+  function exportStatusBody(status: string) {
+    return {
+      export: {
+        id: EXPORT_ID,
+        status,
+        format: "onnx",
+        args: { format: "onnx" },
+        file: null,
+        startedAt: null,
+        completedAt: null,
+        createdAt: "2026-05-17T14:38:31.741Z",
+        updatedAt: "2026-05-17T14:38:31.741Z",
+      },
+    };
+  }
+
+  test("rejects a bare model id without any network call", async () => {
+    const { client, calls } = sequenceClient([]);
+    await expect(
+      exportCancel(client, "b".repeat(24), EXPORT_ID),
+    ).rejects.toThrow(/not addressable.*owner\/project\/model.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("requires a project for a bare slug", async () => {
+    const { client, calls } = sequenceClient([]);
+    await expect(exportCancel(client, MODEL, EXPORT_ID)).rejects.toThrow(
+      /project is required/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("passes the export id through untouched without id validation", async () => {
+    const { client, calls } = sequenceClient([
+      () => jsonResponse({ error: "Export not found" }, 404),
+    ]);
+    await expect(exportCancel(client, REF, "not-an-id")).rejects.toThrow(
+      /Export not found/,
+    );
+    expect(calls).toEqual([
+      {
+        method: "GET",
+        path: `/api/models/${OWNER}/${PROJECT}/${MODEL}/exports/not-an-id`,
+      },
+    ]);
+  });
+
+  test("checks status, then cancels a queued export and reports the action verbatim", async () => {
+    const { client, calls } = sequenceClient([
+      () => jsonResponse(exportStatusBody("queued")),
+      () => jsonResponse({ success: true, action: "cancelled" }),
+    ]);
+
+    const result = await exportCancel(client, REF, EXPORT_ID);
+
+    expect(calls).toEqual([
+      { method: "GET", path: EXPORT_PATH },
+      { method: "DELETE", path: EXPORT_PATH },
+    ]);
+    expect(result.summary).toBe(
+      `Export '${EXPORT_ID}' for model 'exp' for owner 'alice' project 'road': cancelled.`,
+    );
+    expect(result.data).toEqual({
+      owner: OWNER,
+      project: PROJECT,
+      model: MODEL,
+      id: EXPORT_ID,
+      action: "cancelled",
+      success: true,
+    });
+  });
+
+  test("cancels a running export", async () => {
+    const { client, calls } = sequenceClient([
+      () => jsonResponse(exportStatusBody("running")),
+      () => jsonResponse({ success: true, action: "cancelled" }),
+    ]);
+
+    const result = await exportCancel(client, REF, EXPORT_ID);
+
+    expect(calls.map((call) => call.method)).toEqual(["GET", "DELETE"]);
+    expect(result.data).toMatchObject({ action: "cancelled" });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = sequenceClient([
+      () => jsonResponse({ username: OWNER }),
+      () => jsonResponse(exportStatusBody("queued")),
+      () => jsonResponse({ success: true, action: "cancelled" }),
+    ]);
+
+    const result = await exportCancel(client, MODEL, EXPORT_ID, PROJECT);
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      EXPORT_PATH,
+      EXPORT_PATH,
+    ]);
+    expect(result.data).toMatchObject({ owner: OWNER, action: "cancelled" });
+  });
+
+  test.each([
+    "completed",
+    "failed",
+    "cancelled",
+  ])("refuses a %s export without sending the cancellation", async (status) => {
+    const { client, calls } = sequenceClient([
+      () => jsonResponse(exportStatusBody(status)),
+    ]);
+
+    await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
+      new RegExp(
+        `has status '${status}' and is no longer active.*only cancels running exports`,
+        "s",
+      ),
+    );
+    expect(calls).toEqual([{ method: "GET", path: EXPORT_PATH }]);
+  });
+
+  test("reports the action verbatim even when it deleted instead of cancelling", async () => {
+    const { client } = sequenceClient([
+      () => jsonResponse(exportStatusBody("running")),
+      () => jsonResponse({ success: true, action: "deleted" }),
+    ]);
+
+    const result = await exportCancel(client, REF, EXPORT_ID);
+
+    expect(result.summary).toContain("deleted");
+    expect(result.data).toMatchObject({ action: "deleted" });
+  });
+
+  test("surfaces the API message for an export that does not exist", async () => {
+    const { client } = sequenceClient([
+      () => jsonResponse({ error: "Export not found" }, 404),
+    ]);
+    await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
+      /Export not found/,
+    );
   });
 });

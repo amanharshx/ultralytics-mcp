@@ -239,6 +239,7 @@ You should see `ultralytics` in configured MCP servers.
 - Run model prediction from image URL or base64 input
 - Download model weights to local path
 - Create exports and training jobs with explicit cost confirmation
+- Cancel an active export before it finishes; refuses on a finished export instead of deleting its artifact
 - Pass advanced YOLO training settings through `training_start.train_args`
 - Start training from existing project models or official YOLO base checkpoints
 
@@ -250,7 +251,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 - Datasets: 12 tools
 - Models: 5 tools
 - Training: 3 tools
-- Exports: 3 tools
+- Exports: 4 tools
 - Infrastructure: 1 tool
 
 ## Safety

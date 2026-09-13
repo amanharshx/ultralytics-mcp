@@ -26,7 +26,12 @@ import {
   exploreDatasets,
 } from "./datasets.js";
 import { modelDownload } from "./downloads.js";
-import { exportCreate, exportStatus, exportsList } from "./exports.js";
+import {
+  exportCancel,
+  exportCreate,
+  exportStatus,
+  exportsList,
+} from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
 import { modelsDelete, modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
@@ -54,7 +59,12 @@ export {
   exploreDatasets,
 } from "./datasets.js";
 export { modelDownload } from "./downloads.js";
-export { exportCreate, exportStatus, exportsList } from "./exports.js";
+export {
+  exportCancel,
+  exportCreate,
+  exportStatus,
+  exportsList,
+} from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
 export { modelsDelete, modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
@@ -1033,6 +1043,42 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             dynamic: dynamic as boolean | undefined,
             confirmCost: confirm_cost as boolean | undefined,
           }),
+        ),
+  }),
+  tool({
+    name: "export_cancel",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Cancel an active export job for a model by owner/project/model, ul://owner/project/model, or slug with a project, plus the export id. Checks the export's status first and sends the cancellation only while it is still active, refusing on any terminal status; the same API verb deletes a finished export's artifact irreversibly instead of cancelling it. The status check cannot be atomic: an export that finishes between the check and the request will have its artifact deleted rather than cancelled, and that deletion cannot be undone.",
+    inputSchema: {
+      model: z
+        .string()
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      export_id: z.string().describe("Export job id."),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ model, export_id, project }) =>
+        toMcpTextResult(
+          await exportCancel(
+            getClient(),
+            model as string,
+            export_id as string,
+            project as string | undefined,
+          ),
         ),
   }),
   tool({

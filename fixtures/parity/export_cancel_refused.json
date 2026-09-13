@@ -1,0 +1,45 @@
+{
+  "tool": "export_cancel",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-2",
+    "export_id": "000000000000000000000001"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-model-2/exports/000000000000000000000001",
+      "response": {
+        "status": 200,
+        "json": {
+          "export": {
+            "id": "000000000000000000000001",
+            "status": "completed",
+            "format": "coreml",
+            "args": {
+              "format": "coreml",
+              "imgsz": 640,
+              "dynamic": true,
+              "half": true,
+              "int8": false,
+              "nms": true,
+              "batch": 1
+            },
+            "file": {
+              "size": 103287219,
+              "downloadUrl": "https://storage.example/example-bucket/example-model-2/best.mlpackage.zip",
+              "downloadFilename": "best.mlpackage.zip"
+            },
+            "startedAt": "2026-04-22T17:25:07.611Z",
+            "completedAt": "2026-04-22T17:25:26.190Z",
+            "createdAt": "2026-04-22T17:25:06.734Z",
+            "updatedAt": "2026-04-22T17:25:26.190Z"
+          }
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 200,
+    "message": "Export '000000000000000000000001' for model 'example-model-2' for owner 'example-owner' project 'example-project-1' has status 'completed' and is no longer active. export_cancel only cancels running exports; it does not delete finished ones."
+  }
+}
