@@ -87,9 +87,13 @@ const fixtureSchema = z
     // result, so the fixture records the expected failure, not output.
     expectedError: expectedErrorSchema.optional(),
   })
-  .refine((fixture) => fixture.expected !== undefined || fixture.expectedError !== undefined, {
-    message: "fixture must declare either expected or expectedError",
-  });
+  .refine(
+    (fixture) =>
+      fixture.expected !== undefined || fixture.expectedError !== undefined,
+    {
+      message: "fixture must declare either expected or expectedError",
+    },
+  );
 
 type Fixture = z.infer<typeof fixtureSchema>;
 

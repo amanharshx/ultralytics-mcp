@@ -449,7 +449,7 @@ Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt`
 
 Cancel a running training job by owner/project/model, ul://owner/project/model, or slug with a project. Cancelling releases the compute instance; elapsed GPU time is still charged and the most recently uploaded checkpoint is preserved rather than discarded. This stops the job and does not delete the model.
 
-Metadata: state-changing, non-idempotent, external/live
+Metadata: state-changing, destructive, non-idempotent, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

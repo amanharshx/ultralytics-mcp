@@ -217,7 +217,7 @@ test("server registers all available tools over the protocol", async () => {
   expect(trainingCancel?.inputSchema?.required).toEqual(["model"]);
   expect(trainingCancel?.annotations).toMatchObject({
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
   });
   expect(trainingCancel?.description).toMatch(/releases the compute instance/);
