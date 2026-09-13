@@ -227,6 +227,7 @@ You should see `ultralytics` in configured MCP servers.
 
 - Browse projects, datasets, models, exports, GPU availability
 - Resolve project refs by slug, `owner/slug`, or `ul://` (project ids are not addressable); dataset refs by slug, `owner/slug`, or `ul://` (dataset ids are not addressable)
+- Resolve model refs by `owner/project/model`, `ul://owner/project/model`, or a bare slug with a project (model ids are not addressable)
 - Search public projects and datasets on Ultralytics Explore
 - Create projects private by default (the platform defaults to public)
 - Create datasets private by default (the platform defaults to public)

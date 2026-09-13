@@ -25,6 +25,7 @@ import {
   datasetVersionCreate,
   exploreDatasets,
   exploreProjects,
+  exportCreate,
   exportStatus,
   exportsList,
   modelDownload,
@@ -351,6 +352,15 @@ const TOOL_RUNNERS: Record<
       args.export_id as string,
       args.project as string | undefined,
     ),
+  export_create: (client, args) =>
+    exportCreate(client, args.model as string, args.format as string, {
+      project: args.project as string | undefined,
+      gpuType: args.gpu_type as string | undefined,
+      imgsz: args.imgsz as number | undefined,
+      half: args.half as boolean | undefined,
+      dynamic: args.dynamic as boolean | undefined,
+      confirmCost: args.confirm_cost as boolean | undefined,
+    }),
 };
 
 /** Recursively replace the `__TMP__` placeholder with a real temp dir path. */
@@ -413,6 +423,7 @@ describe("parity fixtures", () => {
         "exports_list.json",
         "exports_list_empty.json",
         "export_status.json",
+        "export_create.json",
       ].sort(),
     );
   });
