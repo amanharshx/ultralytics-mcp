@@ -936,15 +936,32 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "export_status",
     registrationGroup: "read",
     stateChanging: false,
-    description: "Get status for one export job by 24-character export id.",
+    description:
+      "Get one export job's status for a model by owner/project/model, ul://owner/project/model, or slug with a project, plus the export id.",
     inputSchema: {
-      export_id: z.string().describe("24-character export job id."),
+      model: z
+        .string()
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      export_id: z.string().describe("Export job id."),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
-      async ({ export_id }) =>
-        toMcpTextResult(await exportStatus(getClient(), export_id as string)),
+      async ({ model, export_id, project }) =>
+        toMcpTextResult(
+          await exportStatus(
+            getClient(),
+            model as string,
+            export_id as string,
+            project as string | undefined,
+          ),
+        ),
   }),
   tool({
     name: "export_create",

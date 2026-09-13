@@ -1,0 +1,66 @@
+{
+  "tool": "export_status",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1",
+    "export_id": "000000000000000000000001"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/exports/000000000000000000000001",
+      "response": {
+        "status": 200,
+        "json": {
+          "export": {
+            "id": "000000000000000000000001",
+            "status": "completed",
+            "format": "onnx",
+            "args": {
+              "format": "onnx",
+              "imgsz": 640,
+              "half": true,
+              "dynamic": false,
+              "simplify": true,
+              "nms": false,
+              "batch": 1
+            },
+            "file": {
+              "size": 111752607,
+              "downloadUrl": "https://storage.example/example-bucket/example-model-1/example-model-1.onnx",
+              "downloadFilename": "example-model-1.onnx"
+            },
+            "startedAt": "2026-05-17T14:38:32.696Z",
+            "completedAt": "2026-05-17T14:38:38.956Z",
+            "createdAt": "2026-05-17T14:38:31.741Z",
+            "updatedAt": "2026-05-17T14:38:38.956Z"
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Export '000000000000000000000001' for model 'example-model-1' for owner 'example-owner' project 'example-project-1': status=completed format=onnx. Download: example-model-1.onnx.",
+    "data": {
+      "id": "000000000000000000000001",
+      "format": "onnx",
+      "status": "completed",
+      "createdAt": "2026-05-17T14:38:31.741Z",
+      "startedAt": "2026-05-17T14:38:32.696Z",
+      "completedAt": "2026-05-17T14:38:38.956Z",
+      "updatedAt": "2026-05-17T14:38:38.956Z",
+      "fileSize": 111752607,
+      "downloadUrl": "https://storage.example/example-bucket/example-model-1/example-model-1.onnx",
+      "downloadFilename": "example-model-1.onnx",
+      "args": {
+        "format": "onnx",
+        "imgsz": 640,
+        "half": true,
+        "dynamic": false,
+        "simplify": true,
+        "nms": false,
+        "batch": 1
+      },
+      "error": null
+    }
+  }
+}
