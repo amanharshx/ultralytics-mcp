@@ -907,12 +907,18 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "exports_list",
     registrationGroup: "read",
     stateChanging: false,
-    description: "List export jobs for a model.",
+    description:
+      "List export jobs for a model by owner/project/model, ul://owner/project/model, or slug with a project.",
     inputSchema: {
       model: z
         .string()
-        .describe("Model id, or slug when project is also provided."),
-      project: z.string().optional(),
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:

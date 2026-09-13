@@ -462,14 +462,14 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ### exports_list
 
-List export jobs for a model.
+List export jobs for a model by owner/project/model, ul://owner/project/model, or slug with a project.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `model` | string | Yes | Model id, or slug when project is also provided. |
-| `project` | string | No |  |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `project` | string | No | Project ref required when model is given by slug. |
 
 ### export_status
 

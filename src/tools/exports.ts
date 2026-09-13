@@ -1,7 +1,7 @@
 /** Export tools. `export_create` is state-changing and guarded by confirm_cost. */
 
 import type { UltralyticsClient } from "../client.js";
-import { looksLikeId, resolveLegacyModelId } from "../resolve.js";
+import { looksLikeId, resolveLegacyModelId, resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
 
@@ -27,20 +27,51 @@ const EXPORT_FORMATS = new Set([
   "deepx",
 ]);
 
-/** List exports for a model. */
+/** List exports for a model.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and lists
+ * the model's exports through the live owner-scoped endpoint. The API
+ * returns `{exports[], region}`; each entry names the job via `id`,
+ * `format`, and `status`, with lifecycle timestamps, the export `args`, and
+ * the artifact's size and filename when the job produced one. The signed
+ * download URL is deliberately omitted. A model with no exports reports an
+ * empty list. The timestamps and artifact presence tell a finished export
+ * from a running or failed one without a second call.
+ */
 export async function exportsList(
   client: UltralyticsClient,
   model: string,
   project?: string,
 ): Promise<NormalizedToolResult> {
-  const modelId = await resolveLegacyModelId(client, model, project);
-  const data = await client.get("/exports", { modelId });
-  const items = listField(data, "exports").map((entry) => ({
-    id: entry._id ?? null,
-    format: entry.format ?? null,
-    status: entry.status ?? null,
-  }));
-  return { summary: `${items.length} export(s) for model.`, data: items };
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports`,
+  );
+  const items = listField(data, "exports").map((entry) => {
+    const file = asRecord(entry.file);
+    const args =
+      entry.args && typeof entry.args === "object" ? entry.args : null;
+    return {
+      id: entry.id ?? null,
+      format: entry.format ?? null,
+      status: entry.status ?? null,
+      createdAt: entry.createdAt ?? null,
+      startedAt: entry.startedAt ?? null,
+      completedAt: entry.completedAt ?? null,
+      updatedAt: entry.updatedAt ?? null,
+      fileSize: file.size ?? null,
+      downloadFilename: file.downloadFilename ?? null,
+      args,
+    };
+  });
+  return {
+    summary:
+      `Model '${resolved.model}' for owner '${resolvedOwner}' ` +
+      `project '${resolved.project}': ${items.length} export(s).`,
+    data: items,
+  };
 }
 
 /** Get status for one export job. */

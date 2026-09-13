@@ -1,0 +1,23 @@
+{
+  "tool": "exports_list",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-2"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-model-2/exports",
+      "response": {
+        "status": 200,
+        "json": {
+          "exports": [],
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Model 'example-model-2' for owner 'example-owner' project 'example-project-1': 0 export(s).",
+    "data": []
+  }
+}
