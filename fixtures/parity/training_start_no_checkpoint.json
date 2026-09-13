@@ -1,0 +1,27 @@
+{
+  "tool": "training_start",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-2",
+    "project": "example-owner/example-project-1",
+    "dataset": "example-owner/example-dataset-1",
+    "gpu_type": "l4",
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-model-2",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": { "id": "gggggggggggggggggggggggg", "trainArgs": {} },
+          "isOwner": true
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 200,
+    "message": "Resolved model has no stored base checkpoint; pass a base checkpoint like `yolo26x.pt` instead."
+  }
+}

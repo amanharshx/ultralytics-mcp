@@ -1,0 +1,84 @@
+{
+  "tool": "training_start",
+  "args": {
+    "model": "yolo26n.pt",
+    "project": "example-owner/example-project-1",
+    "dataset": "example-owner/example-dataset-1",
+    "gpu_type": "l4",
+    "epochs": 1,
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1",
+      "response": {
+        "status": 200,
+        "json": { "dataset": { "task": "detect" } }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/models",
+      "json": {
+        "owner": "example-owner",
+        "project": "example-project-1",
+        "task": "detect"
+      },
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "ffffffffffffffffffffffff",
+          "owner": "example-owner",
+          "project": "example-project-1",
+          "model": "exp-2",
+          "region": "eu"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/training/start",
+      "json": {
+        "modelId": "ffffffffffffffffffffffff",
+        "gpuType": "l4",
+        "trainArgs": {
+          "model": "yolo26n.pt",
+          "data": "ul://example-owner/datasets/example-dataset-1",
+          "epochs": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "modelId": "ffffffffffffffffffffffff",
+          "status": "starting",
+          "gpuType": "l4",
+          "estimatedCost": { "pricePerHour": 0.39, "gpuMemoryGb": 24 },
+          "billing": {
+            "estimatedCostCents": 10,
+            "estimatedCostDisplay": "$0.10",
+            "balanceCents": 999800
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Started training for model 'exp-2' for owner 'example-owner' project 'example-project-1': status=starting on l4. Estimated cost $0.10 (0.39/hr); balance after start $9998.00.",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "exp-2",
+      "modelId": "ffffffffffffffffffffffff",
+      "status": "starting",
+      "gpuType": "l4",
+      "estimatedCost": { "pricePerHour": 0.39, "gpuMemoryGb": 24 },
+      "billing": {
+        "estimatedCostCents": 10,
+        "estimatedCostDisplay": "$0.10",
+        "balanceCents": 999800
+      }
+    }
+  }
+}

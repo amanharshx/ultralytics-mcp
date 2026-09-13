@@ -1,0 +1,71 @@
+{
+  "tool": "training_start",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1",
+    "project": "example-owner/example-project-1",
+    "dataset": "example-owner/example-dataset-1",
+    "gpu_type": "l4",
+    "epochs": 1,
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-model-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "id": "eeeeeeeeeeeeeeeeeeeeeeee",
+            "trainArgs": { "model": "ul://ultralytics/yolo26/yolo26x" }
+          },
+          "isOwner": true
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/training/start",
+      "json": {
+        "modelId": "eeeeeeeeeeeeeeeeeeeeeeee",
+        "gpuType": "l4",
+        "trainArgs": {
+          "data": "ul://example-owner/datasets/example-dataset-1",
+          "model": "ul://ultralytics/yolo26/yolo26x",
+          "epochs": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "modelId": "eeeeeeeeeeeeeeeeeeeeeeee",
+          "status": "starting",
+          "gpuType": "l4",
+          "estimatedCost": { "pricePerHour": 0.39, "gpuMemoryGb": 24 },
+          "billing": {
+            "estimatedCostCents": 10,
+            "estimatedCostDisplay": "$0.10",
+            "balanceCents": 999900
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Started training for model 'example-model-1' for owner 'example-owner' project 'example-project-1': status=starting on l4. Estimated cost $0.10 (0.39/hr); balance after start $9999.00.",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-model-1",
+      "modelId": "eeeeeeeeeeeeeeeeeeeeeeee",
+      "status": "starting",
+      "gpuType": "l4",
+      "estimatedCost": { "pricePerHour": 0.39, "gpuMemoryGb": 24 },
+      "billing": {
+        "estimatedCostCents": 10,
+        "estimatedCostDisplay": "$0.10",
+        "balanceCents": 999900
+      }
+    }
+  }
+}

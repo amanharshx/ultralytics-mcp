@@ -4,11 +4,9 @@ import type { UltralyticsClient } from "../client.js";
 import { UltralyticsApiError } from "../errors.js";
 import {
   parseRef,
-  resolveLegacyDatasetDetails,
-  resolveLegacyDatasetId,
-  resolveLegacyModelId,
-  resolveLegacyProjectId,
+  resolveDataset,
   resolveModel,
+  resolveProject,
 } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, pyField } from "./shared.js";
@@ -99,36 +97,42 @@ function storedTrainModel(data: unknown): string | null {
   return typeof model === "string" && model.trim() ? model : null;
 }
 
-function createdModelId(data: unknown): string {
-  const record = asRecord(data);
-  const model = asRecord(record.model);
-  const nested = asRecord(record.data);
-  const nestedModel = asRecord(nested.model);
-  const candidates = [
-    record.modelId,
-    record._id,
-    record.id,
-    model.modelId,
-    model._id,
-    model.id,
-    nested.modelId,
-    nested._id,
-    nested.id,
-    nestedModel.modelId,
-    nestedModel._id,
-    nestedModel.id,
-  ];
-  const id = candidates.find(
-    (value) => typeof value === "string" && value.trim(),
-  );
-  if (typeof id !== "string") {
-    throw new Error("Create model response did not include a model id.");
+/** Read the database id off a model detail response (`{model: {id, ...}}`). */
+function modelDatabaseId(data: unknown): string {
+  const fields = asRecord(asRecord(data).model);
+  const id = fields.id;
+  if (typeof id !== "string" || !id.trim()) {
+    throw new Error("Model detail response did not include a database id.");
   }
   return id;
 }
 
-function checkpointModelName(ref: string): string {
-  return normalizeCheckpointRef(ref).replace(/\.pt$/i, "");
+/** Read the database id off a model create response: flat `{id, ...}`. */
+function createdModelId(data: unknown): string {
+  const id = asRecord(data).id;
+  if (typeof id !== "string" || !id.trim()) {
+    throw new Error("Create model response did not include an id.");
+  }
+  return id;
+}
+
+/** Build the three-segment `ul://owner/datasets/slug` URI training's `data`
+ * argument requires. The middle `datasets` segment is mandatory and this is
+ * the only tool that emits it, so the formatter lives here rather than on
+ * the pure, shape-agnostic dataset resolver. */
+function formatDatasetUri(dataset: { owner: string; dataset: string }): string;
+function formatDatasetUri(
+  dataset: { owner: string; dataset: string }[],
+): string[];
+function formatDatasetUri(
+  dataset:
+    | { owner: string; dataset: string }
+    | { owner: string; dataset: string }[],
+): string | string[] {
+  if (Array.isArray(dataset)) {
+    return dataset.map((entry) => formatDatasetUri(entry));
+  }
+  return `ul://${dataset.owner}/datasets/${dataset.dataset}`;
 }
 
 function validateCheckpointCompatibility(
@@ -356,7 +360,26 @@ export async function trainingCancel(
   };
 }
 
-/** Start cloud training. This is state-changing and may cost credits. */
+/** Start cloud training from an existing model or a base checkpoint. This is
+ * state-changing and may cost credits.
+ *
+ * Resolves the model, project, and dataset references by pure string parsing
+ * (ids are not addressable on any of them) and fills a missing owner from the
+ * account summary. `trainArgs.data` is built as the three-segment
+ * `ul://owner/datasets/slug` URI the platform requires; a bare dataset id is
+ * not accepted. Training from an existing model fetches it through the live
+ * owner-scoped endpoint to read its database id — the start endpoint takes an
+ * id by design while every other endpoint takes owner and slug — and reuses
+ * its own stored base checkpoint for `trainArgs.model` verbatim. Checkpoint
+ * mode creates a project model first from owner and project slug (the
+ * platform assigns the new model's slug; it no longer accepts a requested
+ * name) and validates the checkpoint's inferred task against the dataset's
+ * task before creating anything. The endpoint validates at creation, so an
+ * unusable dataset is rejected before any compute starts; use
+ * `training_cancel` to stop a job that is already running. The response's
+ * projected cost and remaining balance are surfaced verbatim rather than
+ * discarded.
+ */
 export async function trainingStart(
   client: UltralyticsClient,
   options: {
@@ -401,22 +424,31 @@ export async function trainingStart(
     throw new Error("`batch` must be -1 for auto or greater than 0.");
   }
 
-  const projectId = await resolveLegacyProjectId(client, project);
+  const resolvedProject = resolveProject(project);
+  const resolvedDataset = resolveDataset(dataset);
   const checkpoint = checkpointFromRef(model);
-  const datasetDetails =
-    checkpoint === null
-      ? { id: await resolveLegacyDatasetId(client, dataset), task: null }
-      : await resolveLegacyDatasetDetails(client, dataset);
-  const datasetId = datasetDetails.id;
 
-  let modelId: string;
+  const datasetOwner =
+    resolvedDataset.owner ?? (await client.getAccountOwner());
   const trainArgs: Record<string, unknown> = {
     ...passthroughTrainArgs,
-    data: datasetId,
+    data: formatDatasetUri({
+      owner: datasetOwner,
+      dataset: resolvedDataset.dataset,
+    }),
   };
+
+  let modelId: string;
+  let modelOwnerDisplay: string;
+  let modelProjectDisplay: string;
+  let modelSlugDisplay: string;
   if (checkpoint === null) {
-    modelId = await resolveLegacyModelId(client, model, project);
-    const modelData = await client.get(`/models/${modelId}`);
+    const resolvedModel = resolveModel(model, project);
+    const modelOwner = resolvedModel.owner ?? (await client.getAccountOwner());
+    const modelData = await client.get(
+      `/models/${encodeURIComponent(modelOwner)}/${encodeURIComponent(resolvedModel.project)}/${encodeURIComponent(resolvedModel.model)}`,
+    );
+    modelId = modelDatabaseId(modelData);
     const trainModel = storedTrainModel(modelData);
     if (trainModel === null) {
       throw new Error(
@@ -424,16 +456,38 @@ export async function trainingStart(
       );
     }
     trainArgs.model = trainModel;
+    modelOwnerDisplay = modelOwner;
+    modelProjectDisplay = resolvedModel.project;
+    modelSlugDisplay = resolvedModel.model;
   } else {
     const checkpointTask = inferCheckpointTask(checkpoint);
-    validateCheckpointCompatibility(datasetDetails.task, checkpointTask);
+    const datasetDetail = await client.get(
+      `/datasets/${encodeURIComponent(datasetOwner)}/${encodeURIComponent(resolvedDataset.dataset)}`,
+    );
+    const datasetFields = asRecord(asRecord(datasetDetail).dataset);
+    const datasetTask =
+      typeof datasetFields.task === "string" ? datasetFields.task : null;
+    validateCheckpointCompatibility(datasetTask, checkpointTask);
+    const projectOwner =
+      resolvedProject.owner ?? (await client.getAccountOwner());
     const created = await client.postJson("/models", {
-      projectId,
+      owner: projectOwner,
+      project: resolvedProject.project,
       task: checkpointTask,
-      name: checkpointModelName(checkpoint),
     });
+    const createdFields = asRecord(created);
     modelId = createdModelId(created);
     trainArgs.model = checkpoint;
+    modelOwnerDisplay =
+      typeof createdFields.owner === "string"
+        ? createdFields.owner
+        : projectOwner;
+    modelProjectDisplay =
+      typeof createdFields.project === "string"
+        ? createdFields.project
+        : resolvedProject.project;
+    modelSlugDisplay =
+      typeof createdFields.model === "string" ? createdFields.model : "?";
   }
 
   if (epochs !== undefined) {
@@ -451,15 +505,40 @@ export async function trainingStart(
 
   const data = await client.postJson("/training/start", {
     modelId,
-    projectId,
     gpuType,
     trainArgs,
   });
   const record = asRecord(data);
-  const item = "job" in record ? record.job : data;
-  const fields = asRecord(item);
+  const status = record.status ?? null;
+  const responseGpuType = record.gpuType ?? gpuType;
+  const estimatedCost =
+    record.estimatedCost && typeof record.estimatedCost === "object"
+      ? asRecord(record.estimatedCost)
+      : null;
+  const billing =
+    record.billing && typeof record.billing === "object"
+      ? asRecord(record.billing)
+      : null;
+  const balanceDisplay =
+    typeof billing?.balanceCents === "number"
+      ? `$${(billing.balanceCents / 100).toFixed(2)}`
+      : null;
+
   return {
-    summary: `Started training job ${pyField(fields._id)} status=${pyField(fields.status)}.`,
-    data: item,
+    summary:
+      `Started training for model '${modelSlugDisplay}' for owner '${modelOwnerDisplay}' ` +
+      `project '${modelProjectDisplay}': status=${pyField(status)} on ${pyField(responseGpuType)}. ` +
+      `Estimated cost ${pyField(billing?.estimatedCostDisplay)} (${pyField(estimatedCost?.pricePerHour)}/hr); ` +
+      `balance after start ${pyField(balanceDisplay)}.`,
+    data: {
+      owner: modelOwnerDisplay,
+      project: modelProjectDisplay,
+      model: modelSlugDisplay,
+      modelId: record.modelId ?? modelId,
+      status,
+      gpuType: responseGpuType,
+      estimatedCost,
+      billing,
+    },
   };
 }

@@ -1086,7 +1086,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Requires confirm_cost=true.",
+      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; task and architecture compatibility for the checkpoint is checked up front too. Reports the projected cost and remaining balance the platform returns. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
     inputSchema: {
       model: z
         .string()
@@ -1098,7 +1098,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .describe("Project ref that owns the training job and resolved model."),
       dataset: z
         .string()
-        .describe("Dataset ref used as training data for the job."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or ul:// URI used as training data for the job.",
+        ),
       gpu_type: z.string().describe("Cloud GPU type to allocate for training."),
       train_args: z.record(z.string(), z.unknown()).optional(),
       epochs: z.number().optional(),
@@ -1124,7 +1126,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         input: {
           model: "team/project/my-model",
           project: "team/project",
-          dataset: "team/datasets/warehouse-items",
+          dataset: "team/warehouse-items",
           gpu_type: "rtx-4090",
           confirm_cost: true,
         },
@@ -1134,7 +1136,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         input: {
           model: "yolo11n-seg.pt",
           project: "team/project",
-          dataset: "team/datasets/road-segments",
+          dataset: "team/road-segments",
           gpu_type: "rtx-4090",
           confirm_cost: true,
         },
