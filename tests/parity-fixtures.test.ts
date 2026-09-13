@@ -25,6 +25,7 @@ import {
   datasetVersionCreate,
   exploreDatasets,
   exploreProjects,
+  exportCancel,
   exportCreate,
   exportStatus,
   exportsList,
@@ -361,6 +362,19 @@ const TOOL_RUNNERS: Record<
       dynamic: args.dynamic as boolean | undefined,
       confirmCost: args.confirm_cost as boolean | undefined,
     }),
+  // export_cancel.json: live capture, DELETE .../exports/{exportId} on a
+  // GPU `engine` export while `running` -> 200 {success:true,
+  // action:"cancelled"}. A `queued` capture was not reachable live: onnx
+  // (cheapest format) completed before the status GET landed, and this
+  // `engine`/`l4` job moved queued -> running just as fast. The exported
+  // record showed no artifact fields after cancelling.
+  export_cancel: (client, args) =>
+    exportCancel(
+      client,
+      args.model as string,
+      args.export_id as string,
+      args.project as string | undefined,
+    ),
 };
 
 /** Recursively replace the `__TMP__` placeholder with a real temp dir path. */
@@ -424,6 +438,8 @@ describe("parity fixtures", () => {
         "exports_list_empty.json",
         "export_status.json",
         "export_create.json",
+        "export_cancel.json",
+        "export_cancel_refused.json",
       ].sort(),
     );
   });
@@ -454,7 +470,10 @@ describe("parity fixtures", () => {
     }
     // Error case: the live API refuses with a 400 carrying its own message.
     // Replayed by the dedicated test below, which asserts the refusal.
-    if (fixtureFile === "training_cancel_refused.json") {
+    if (
+      fixtureFile === "training_cancel_refused.json" ||
+      fixtureFile === "export_cancel_refused.json"
+    ) {
       continue;
     }
     const runner = TOOL_RUNNERS[fixture.tool];
@@ -491,6 +510,30 @@ describe("parity fixtures", () => {
     expect(error).toBeInstanceOf(UltralyticsApiError);
     expect(error.statusCode).toBe(fixture.expectedError?.status);
     expect(error.apiMessage).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: export_cancel_refused.json", async () => {
+    // Live capture: GET .../exports/{exportId} on a completed export ->
+    // 200 {export: {status: "completed", ...}}. The refusal below is our own
+    // guard, sent instead of the DELETE that would otherwise irreversibly
+    // delete the artifact.
+    const raw = readFileSync(
+      join(fixtureDir, "export_cancel_refused.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await exportCancel(
+      client,
+      fixture.args.model as string,
+      fixture.args.export_id as string,
+    ).catch((e) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(fixture.expectedError?.message);
   });
 
   test("parity output: model_download_signed_url.json", async () => {

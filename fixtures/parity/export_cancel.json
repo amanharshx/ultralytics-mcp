@@ -1,0 +1,52 @@
+{
+  "tool": "export_cancel",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1",
+    "export_id": "000000000000000000000002"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/exports/000000000000000000000002",
+      "response": {
+        "status": 200,
+        "json": {
+          "export": {
+            "id": "000000000000000000000002",
+            "status": "running",
+            "format": "engine",
+            "gpuType": "l4",
+            "file": {
+              "downloadFilename": "best.engine"
+            },
+            "startedAt": "2026-09-13T22:51:48.287Z",
+            "createdAt": "2026-09-13T22:51:46.370Z",
+            "updatedAt": "2026-09-13T22:51:48.287Z"
+          }
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/exports/000000000000000000000002",
+      "response": {
+        "status": 200,
+        "json": {
+          "success": true,
+          "action": "cancelled"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Export '000000000000000000000002' for model 'example-model-1' for owner 'example-owner' project 'example-project-1': cancelled.",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-model-1",
+      "id": "000000000000000000000002",
+      "action": "cancelled",
+      "success": true
+    }
+  }
+}

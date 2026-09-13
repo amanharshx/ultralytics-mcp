@@ -458,7 +458,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Exports
 
-3 tools.
+4 tools.
 
 ### exports_list
 
@@ -511,6 +511,18 @@ Notes: State-changing export job that may cost credits. Set `confirm_cost` to `t
   "confirm_cost": true
 }
 ```
+
+### export_cancel
+
+Cancel an active export job for a model by owner/project/model, ul://owner/project/model, or slug with a project, plus the export id. Checks the export's status first and sends the cancellation only while it is still active, refusing on any terminal status; the same API verb deletes a finished export's artifact irreversibly instead of cancelling it. The status check cannot be atomic: an export that finishes between the check and the request will have its artifact deleted rather than cancelled, and that deletion cannot be undone.
+
+Metadata: state-changing, destructive, non-idempotent, external/live
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `export_id` | string | Yes | Export job id. |
+| `project` | string | No | Project ref required when model is given by slug. |
 
 ## Infrastructure
 
