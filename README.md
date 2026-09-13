@@ -234,6 +234,7 @@ You should see `ultralytics` in configured MCP servers.
 - Soft-delete datasets to trash, restorable for 30 days; images and annotations move with the dataset, models trained on it are unaffected
 - Start dataset ingest jobs and upload archive files, folders, or videos
 - Monitor training progress and inspect latest metrics or recent metric history
+- Cancel a running training job; the latest checkpoint is preserved and the model is kept
 - Run model prediction from image URL or base64 input
 - Download model weights to local path
 - Create exports and training jobs with explicit cost confirmation
@@ -247,7 +248,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 - Projects: 5 tools
 - Datasets: 12 tools
 - Models: 5 tools
-- Training: 2 tools
+- Training: 3 tools
 - Exports: 3 tools
 - Infrastructure: 1 tool
 

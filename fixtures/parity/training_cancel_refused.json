@@ -15,10 +15,8 @@
       }
     }
   ],
-  "expected": {
-    "summary": "Cannot cancel training with status: cancelled",
-    "data": {
-      "error": "Cannot cancel training with status: cancelled"
-    }
+  "expectedError": {
+    "status": 400,
+    "message": "Cannot cancel training with status: cancelled"
   }
 }

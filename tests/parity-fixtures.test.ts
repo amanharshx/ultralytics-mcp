@@ -64,18 +64,32 @@ const uploadSchema = z.object({
   zip_files: z.record(z.string(), z.string()).optional(),
 });
 
-const fixtureSchema = z.object({
-  tool: z.string(),
-  args: z.record(z.string(), z.unknown()),
-  api: z.array(apiStepSchema),
-  download: downloadSchema.optional(),
-  upload: uploadSchema.optional(),
-  folder_files: z.record(z.string(), z.string()).optional(),
-  expected: z.object({
-    summary: z.string(),
-    data: z.unknown(),
-  }),
+const expectedErrorSchema = z.object({
+  status: z.number().int(),
+  message: z.string(),
 });
+
+const fixtureSchema = z
+  .object({
+    tool: z.string(),
+    args: z.record(z.string(), z.unknown()),
+    api: z.array(apiStepSchema),
+    download: downloadSchema.optional(),
+    upload: uploadSchema.optional(),
+    folder_files: z.record(z.string(), z.string()).optional(),
+    expected: z
+      .object({
+        summary: z.string(),
+        data: z.unknown(),
+      })
+      .optional(),
+    // Refusal case: the tool throws the API's error instead of returning a
+    // result, so the fixture records the expected failure, not output.
+    expectedError: expectedErrorSchema.optional(),
+  })
+  .refine((fixture) => fixture.expected !== undefined || fixture.expectedError !== undefined, {
+    message: "fixture must declare either expected or expectedError",
+  });
 
 type Fixture = z.infer<typeof fixtureSchema>;
 
@@ -385,7 +399,12 @@ describe("parity fixtures", () => {
     test(`fixture schema: ${fixtureFile}`, () => {
       const raw = readFileSync(join(fixtureDir, fixtureFile), "utf8");
       const fixture = fixtureSchema.parse(JSON.parse(raw));
-      expect(fixture.expected.summary.length).toBeGreaterThan(0);
+      if (fixture.expectedError !== undefined) {
+        expect(fixture.expected).toBeUndefined();
+        expect(fixture.expectedError.message.length).toBeGreaterThan(0);
+      } else {
+        expect(fixture.expected?.summary.length).toBeGreaterThan(0);
+      }
       expect(fixture.api.length).toBeGreaterThan(0);
     });
   }
@@ -437,10 +456,8 @@ describe("parity fixtures", () => {
       fixture.args.model as string,
     ).catch((e) => e as UltralyticsApiError);
     expect(error).toBeInstanceOf(UltralyticsApiError);
-    expect(error.statusCode).toBe(400);
-    expect(String(error)).toMatch(
-      /Cannot cancel training with status: cancelled/,
-    );
+    expect(error.statusCode).toBe(fixture.expectedError?.status);
+    expect(error.apiMessage).toBe(fixture.expectedError?.message);
   });
 
   test("parity output: model_download_signed_url.json", async () => {
