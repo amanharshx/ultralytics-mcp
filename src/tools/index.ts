@@ -37,7 +37,7 @@ import {
   projectsGet,
   projectsList,
 } from "./projects.js";
-import { trainingMonitor, trainingStart } from "./training.js";
+import { trainingCancel, trainingMonitor, trainingStart } from "./training.js";
 
 export {
   datasetExport,
@@ -65,7 +65,7 @@ export {
   projectsGet,
   projectsList,
 } from "./projects.js";
-export { trainingMonitor, trainingStart } from "./training.js";
+export { trainingCancel, trainingMonitor, trainingStart } from "./training.js";
 
 type RegistrationGroup = "read" | "action" | "write";
 
@@ -1088,6 +1088,40 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             name: name as string | undefined,
             confirmCost: confirm_cost as boolean | undefined,
           }),
+        ),
+  }),
+  tool({
+    name: "training_cancel",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Cancel a running training job by owner/project/model, ul://owner/project/model, or slug with a project. Cancelling releases the compute instance; elapsed GPU time is still charged and the most recently uploaded checkpoint is preserved rather than discarded. This stops the job and does not delete the model.",
+    inputSchema: {
+      model: z
+        .string()
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ model, project }) =>
+        toMcpTextResult(
+          await trainingCancel(
+            getClient(),
+            model as string,
+            project as string | undefined,
+          ),
         ),
   }),
 ];

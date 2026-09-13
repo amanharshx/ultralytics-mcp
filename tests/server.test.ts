@@ -212,4 +212,20 @@ test("server registers all available tools over the protocol", async () => {
       description: expect.any(String),
     },
   });
+
+  const trainingCancel = tools.find((tool) => tool.name === "training_cancel");
+  expect(trainingCancel?.inputSchema?.required).toEqual(["model"]);
+  expect(trainingCancel?.annotations).toMatchObject({
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+  });
+  expect(trainingCancel?.description).toMatch(/releases the compute instance/);
+  expect(trainingCancel?.description).toMatch(
+    /elapsed GPU time is still charged/,
+  );
+  expect(trainingCancel?.description).toMatch(
+    /most recently uploaded checkpoint is preserved/,
+  );
+  expect(trainingCancel?.description).toMatch(/does not delete the model/);
 });

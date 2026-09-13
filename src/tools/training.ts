@@ -1,4 +1,4 @@
-/** Training monitor tool (private-safe: derives progress from model trainResults). */
+/** Training monitor, start, and cancel tools. */
 
 import type { UltralyticsClient } from "../client.js";
 import { UltralyticsApiError } from "../errors.js";
@@ -314,6 +314,44 @@ export async function trainingMonitor(
           }
         : {}),
       ...(includeHistory ? { metricsHistory } : {}),
+    },
+  };
+}
+
+/** Cancel a running training job.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and cancels
+ * through the live owner-scoped endpoint. The API's cancel response is
+ * surfaced verbatim; when the job cannot be cancelled the API's own error
+ * message propagates without branching on a status code or a warning field.
+ * Cancelling releases the compute instance, elapsed GPU time is still
+ * charged, and the most recently uploaded checkpoint is preserved rather
+ * than discarded. This stops the job and does not delete the model.
+ */
+export async function trainingCancel(
+  client: UltralyticsClient,
+  model: string,
+  project?: string,
+): Promise<NormalizedToolResult> {
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data = await client.delete(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/training`,
+  );
+  const record = asRecord(data);
+  return {
+    summary:
+      `Cancelled training job for model '${resolved.model}' for owner '${resolvedOwner}' ` +
+      `project '${resolved.project}' (status=${pyField(record.status)}). ` +
+      `Compute instance released; elapsed GPU time still charged; ` +
+      `most recent checkpoint preserved. ` +
+      `This stops the job and does not delete the model.`,
+    data: {
+      owner: resolvedOwner,
+      project: resolved.project,
+      model: resolved.model,
+      ...record,
     },
   };
 }

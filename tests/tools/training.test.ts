@@ -2,7 +2,11 @@ import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import { UltralyticsApiError } from "../../src/errors.js";
-import { trainingMonitor, trainingStart } from "../../src/tools/training.js";
+import {
+  trainingCancel,
+  trainingMonitor,
+  trainingStart,
+} from "../../src/tools/training.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
 
 describe("trainingMonitor", () => {
@@ -1191,5 +1195,161 @@ describe("trainingStart", () => {
         confirmCost: true,
       }),
     ).rejects.toThrow(/batch/);
+  });
+});
+
+describe("trainingCancel", () => {
+  const OWNER = "alice";
+  const PROJECT = "road";
+  const MODEL = "exp";
+  const REF = `${OWNER}/${PROJECT}/${MODEL}`;
+  const TRAINING_PATH = `/api/models/${OWNER}/${PROJECT}/${MODEL}/training`;
+
+  function cancelClient(
+    options: {
+      cancelBody?: unknown;
+      cancelStatus?: number;
+      accountOwner?: string;
+    } = {},
+  ) {
+    const {
+      cancelBody = { success: true, status: "cancelled" },
+      cancelStatus = 200,
+      accountOwner,
+    } = options;
+    const calls: { path: string; method: string }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      const method = (init.method ?? "GET").toUpperCase();
+      calls.push({ path: parsed.pathname, method });
+      if (parsed.pathname === "/api/account/summary") {
+        if (accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: accountOwner });
+      }
+      if (parsed.pathname === TRAINING_PATH) {
+        return jsonResponse(cancelBody, cancelStatus);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+    });
+    return { client, calls };
+  }
+
+  test("cancels through the owner-scoped path and reports the API response", async () => {
+    const { client, calls } = cancelClient();
+
+    const result = await trainingCancel(client, REF);
+
+    expect(calls).toEqual([{ path: TRAINING_PATH, method: "DELETE" }]);
+    expect(result.summary).toContain("Cancelled");
+    expect(result.summary).toContain("'exp'");
+    expect(result.summary).toContain("cancelled");
+    expect(result.data).toEqual({
+      owner: OWNER,
+      project: PROJECT,
+      model: MODEL,
+      success: true,
+      status: "cancelled",
+    });
+  });
+
+  test("accepts a ul:// model URI without an account lookup", async () => {
+    const { client, calls } = cancelClient();
+
+    const result = await trainingCancel(client, "ul://alice/road/exp");
+
+    expect(calls).toEqual([{ path: TRAINING_PATH, method: "DELETE" }]);
+    expect(result.data).toMatchObject({ status: "cancelled" });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = cancelClient({ accountOwner: OWNER });
+
+    const result = await trainingCancel(client, MODEL, PROJECT);
+
+    expect(calls).toEqual([
+      { path: "/api/account/summary", method: "GET" },
+      { path: TRAINING_PATH, method: "DELETE" },
+    ]);
+    expect(result.data).toMatchObject({
+      owner: OWNER,
+      project: PROJECT,
+      model: MODEL,
+    });
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = cancelClient();
+    await expect(trainingCancel(client, "b".repeat(24))).rejects.toThrow(
+      /not addressable.*owner\/project\/model.*ul:\/\//s,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("requires a project for a bare slug", async () => {
+    const { client, calls } = cancelClient();
+    await expect(trainingCancel(client, MODEL)).rejects.toThrow(
+      /project is required/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("surfaces the API message for a model that does not exist", async () => {
+    const { client } = cancelClient({
+      cancelBody: { error: "Model not found" },
+      cancelStatus: 404,
+    });
+    await expect(trainingCancel(client, REF)).rejects.toThrow(
+      /Model not found/,
+    );
+  });
+
+  test("reports the API message when the job cannot be cancelled", async () => {
+    // Live capture: DELETE /api/models/{owner}/{project}/{model}/training
+    // -> 400 {"error":"Cannot cancel training with status: cancelled"}
+    const { client } = cancelClient({
+      cancelBody: { error: "Cannot cancel training with status: cancelled" },
+      cancelStatus: 400,
+    });
+    const error = await trainingCancel(client, REF).catch(
+      (e) => e as UltralyticsApiError,
+    );
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(400);
+    expect(String(error)).toMatch(
+      /Cannot cancel training with status: cancelled/,
+    );
+  });
+
+  test("does not translate other failure statuses into a custom message", async () => {
+    const { client } = cancelClient({
+      cancelBody: { error: "Training is no longer active" },
+      cancelStatus: 409,
+    });
+    const error = await trainingCancel(client, REF).catch(
+      (e) => e as UltralyticsApiError,
+    );
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(409);
+    expect(String(error)).toMatch(/Training is no longer active/);
+  });
+
+  test("surfaces a warning field verbatim instead of branching on it", async () => {
+    const { client } = cancelClient({
+      cancelBody: { success: true, status: "cancelled", warning: "note" },
+    });
+    const result = await trainingCancel(client, REF);
+    expect(result.data).toMatchObject({
+      success: true,
+      status: "cancelled",
+      warning: "note",
+    });
+    expect(result.summary).toContain("cancelled");
   });
 });
