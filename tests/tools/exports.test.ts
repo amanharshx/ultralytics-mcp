@@ -549,8 +549,7 @@ describe("exportCreate", () => {
   });
 
   test("fills a missing owner from the account summary for a bare slug", async () => {
-    const impl = (async (url: string | URL) => {
-      const path = new URL(String(url)).pathname;
+    const { client } = routeClient((path) => {
       if (path === "/api/account/summary") {
         return jsonResponse({ username: OWNER });
       }
@@ -561,11 +560,6 @@ describe("exportCreate", () => {
         );
       }
       return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: impl,
     });
 
     const result = await exportCreate(client, MODEL, "onnx", {
