@@ -1,7 +1,7 @@
 /** Export tools. `export_create` is state-changing and guarded by confirm_cost. */
 
 import type { UltralyticsClient } from "../client.js";
-import { looksLikeId, resolveLegacyModelId, resolveModel } from "../resolve.js";
+import { resolveLegacyModelId, resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
 
@@ -74,22 +74,67 @@ export async function exportsList(
   };
 }
 
-/** Get status for one export job. */
+/** Get status for one export job.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and reads
+ * the export through the live model-scoped endpoint. The export id is
+ * itself a 24-character id and a legitimate input, so it passes through
+ * untouched with no id rejection. The API returns the job nested as
+ * `{export}`; the curated result reports the status, format, lifecycle
+ * timestamps, the export `args`, and the artifact's size, filename, and
+ * download link when the job produced one, plus the error when present.
+ * The status is surfaced verbatim so a failed export stays distinguishable
+ * from a cancelled one.
+ */
 export async function exportStatus(
   client: UltralyticsClient,
+  model: string,
   exportId: string,
+  project?: string,
 ): Promise<NormalizedToolResult> {
-  if (!looksLikeId(exportId)) {
-    throw new Error("`export_id` must be a 24-character export id.");
-  }
-  const data = await client.get(`/exports/${exportId}`);
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports/${encodeURIComponent(exportId)}`,
+  );
   const record = asRecord(data);
   const item = "export" in record ? record.export : data;
   const fields = asRecord(item);
-  const idText = "_id" in fields ? pyField(fields._id) : exportId;
+  const file = asRecord(fields.file);
+  const args =
+    fields.args && typeof fields.args === "object" ? fields.args : null;
+  const status = fields.status ?? null;
+  const format = fields.format ?? null;
+  const error = fields.error ?? null;
+  const downloadFilename = file.downloadFilename ?? null;
+  let summary =
+    `Export '${String(fields.id ?? exportId)}' for model '${resolved.model}' ` +
+    `for owner '${resolvedOwner}' project '${resolved.project}': ` +
+    `status=${pyField(status)} format=${pyField(format)}.`;
+  if (error !== null) {
+    summary += ` Error: ${String(error)}.`;
+  } else if (status === "completed" && downloadFilename !== null) {
+    summary += ` Download: ${String(downloadFilename)}.`;
+  } else if (status === "cancelled") {
+    summary += " No artifact produced.";
+  }
   return {
-    summary: `Export ${idText} status=${pyField(fields.status)} format=${pyField(fields.format)}.`,
-    data: item,
+    summary,
+    data: {
+      id: fields.id ?? null,
+      format,
+      status,
+      createdAt: fields.createdAt ?? null,
+      startedAt: fields.startedAt ?? null,
+      completedAt: fields.completedAt ?? null,
+      updatedAt: fields.updatedAt ?? null,
+      fileSize: file.size ?? null,
+      downloadUrl: file.downloadUrl ?? null,
+      downloadFilename,
+      args,
+      error,
+    },
   };
 }
 

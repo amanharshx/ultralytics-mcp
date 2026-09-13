@@ -25,6 +25,7 @@ import {
   datasetVersionCreate,
   exploreDatasets,
   exploreProjects,
+  exportStatus,
   exportsList,
   modelDownload,
   modelPredict,
@@ -343,6 +344,13 @@ const TOOL_RUNNERS: Record<
       args.model as string,
       args.project as string | undefined,
     ),
+  export_status: (client, args) =>
+    exportStatus(
+      client,
+      args.model as string,
+      args.export_id as string,
+      args.project as string | undefined,
+    ),
 };
 
 /** Recursively replace the `__TMP__` placeholder with a real temp dir path. */
@@ -404,6 +412,7 @@ describe("parity fixtures", () => {
         "training_cancel_refused.json",
         "exports_list.json",
         "exports_list_empty.json",
+        "export_status.json",
       ].sort(),
     );
   });

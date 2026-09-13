@@ -473,13 +473,15 @@ Metadata: read-only
 
 ### export_status
 
-Get status for one export job by 24-character export id.
+Get one export job's status for a model by owner/project/model, ul://owner/project/model, or slug with a project, plus the export id.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `export_id` | string | Yes | 24-character export job id. |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `export_id` | string | Yes | Export job id. |
+| `project` | string | No | Project ref required when model is given by slug. |
 
 ### export_create
 
