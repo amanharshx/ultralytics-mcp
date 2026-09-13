@@ -1086,7 +1086,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; task and architecture compatibility for the checkpoint is checked up front too. Reports the projected cost and remaining balance the platform returns. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
+      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; checkpoint mode also checks the checkpoint's task against the dataset's task up front. Reports the projected cost and remaining balance the platform returns. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
     inputSchema: {
       model: z
         .string()

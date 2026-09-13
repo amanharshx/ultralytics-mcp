@@ -120,18 +120,7 @@ function createdModelId(data: unknown): string {
  * argument requires. The middle `datasets` segment is mandatory and this is
  * the only tool that emits it, so the formatter lives here rather than on
  * the pure, shape-agnostic dataset resolver. */
-function formatDatasetUri(dataset: { owner: string; dataset: string }): string;
-function formatDatasetUri(
-  dataset: { owner: string; dataset: string }[],
-): string[];
-function formatDatasetUri(
-  dataset:
-    | { owner: string; dataset: string }
-    | { owner: string; dataset: string }[],
-): string | string[] {
-  if (Array.isArray(dataset)) {
-    return dataset.map((entry) => formatDatasetUri(entry));
-  }
+function formatDatasetUri(dataset: { owner: string; dataset: string }): string {
   return `ul://${dataset.owner}/datasets/${dataset.dataset}`;
 }
 
