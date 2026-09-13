@@ -1,0 +1,34 @@
+{
+  "tool": "export_create",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1",
+    "format": "litert",
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/models/example-owner/example-project-1/example-model-1/exports",
+      "json": {
+        "format": "litert"
+      },
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "000000000000000000000001",
+          "format": "litert",
+          "status": "queued",
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Created export '000000000000000000000001' for model 'example-model-1' for owner 'example-owner' project 'example-project-1': status=queued format=litert. Format is validated at creation; task and architecture compatibility is only known when the job runs, so a queued export can still fail. Use export_status and exports_list for the real outcome.",
+    "data": {
+      "id": "000000000000000000000001",
+      "format": "litert",
+      "status": "queued"
+    }
+  }
+}

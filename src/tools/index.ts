@@ -968,14 +968,24 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Create a model export job (state-changing, may cost credits). Requires confirm_cost=true.",
+      "Create a model export job by owner/project/model, ul://owner/project/model, or slug with a project (state-changing, may cost credits). The format is validated immediately by the server; task and architecture compatibility is only known when the job runs, so a queued export can still fail. Use export_status and exports_list for the real outcome. Requires confirm_cost=true.",
     inputSchema: {
       model: z
         .string()
-        .describe("Model id, or slug when project is also provided."),
-      format: z.string().describe("Requested export format."),
-      project: z.string().optional(),
-      gpu_type: z.string().optional(),
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      format: z
+        .string()
+        .describe("Requested export format (validated by the server)."),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+      gpu_type: z
+        .string()
+        .optional()
+        .describe("GPU type required for TensorRT engine exports."),
       imgsz: z.number().optional(),
       half: z.boolean().optional(),
       dynamic: z.boolean().optional(),

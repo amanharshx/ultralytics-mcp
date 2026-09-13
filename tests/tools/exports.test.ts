@@ -8,7 +8,6 @@ import {
 } from "../../src/tools/exports.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
 
-const ID = "a".repeat(24);
 const EXPORT_ID = "e".repeat(24);
 
 /** Client that records request method/body and replies via `responder`. */
@@ -480,40 +479,114 @@ describe("exportStatus", () => {
 });
 
 describe("exportCreate", () => {
+  const OWNER = "alice";
+  const PROJECT = "road";
+  const MODEL = "exp";
+  const REF = `${OWNER}/${PROJECT}/${MODEL}`;
+  const CREATE_PATH = `/api/models/${OWNER}/${PROJECT}/${MODEL}/exports`;
+
   test("rejects when confirm_cost is false before any network call", async () => {
-    await expect(exportCreate(throwingClient(), ID, "onnx")).rejects.toThrow(
+    await expect(exportCreate(throwingClient(), REF, "onnx")).rejects.toThrow(
       /Set confirm_cost=true/,
     );
   });
 
-  test("rejects an unsupported format before any network call", async () => {
-    await expect(
-      exportCreate(throwingClient(), ID, "bogus", { confirmCost: true }),
-    ).rejects.toThrow(/Unsupported export format/);
-  });
-
   test("requires gpu_type for engine exports before any network call", async () => {
     await expect(
-      exportCreate(throwingClient(), ID, "engine", { confirmCost: true }),
+      exportCreate(throwingClient(), REF, "engine", { confirmCost: true }),
     ).rejects.toThrow(/gpu_type` is required for TensorRT/);
   });
 
-  test("posts the export payload and summarizes the job", async () => {
-    const { client, calls } = captureClient(() =>
-      jsonResponse({
-        export: { _id: EXPORT_ID, status: "queued", format: "onnx" },
+  test("rejects a non-positive imgsz before any network call", async () => {
+    await expect(
+      exportCreate(throwingClient(), REF, "onnx", {
+        confirmCost: true,
+        imgsz: 0,
       }),
+    ).rejects.toThrow(/imgsz` must be greater than 0/);
+  });
+
+  test("rejects a bare model id without any network call", async () => {
+    await expect(
+      exportCreate(throwingClient(), "b".repeat(24), "onnx", {
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/not addressable.*owner\/project\/model.*ul:\/\//s);
+  });
+
+  test("requires a project for a bare slug before any network call", async () => {
+    await expect(
+      exportCreate(throwingClient(), MODEL, "onnx", { confirmCost: true }),
+    ).rejects.toThrow(/project is required/);
+  });
+
+  test("posts the export payload through the owner-scoped path and summarizes the job", async () => {
+    const { client, calls } = captureClient(() =>
+      jsonResponse(
+        { id: EXPORT_ID, format: "litert", status: "queued", region: "eu" },
+        201,
+      ),
     );
-    const result = await exportCreate(client, ID, "ONNX", {
+    const result = await exportCreate(client, REF, "LITERT", {
       confirmCost: true,
     });
     expect(result.summary).toBe(
-      `Created export ${EXPORT_ID} status=queued format=onnx.`,
+      `Created export '${EXPORT_ID}' for model 'exp' for owner 'alice' project 'road': ` +
+        "status=queued format=litert. Format is validated at creation; task and " +
+        "architecture compatibility is only known when the job runs, so a queued " +
+        "export can still fail. Use export_status and exports_list for the real outcome.",
     );
-    expect(calls[0]).toMatchObject({
-      url: `${BASE}/exports`,
-      method: "POST",
-      body: { modelId: ID, format: "onnx" },
+    expect(result.data).toEqual({
+      id: EXPORT_ID,
+      format: "litert",
+      status: "queued",
     });
+    expect(calls[0]).toMatchObject({
+      url: `${BASE}/models/${OWNER}/${PROJECT}/${MODEL}/exports`,
+      method: "POST",
+      body: { format: "litert" },
+    });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const impl = (async (url: string | URL) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: OWNER });
+      }
+      if (path === CREATE_PATH) {
+        return jsonResponse(
+          { id: EXPORT_ID, format: "onnx", status: "queued" },
+          201,
+        );
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    const result = await exportCreate(client, MODEL, "onnx", {
+      confirmCost: true,
+      project: PROJECT,
+    });
+    expect(result.data).toMatchObject({ id: EXPORT_ID, status: "queued" });
+  });
+
+  test("surfaces the server's message for a format it rejects", async () => {
+    const { client } = captureClient(() =>
+      jsonResponse(
+        {
+          error:
+            "Invalid format 'bogus'. Valid formats: onnx, torchscript, ...",
+        },
+        400,
+      ),
+    );
+    await expect(
+      exportCreate(client, REF, "bogus", { confirmCost: true }),
+    ).rejects.toThrow(/Invalid format 'bogus'/);
   });
 });

@@ -1,31 +1,9 @@
 /** Export tools. `export_create` is state-changing and guarded by confirm_cost. */
 
 import type { UltralyticsClient } from "../client.js";
-import { resolveLegacyModelId, resolveModel } from "../resolve.js";
+import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { asRecord, listField, pyField } from "./shared.js";
-
-const EXPORT_FORMATS = new Set([
-  "onnx",
-  "torchscript",
-  "openvino",
-  "engine",
-  "coreml",
-  "tflite",
-  "saved_model",
-  "pb",
-  "paddle",
-  "ncnn",
-  "edgetpu",
-  "tfjs",
-  "mnn",
-  "rknn",
-  "qnn",
-  "imx",
-  "axelera",
-  "executorch",
-  "deepx",
-]);
 
 /** List exports for a model.
  *
@@ -138,7 +116,19 @@ export async function exportStatus(
   };
 }
 
-/** Create a model export job. This is state-changing and may cost credits. */
+/** Create a model export job. This is state-changing and may cost credits.
+ *
+ * Resolves the model reference by pure string parsing (ids are not
+ * addressable), fills a missing owner from the account summary, and creates
+ * the export through the live model-scoped endpoint. There is no local
+ * format allowlist: the server validates the format at creation and names
+ * every accepted value in its error, so an invalid format surfaces that
+ * message directly. Task and architecture compatibility is not checked at
+ * creation, only when the job runs, so a queued export can still fail; use
+ * `export_status` and `exports_list` for the real outcome. A TensorRT
+ * `engine` export still requires a GPU type, which is a companion-field
+ * requirement of ours rather than a mirrored server enum.
+ */
 export async function exportCreate(
   client: UltralyticsClient,
   model: string,
@@ -165,24 +155,22 @@ export async function exportCreate(
   }
 
   const exportFormat = format.trim().toLowerCase();
-  if (!EXPORT_FORMATS.has(exportFormat)) {
-    throw new Error(`Unsupported export format '${format}'.`);
-  }
   if (exportFormat === "engine" && !gpuType) {
     throw new Error("`gpu_type` is required for TensorRT engine exports.");
   }
+  if (imgsz !== undefined && imgsz <= 0) {
+    throw new Error("`imgsz` must be greater than 0.");
+  }
 
-  const modelId = await resolveLegacyModelId(client, model, project);
-  const payload: Record<string, unknown> = { modelId, format: exportFormat };
+  const resolved = resolveModel(model, project);
+  const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+
+  const payload: Record<string, unknown> = { format: exportFormat };
   if (gpuType) {
     payload.gpuType = gpuType;
   }
-
   const args: Record<string, unknown> = {};
   if (imgsz !== undefined) {
-    if (imgsz <= 0) {
-      throw new Error("`imgsz` must be greater than 0.");
-    }
     args.imgsz = imgsz;
   }
   if (half !== undefined) {
@@ -195,12 +183,24 @@ export async function exportCreate(
     payload.args = args;
   }
 
-  const data = await client.postJson("/exports", payload);
+  const data = await client.postJson(
+    `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports`,
+    payload,
+  );
   const record = asRecord(data);
   const item = "export" in record ? record.export : data;
   const fields = asRecord(item);
+  const id = fields.id ?? null;
+  const status = fields.status ?? null;
+  const returnedFormat = fields.format ?? null;
   return {
-    summary: `Created export ${pyField(fields._id)} status=${pyField(fields.status)} format=${pyField(fields.format)}.`,
-    data: item,
+    summary:
+      `Created export '${String(id ?? "unknown")}' for model '${resolved.model}' ` +
+      `for owner '${resolvedOwner}' project '${resolved.project}': ` +
+      `status=${pyField(status)} format=${pyField(returnedFormat)}. ` +
+      "Format is validated at creation; task and architecture compatibility " +
+      "is only known when the job runs, so a queued export can still fail. " +
+      "Use export_status and exports_list for the real outcome.",
+    data: { id, format: returnedFormat, status },
   };
 }
