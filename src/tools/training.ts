@@ -195,6 +195,10 @@ interface TrainingMonitorOptions {
  * recorded compute cost and the training error are surfaced when present.
  * This tool answers "how is this training run going right now?" only: the
  * top-level `metrics` object and `trainArgs` belong to `model_metrics`.
+ * `timing.elapsedMs` is wall-clock since model creation, evaluated at
+ * request time: it tracks elapsed run time while training is active, but
+ * for a finished model it reflects the model's age, not training duration.
+ * Billed training time is `computeCost.durationMs`.
  * Evaluation plots are deliberately omitted: the platform disclaims their
  * shape as unstable.
  */
