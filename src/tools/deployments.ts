@@ -4,7 +4,12 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import type { UltralyticsClient } from "../client.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { asRecord, listField } from "./shared.js";
+import {
+  asRecord,
+  listField,
+  type PredictParams,
+  projectPredictResult,
+} from "./shared.js";
 
 const IMAGE_CONTENT_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -304,12 +309,7 @@ export async function deploymentMetrics(
 export async function deploymentPredict(
   client: UltralyticsClient,
   deployment: string,
-  options: {
-    imagePath: string;
-    conf?: number;
-    iou?: number;
-    imgsz?: number;
-  },
+  options: PredictParams & { imagePath: string },
 ): Promise<NormalizedToolResult> {
   const imagePath = options.imagePath?.trim();
   if (!imagePath) {
@@ -351,20 +351,7 @@ export async function deploymentPredict(
     { data, files: { file: { blob, filename } } },
   );
 
-  const images = listField(result, "images");
-  const metadataField = asRecord(result).metadata;
-  const metadata =
-    metadataField && typeof metadataField === "object"
-      ? (metadataField as Record<string, unknown>)
-      : null;
-  const detectionCount = images.reduce(
-    (total, image) =>
-      total +
-      (Array.isArray(asRecord(image).results)
-        ? (asRecord(image).results as unknown[]).length
-        : 0),
-    0,
-  );
+  const { images, metadata, detectionCount } = projectPredictResult(result);
 
   return {
     summary: `Deployment '${slug}' for owner '${resolvedOwner}': ${images.length} image(s), ${detectionCount} detection(s).`,
