@@ -334,3 +334,13 @@ set to `owner/slug` for a ready dataset with ingested images. It skips
 without the variable. Re-creating an unchanged version is a no-op, but an
 opted-in fixture that changed since its last snapshot gains an immutable
 snapshot version.
+
+Also covers the model, training, and export read tools on one disposable
+`mcp-smoke-*` model (list, get, training status, export list, and the
+training-cancel refusal for a non-cancellable job), deleting the model and
+its project again even on failure. Starting training or creating an export
+bills the account, so neither runs here; that live verification lives in
+`training_start` and `export_create`'s own tickets. Export status shape and
+the export-cancel refusal need an existing export that has already reached
+a terminal status, opted into with `ULTRALYTICS_SMOKE_EXPORT_REF=owner/project/model:exportId`.
+It skips without the variable.
