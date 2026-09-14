@@ -1280,6 +1280,199 @@ describe("trainingStart", () => {
     });
   });
 
+  describe("history-loss consent", () => {
+    test("refuses to restart training on a completed model without confirm_history_loss", async () => {
+      const { client, calls } = routeClient((path) => {
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: {
+              id: MODEL_DB_ID,
+              status: "completed",
+              epochs: 100,
+              trainArgs: { model: "yolo26n.pt" },
+              trainResults: [{ epoch: 0 }, { epoch: 1 }],
+            },
+          });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(
+        /already has a recorded run.*confirm_history_loss=true/s,
+      );
+      expect(calls).toHaveLength(1);
+    });
+
+    test("proceeds when confirm_history_loss=true is set for a completed model", async () => {
+      const impl = (async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: {
+              id: MODEL_DB_ID,
+              status: "completed",
+              epochs: 100,
+              trainArgs: { model: "yolo26n.pt" },
+              trainResults: [{ epoch: 0 }],
+            },
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse(startResponse());
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      const result = await trainingStart(client, {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+        confirmHistoryLoss: true,
+      });
+      expect(result.summary).toContain("Started training");
+    });
+
+    test.each([
+      "pending",
+      "untrained",
+    ])("requires no extra confirmation for a %s model", async (status) => {
+      const impl = (async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: {
+              id: MODEL_DB_ID,
+              status,
+              trainArgs: { model: "yolo26n.pt" },
+              trainResults: [],
+            },
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse(startResponse());
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      const result = await trainingStart(client, {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+      expect(result.summary).toContain("Started training");
+    });
+
+    test("requires no extra confirmation when status is absent and no trainResults exist", async () => {
+      const impl = (async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse(startResponse());
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      const result = await trainingStart(client, {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+      expect(result.summary).toContain("Started training");
+    });
+
+    test("treats a running job as having history even before completion", async () => {
+      const { client, calls } = routeClient((path) => {
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: {
+              id: MODEL_DB_ID,
+              status: "running",
+              trainArgs: { model: "yolo26n.pt" },
+              trainResults: [],
+            },
+          });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/already has a recorded run/);
+      expect(calls).toHaveLength(1);
+    });
+
+    test("checkpoint mode never requires confirm_history_loss", async () => {
+      const impl = (async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: "m".repeat(24),
+            owner: OWNER,
+            project: PROJECT,
+            model: "exp-2",
+          });
+        }
+        return jsonResponse(startResponse({ modelId: "m".repeat(24) }));
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      const result = await trainingStart(client, {
+        model: "yolo26n.pt",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+      expect(result.summary).toContain("Started training");
+    });
+  });
+
   describe("multiple datasets", () => {
     const DATASET_2 = "road-data-2";
     const DATASET_2_REF = `${OWNER}/${DATASET_2}`;

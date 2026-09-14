@@ -1,0 +1,52 @@
+{
+  "tool": "training_start",
+  "args": {
+    "model": "example-owner/example-project-1/example-model-1",
+    "project": "example-owner/example-project-1",
+    "dataset": "example-owner/example-dataset-1",
+    "gpu_type": "l4",
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-model-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "id": "hhhhhhhhhhhhhhhhhhhhhhhh",
+            "owner": "example-owner",
+            "project": "example-project-1",
+            "model": "example-model-1",
+            "status": "completed",
+            "epochs": 100,
+            "hasWeights": true,
+            "trainArgs": { "model": "ul://ultralytics/yolo26/yolo26n-seg" },
+            "trainResults": [
+              {
+                "epoch": 0,
+                "metrics": {
+                  "metrics/mAP50(B)": 0,
+                  "metrics/mAP50-95(B)": 0
+                }
+              },
+              {
+                "epoch": 100,
+                "metrics": {
+                  "metrics/mAP50(B)": 0.834,
+                  "metrics/mAP50-95(B)": 0.612
+                }
+              }
+            ]
+          },
+          "isOwner": true
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 200,
+    "message": "Model 'example-model-1' already has a recorded run (status=completed, 2 recorded epoch(s)). Starting training again replaces this model's status, epoch count, and per-epoch metric history, and that history cannot be recovered through the API; the previously uploaded weights survive. Set confirm_history_loss=true to proceed. This is separate from confirm_cost."
+  }
+}

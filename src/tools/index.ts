@@ -1086,7 +1086,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; checkpoint mode also checks the checkpoint's task against every dataset's task up front. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
+      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; checkpoint mode also checks the checkpoint's task against every dataset's task up front. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Training an existing model that already has a recorded run (any status past pending/untrained) replaces that model's status, epoch count, and per-epoch metric history the instant the new job starts, and that history cannot be recovered afterward; the previously uploaded weights survive. That path requires confirm_history_loss=true in addition to confirm_cost=true. Checkpoint mode always creates a new model and destroys nothing, so it never needs confirm_history_loss. An untrained or never-trained model needs no extra confirmation either. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
     inputSchema: {
       model: z
         .string()
@@ -1113,6 +1113,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .describe(
           "Must be true to allow a credit-costing training run. Starting is billable immediately; the platform has no cost preview before that, so the estimated cost and remaining balance are only reported after the job starts.",
         ),
+      confirm_history_loss: z
+        .boolean()
+        .optional()
+        .describe(
+          "Must be true to restart training on an existing model that already has a recorded run. Doing so replaces that model's status, epoch count, and per-epoch metric history irrecoverably; the previously uploaded weights survive. Not required for an untrained model or for checkpoint mode, which creates a new model instead. Separate from confirm_cost.",
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -1131,6 +1137,17 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           dataset: "team/warehouse-items",
           gpu_type: "rtx-4090",
           confirm_cost: true,
+        },
+      },
+      {
+        title: "Retrain an existing model that already has a recorded run",
+        input: {
+          model: "team/project/my-model",
+          project: "team/project",
+          dataset: "team/warehouse-items",
+          gpu_type: "rtx-4090",
+          confirm_cost: true,
+          confirm_history_loss: true,
         },
       },
       {
@@ -1167,6 +1184,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         batch,
         name,
         confirm_cost,
+        confirm_history_loss,
       }) =>
         toMcpTextResult(
           await trainingStart(getClient(), {
@@ -1180,6 +1198,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             batch: batch as number | undefined,
             name: name as string | undefined,
             confirmCost: confirm_cost as boolean | undefined,
+            confirmHistoryLoss: confirm_history_loss as boolean | undefined,
           }),
         ),
   }),
