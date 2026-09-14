@@ -1,13 +1,18 @@
-import { describe, expect, test } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
+import { UltralyticsClient } from "../../src/client.js";
 import {
   deploymentGet,
   deploymentHealth,
   deploymentLogs,
   deploymentMetrics,
+  deploymentPredict,
   deploymentsList,
 } from "../../src/tools/deployments.js";
-import { jsonResponse, routeClient } from "../helpers.js";
+import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
 
 describe("deploymentsList", () => {
   test("fills the owner from the account summary and projects the guaranteed fields", async () => {
@@ -680,5 +685,203 @@ describe("deploymentMetrics", () => {
       "/api/account/summary",
       "/api/deployments/alice/road-detector/metrics",
     ]);
+  });
+});
+
+describe("deploymentPredict", () => {
+  let tmpDir: string;
+  let imagePath: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "ul-mcp-predict-"));
+    imagePath = join(tmpDir, "bus.jpg");
+    await writeFile(imagePath, "fake-jpeg-bytes");
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("posts the local image file and returns images and metadata verbatim", async () => {
+    const calls: { path: string; method: string; form: FormData }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+        form: init.body as FormData,
+      });
+      if (parsed.pathname === "/api/deployments/alice/road-detector/predict") {
+        return jsonResponse({
+          images: [
+            {
+              shape: [1080, 810],
+              speed: { preprocess: 34.1, inference: 461.4, postprocess: 142.2 },
+              results: [
+                {
+                  name: "person",
+                  class: 0,
+                  confidence: 0.923,
+                  box: { x1: 668.3, y1: 394.8, x2: 809.5, y2: 880.3 },
+                },
+              ],
+            },
+          ],
+          metadata: {
+            imageCount: 1,
+            classNames: ["person", "bus"],
+            task: "detect",
+            version: "1.0.0",
+            functionTimeAlive: 12345.6,
+            functionTimeCall: 78.9,
+          },
+        });
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+    });
+
+    const result = await deploymentPredict(client, "alice/road-detector", {
+      imagePath,
+    });
+
+    expect(result.data).toEqual({
+      owner: "alice",
+      deployment: "road-detector",
+      images: [
+        {
+          shape: [1080, 810],
+          speed: { preprocess: 34.1, inference: 461.4, postprocess: 142.2 },
+          results: [
+            {
+              name: "person",
+              class: 0,
+              confidence: 0.923,
+              box: { x1: 668.3, y1: 394.8, x2: 809.5, y2: 880.3 },
+            },
+          ],
+        },
+      ],
+      metadata: {
+        imageCount: 1,
+        classNames: ["person", "bus"],
+        task: "detect",
+        version: "1.0.0",
+        functionTimeAlive: 12345.6,
+        functionTimeCall: 78.9,
+      },
+    });
+    expect(result.summary).toContain("1 image(s)");
+    expect(result.summary).toContain("1 detection(s)");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].form.get("file")).toBeInstanceOf(Blob);
+  });
+
+  test("defaults the owner from the account summary for a bare slug", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/deployments/alice/road-detector/predict") {
+        return jsonResponse({ images: [], metadata: {} });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentPredict(client, "road-detector", {
+      imagePath,
+    });
+    expect((result.data as Record<string, unknown>).owner).toBe("alice");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/deployments/alice/road-detector/predict",
+    ]);
+  });
+
+  test("sends conf, iou, and imgsz only when given", async () => {
+    const forms: FormData[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      forms.push(init.body as FormData);
+      if (parsed.pathname === "/api/deployments/alice/road-detector/predict") {
+        return jsonResponse({ images: [], metadata: {} });
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+    });
+
+    await deploymentPredict(client, "alice/road-detector", { imagePath });
+    expect(forms[0].get("conf")).toBeNull();
+    expect(forms[0].get("iou")).toBeNull();
+    expect(forms[0].get("imgsz")).toBeNull();
+
+    await deploymentPredict(client, "alice/road-detector", {
+      imagePath,
+      conf: 0.4,
+      iou: 0.5,
+      imgsz: 1280,
+    });
+    expect(forms[1].get("conf")).toBe("0.4");
+    expect(forms[1].get("iou")).toBe("0.5");
+    expect(forms[1].get("imgsz")).toBe("1280");
+  });
+
+  test("rejects a missing imagePath before making any request", async () => {
+    const { client, calls } = routeClient(() => jsonResponse({}, 404));
+    await expect(
+      deploymentPredict(client, "alice/road-detector", { imagePath: "" }),
+    ).rejects.toThrow(/imagePath.*required/);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("rejects an image path that does not exist", async () => {
+    const { client } = routeClient(() => jsonResponse({}, 404));
+    await expect(
+      deploymentPredict(client, "alice/road-detector", {
+        imagePath: join(tmpDir, "missing.jpg"),
+      }),
+    ).rejects.toThrow(/does not exist/);
+  });
+
+  test("rejects an unsupported image file type", async () => {
+    const { client } = routeClient(() => jsonResponse({}, 404));
+    const badPath = join(tmpDir, "notes.txt");
+    await writeFile(badPath, "not an image");
+    await expect(
+      deploymentPredict(client, "alice/road-detector", { imagePath: badPath }),
+    ).rejects.toThrow(/Unsupported image file type/);
+  });
+
+  test("surfaces a 413 with the server's message rather than swallowing it", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/predict") {
+        return jsonResponse({ error: "Prediction input too large" }, 413);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(
+      deploymentPredict(client, "alice/road-detector", { imagePath }),
+    ).rejects.toThrow(/Prediction input too large/);
+  });
+
+  test("surfaces a 503 with the server's message rather than swallowing it", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/predict") {
+        return jsonResponse({ error: "Deployment is not ready" }, 503);
+      }
+      return jsonResponse({}, 404);
+    });
+    await expect(
+      deploymentPredict(client, "alice/road-detector", { imagePath }),
+    ).rejects.toThrow(/Deployment is not ready/);
   });
 });

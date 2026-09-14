@@ -321,7 +321,20 @@ export class UltralyticsClient {
         const parsed = JSON.parse(text);
         if (parsed && typeof parsed === "object") {
           const obj = parsed as Record<string, unknown>;
-          message = (obj.error as string) || (obj.message as string) || message;
+          const raw = obj.error ?? obj.message;
+          // The app's own ErrorResponse.error is always a string, but a gate
+          // in front of the app (a body-size limit, for example) can return
+          // its own shape instead, e.g. {error: {code, message}}. Unwrap one
+          // level so the server's actual message still surfaces rather than
+          // an unreadable stringified object.
+          if (typeof raw === "string") {
+            message = raw;
+          } else if (raw && typeof raw === "object") {
+            const nested = (raw as Record<string, unknown>).message;
+            if (typeof nested === "string") {
+              message = nested;
+            }
+          }
         }
       } catch {
         message = text.slice(0, 300);

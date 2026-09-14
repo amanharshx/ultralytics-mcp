@@ -148,6 +148,28 @@ describe("UltralyticsClient.get", () => {
     expect(String(err)).toMatch(/method not allowed/i);
   });
 
+  test("extracts the nested message when an edge-layer error wraps {code, message} instead of a plain string", async () => {
+    // Live capture: POST .../deployments/{owner}/{deployment}/predict with an
+    // oversized file -> 413 {"error":{"code":"413","message":"Request Entity Too Large"}}.
+    // This 413 is generated in front of the app (a body-size gate), so it
+    // does not follow the app's own ErrorResponse.error: string contract.
+    const { impl } = makeFetch([
+      new Response(
+        JSON.stringify({
+          error: { code: "413", message: "Request Entity Too Large" },
+        }),
+        { status: 413 },
+      ),
+    ]);
+    const err = await client(impl)
+      .get("/deployments/alice/road-detector/predict")
+      .catch((e) => e as UltralyticsApiError);
+    expect(err).toBeInstanceOf(UltralyticsApiError);
+    expect(err.statusCode).toBe(413);
+    expect(err.apiMessage).toBe("Request Entity Too Large");
+    expect(String(err)).toMatch(/Request Entity Too Large/);
+  });
+
   test("retries a 429 once then succeeds", async () => {
     const { impl, calls } = makeFetch([
       new Response(JSON.stringify({ error: "rate" }), {

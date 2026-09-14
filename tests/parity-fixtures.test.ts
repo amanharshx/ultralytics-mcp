@@ -28,6 +28,7 @@ import {
   deploymentHealth,
   deploymentLogs,
   deploymentMetrics,
+  deploymentPredict,
   deploymentsList,
   exploreDatasets,
   exploreProjects,
@@ -80,6 +81,11 @@ const expectedErrorSchema = z.object({
   message: z.string(),
 });
 
+const localFileSchema = z.object({
+  path_arg: z.string(),
+  body_base64: z.string(),
+});
+
 const fixtureSchema = z
   .object({
     tool: z.string(),
@@ -87,6 +93,7 @@ const fixtureSchema = z
     api: z.array(apiStepSchema),
     download: downloadSchema.optional(),
     upload: uploadSchema.optional(),
+    localFile: localFileSchema.optional(),
     folder_files: z.record(z.string(), z.string()).optional(),
     expected: z
       .object({
@@ -479,6 +486,7 @@ describe("parity fixtures", () => {
         "deployment_logs_empty.json",
         "deployment_metrics.json",
         "deployment_metrics_sparkline.json",
+        "deployment_predict.json",
         "training_monitor_history.json",
         "training_monitor_active.json",
         "training_monitor_private.json",
@@ -520,7 +528,8 @@ describe("parity fixtures", () => {
     if (
       fixture.tool === "dataset_upload_file" ||
       fixture.tool === "dataset_upload_folder" ||
-      fixture.tool === "dataset_upload_video"
+      fixture.tool === "dataset_upload_video" ||
+      fixture.tool === "deployment_predict"
     ) {
       continue;
     }
@@ -750,6 +759,44 @@ describe("parity fixtures", () => {
 
       expect(result).toEqual(expected);
       expect(uploadAuth).toBeNull();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("parity output: deployment_predict.json", async () => {
+    const raw = readFileSync(
+      join(fixtureDir, "deployment_predict.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const tmp = await mkdtemp(join(tmpdir(), "ul-mcp-"));
+    try {
+      const args = replaceTmp(fixture.args, tmp) as Record<string, unknown>;
+      const expected = replaceTmp(fixture.expected, tmp);
+      await writeFile(
+        args.imagePath as string,
+        Buffer.from(fixture.localFile?.body_base64 ?? "", "base64"),
+      );
+
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: replayFetch(fixture.api),
+      });
+
+      const result = await deploymentPredict(
+        client,
+        args.deployment as string,
+        {
+          imagePath: args.imagePath as string,
+          conf: args.conf as number | undefined,
+          iou: args.iou as number | undefined,
+          imgsz: args.imgsz as number | undefined,
+        },
+      );
+
+      expect(result).toEqual(expected);
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }

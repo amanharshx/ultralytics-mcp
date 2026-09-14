@@ -21,6 +21,9 @@
  * through the client, not through a tool, and deletes it in a `finally`.
  */
 
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { getApiBase } from "../../src/config.js";
 import { UltralyticsApiError } from "../../src/errors.js";
@@ -29,6 +32,7 @@ import {
   deploymentHealth,
   deploymentLogs,
   deploymentMetrics,
+  deploymentPredict,
   deploymentsList,
 } from "../../src/tools/deployments.js";
 import {
@@ -38,6 +42,11 @@ import {
   recordingClient,
   withDisposableCleanup,
 } from "./live-harness.js";
+
+/** Well-known Ultralytics sample image, already used by the model_predict
+ * live suite (models.live.test.ts), reused here as a local file instead of
+ * a URL source. */
+const SAMPLE_IMAGE_URL = "https://ultralytics.com/images/bus.jpg";
 
 const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
 
@@ -469,5 +478,130 @@ describe.skipIf(!apiKey)("deployment_metrics live smoke", () => {
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     8 * 60_000,
+  );
+});
+
+describe.skipIf(!apiKey)("deployment_predict live smoke", () => {
+  test(
+    "predicts on a ready deployment, surfaces a 413 on an oversized input, and reports the failure on a not-ready deployment",
+    async () => {
+      const records: RecordedCall[] = [];
+      const client = recordingClient(apiKey as string, records);
+      const owner = await client.getAccountOwner();
+
+      const creditsBefore = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+
+      const slug = disposableSlug("zz-mcp-ticket8");
+      const ref = `${owner}/${slug}`;
+
+      const tmpDir = await mkdtemp(join(tmpdir(), "ul-mcp-predict-"));
+      const imagePath = join(tmpDir, "bus.jpg");
+      const oversizedPath = join(tmpDir, "oversized.jpg");
+
+      try {
+        await withDisposableCleanup(
+          "deployment",
+          ref,
+          async () => {
+            await client.delete(`/deployments/${owner}/${slug}`);
+          },
+          async () => {
+            await client.postJson(`/deployments/${owner}`, {
+              project: "pothole",
+              model: "yolo26s",
+              deployment: slug,
+              name: "zz mcp ticket8 delete me",
+              region: "europe-west1",
+            });
+            expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+
+            // pothole/yolo26s serves COCO classes (see the epic overview),
+            // detecting person and bus on the standard sample image.
+            const busResponse = await fetch(SAMPLE_IMAGE_URL);
+            const busBytes = new Uint8Array(await busResponse.arrayBuffer());
+            await writeFile(imagePath, busBytes);
+
+            await pollUntilReady(client, ref, 5 * 60_000);
+
+            const predicted = await deploymentPredict(client, ref, {
+              imagePath,
+            });
+            const data = predicted.data as {
+              owner: string;
+              deployment: string;
+              images: Array<{
+                results: Array<{ name: string; confidence: number }>;
+              }>;
+              metadata: Record<string, unknown> | null;
+            };
+            expect(data.owner).toBe(owner);
+            expect(data.deployment).toBe(slug);
+            expect(data.images.length).toBeGreaterThan(0);
+            const names = data.images[0].results.map((r) => r.name);
+            expect(names).toContain("person");
+            expect(names).toContain("bus");
+            expect(data.metadata?.task).toBe("detect");
+            expect(typeof data.metadata?.functionTimeAlive).toBe("number");
+            expect(predicted.summary).toContain("detection(s)");
+
+            // Oversized input: confirms 413 is surfaced with the server's
+            // own message, not swallowed or stringified into "[object
+            // Object]" (this endpoint's 413 body is {error:{code,message}},
+            // not the app's usual {error: string} shape -- see client.ts).
+            const oversizedBytes = new Uint8Array(25 * 1024 * 1024);
+            await writeFile(oversizedPath, oversizedBytes);
+            const oversizedError = await deploymentPredict(client, ref, {
+              imagePath: oversizedPath,
+            }).catch((error) => error as UltralyticsApiError);
+            expect(oversizedError).toBeInstanceOf(UltralyticsApiError);
+            expect((oversizedError as UltralyticsApiError).statusCode).toBe(
+              413,
+            );
+            expect(
+              (oversizedError as UltralyticsApiError).apiMessage.length,
+            ).toBeGreaterThan(0);
+            expect((oversizedError as UltralyticsApiError).apiMessage).not.toBe(
+              "[object Object]",
+            );
+
+            // Not-ready deployment: stop it, then confirm predict reports
+            // the failure rather than hanging or throwing something opaque.
+            // Observed live as 400 "Deployment is not ready (status:
+            // stopped)", not the 503 the ticket names for a cold start --
+            // recorded here as what was actually observed, not asserted as
+            // the only possible shape.
+            await rawPatchStop(
+              apiKey as string,
+              `/deployments/${owner}/${slug}`,
+            );
+            await pollUntilStopped(client, ref, 2 * 60_000);
+
+            const stoppedError = await deploymentPredict(client, ref, {
+              imagePath,
+            }).catch((error) => error as UltralyticsApiError);
+            expect(stoppedError).toBeInstanceOf(UltralyticsApiError);
+            expect(
+              (stoppedError as UltralyticsApiError).apiMessage.length,
+            ).toBeGreaterThan(0);
+
+            await client.delete(`/deployments/${owner}/${slug}`);
+          },
+        );
+      } finally {
+        await rm(tmpDir, { recursive: true, force: true });
+      }
+
+      const creditsAfter = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+      expect(creditsAfter).toBe(creditsBefore);
+
+      const listAfter = await deploymentsList(client, owner);
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
+      expect(remaining.some((item) => item.deployment === slug)).toBe(false);
+    },
+    10 * 60_000,
   );
 });

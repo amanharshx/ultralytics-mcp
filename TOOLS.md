@@ -565,7 +565,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Deployments
 
-5 tools.
+6 tools.
 
 ### deployments_list
 
@@ -621,6 +621,20 @@ Metadata: read-only
 | `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
 | `range` | string | No | Time range, passed through unvalidated (one of 1h, 6h, 24h, 7d, 30d; default 24h). |
 | `sparkline` | boolean | No | When true, selects the compact sparkline shape (requests24h, totalRequests, errorRate, avgLatencyMs) instead of the detailed shape. |
+
+### deployment_predict
+
+Run inference through a deployment's own serving endpoint on a local image file, by owner/deployment or a bare slug (owner defaults to the account owner). Returns images/metadata verbatim, including undocumented metadata fields. No per-request cost is documented for this endpoint; costs follow the deployment's own resource configuration. A cold start on a scaled-to-zero deployment may respond slowly or with a 503 — check deployment_health rather than retrying blindly.
+
+Metadata: read-only, external/live
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
+| `imagePath` | string | Yes | Local path to an image file (.jpg, .jpeg, .png, .webp, .bmp, .tif, .tiff). |
+| `conf` | number | No | Confidence threshold (0.01-1, server default applies if omitted). |
+| `iou` | number | No | IoU threshold (0-0.95, server default applies if omitted). |
+| `imgsz` | number | No | Inference image size (32-1280, server default applies if omitted). |
 
 ## Infrastructure
 
