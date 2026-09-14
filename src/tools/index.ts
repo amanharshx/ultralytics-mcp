@@ -775,7 +775,6 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("Project ref required when model is given by slug."),
-      include_metrics: z.boolean().optional(),
       include_history: z.boolean().optional(),
       history_last_n: z.number().int().positive().optional(),
     },
@@ -786,20 +785,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     },
     createHandler:
       (getClient) =>
-      async ({
-        model,
-        project,
-        include_metrics,
-        include_history,
-        history_last_n,
-      }) =>
+      async ({ model, project, include_history, history_last_n }) =>
         toMcpTextResult(
           await trainingMonitor(
             getClient(),
             model as string,
             project as string | undefined,
             {
-              includeMetrics: include_metrics as boolean | undefined,
               includeHistory: include_history as boolean | undefined,
               historyLastN: history_last_n as number | undefined,
             },

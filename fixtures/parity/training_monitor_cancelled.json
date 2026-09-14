@@ -134,7 +134,12 @@
         "durationMs": 271194
       },
       "trainingError": null,
-      "progressSource": "models/{owner}/{project}/{model}/training"
+      "progressSource": "models/{owner}/{project}/{model}/training",
+      "timing": {
+        "etaMs": 2403081,
+        "timePerEpochMs": 26700.9,
+        "elapsedMs": 6931971227
+      }
     }
   }
 }

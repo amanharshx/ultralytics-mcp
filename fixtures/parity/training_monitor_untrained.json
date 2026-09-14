@@ -63,7 +63,12 @@
       "latestMetrics": {},
       "computeCost": null,
       "trainingError": null,
-      "progressSource": "models/{owner}/{project}/{model}/training"
+      "progressSource": "models/{owner}/{project}/{model}/training",
+      "timing": {
+        "etaMs": 0,
+        "timePerEpochMs": 0,
+        "elapsedMs": 0
+      }
     }
   }
 }

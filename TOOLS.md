@@ -396,7 +396,6 @@ Metadata: read-only, external/live
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
-| `include_metrics` | boolean | No |  |
 | `include_history` | boolean | No |  |
 | `history_last_n` | number | No |  |
 
