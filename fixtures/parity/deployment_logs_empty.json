@@ -1,0 +1,26 @@
+{
+  "tool": "deployment_logs",
+  "args": {
+    "deployment": "example-owner/example-deployment"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner/example-deployment/logs",
+      "response": {
+        "status": 200,
+        "json": {
+          "entries": [],
+          "nextPageToken": "example-page-token"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deployment 'example-deployment' for owner 'example-owner': 0 log entries (more available).",
+    "data": {
+      "entries": [],
+      "nextPageToken": "example-page-token"
+    }
+  }
+}

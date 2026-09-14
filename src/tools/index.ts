@@ -29,6 +29,7 @@ import {
 import {
   deploymentGet,
   deploymentHealth,
+  deploymentLogs,
   deploymentsList,
 } from "./deployments.js";
 import { modelDownload } from "./downloads.js";
@@ -68,6 +69,7 @@ export {
 export {
   deploymentGet,
   deploymentHealth,
+  deploymentLogs,
   deploymentsList,
 } from "./deployments.js";
 export { modelDownload } from "./downloads.js";
@@ -847,6 +849,45 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       async ({ deployment }) =>
         toMcpTextResult(
           await deploymentHealth(getClient(), deployment as string),
+        ),
+  }),
+  tool({
+    name: "deployment_logs",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Read log entries for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). severity is passed through to the server unvalidated (illustrative values: DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY); an invalid value returns the server's own rejection message. limit defaults to 50, max 200. nextPageToken pages through older entries.",
+    inputSchema: {
+      deployment: z
+        .string()
+        .describe("Deployment ref by owner/deployment or a bare slug."),
+      severity: z
+        .string()
+        .optional()
+        .describe(
+          "Comma-separated log severity levels, passed through unvalidated (e.g. INFO or WARNING,ERROR). Exact match, not a minimum threshold.",
+        ),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Max entries to return (default 50, max 200)."),
+      pageToken: z
+        .string()
+        .optional()
+        .describe("Pagination token from a previous call's nextPageToken."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    createHandler:
+      (getClient) =>
+      async ({ deployment, severity, limit, pageToken }) =>
+        toMcpTextResult(
+          await deploymentLogs(getClient(), deployment as string, {
+            severity: severity as string | undefined,
+            limit: limit as number | undefined,
+            pageToken: pageToken as string | undefined,
+          }),
         ),
   }),
   tool({

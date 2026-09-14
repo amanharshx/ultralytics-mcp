@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   deploymentGet,
   deploymentHealth,
+  deploymentLogs,
   deploymentsList,
 } from "../../src/tools/deployments.js";
 import { jsonResponse, routeClient } from "../helpers.js";
@@ -402,6 +403,119 @@ describe("deploymentHealth", () => {
     expect(calls.map((call) => call.path)).toEqual([
       "/api/account/summary",
       "/api/deployments/alice/road-detector/health",
+    ]);
+  });
+});
+
+describe("deploymentLogs", () => {
+  test("returns entries verbatim with the pagination token exposed", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/logs") {
+        return jsonResponse({
+          entries: [
+            {
+              timestamp: "2026-01-01T00:00:00Z",
+              severity: "INFO",
+              message: "Container started.",
+            },
+            {
+              timestamp: "2026-01-01T00:00:01Z",
+              severity: "NOTICE",
+              message: "Listening on port 8080.",
+            },
+          ],
+          nextPageToken: "page-2-token",
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentLogs(client, "alice/road-detector");
+    expect(result.data).toEqual({
+      entries: [
+        {
+          timestamp: "2026-01-01T00:00:00Z",
+          severity: "INFO",
+          message: "Container started.",
+        },
+        {
+          timestamp: "2026-01-01T00:00:01Z",
+          severity: "NOTICE",
+          message: "Listening on port 8080.",
+        },
+      ],
+      nextPageToken: "page-2-token",
+    });
+    expect(result.summary).toContain("2 log entr");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/deployments/alice/road-detector/logs",
+    ]);
+  });
+
+  test("passes severity, limit, and pageToken through as plain query params", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/logs") {
+        return jsonResponse({ entries: [], nextPageToken: null });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await deploymentLogs(client, "alice/road-detector", {
+      severity: "WARNING",
+      limit: 10,
+      pageToken: "abc",
+    });
+    expect(calls[0].params.get("severity")).toBe("WARNING");
+    expect(calls[0].params.get("limit")).toBe("10");
+    expect(calls[0].params.get("pageToken")).toBe("abc");
+  });
+
+  test("empty entries on a fresh deployment is a valid result, not an error", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/logs") {
+        return jsonResponse({ entries: [], nextPageToken: null });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentLogs(client, "alice/road-detector");
+    expect(result.data).toEqual({ entries: [], nextPageToken: null });
+    expect(result.summary).toContain("0 log entr");
+  });
+
+  test("surfaces the server's rejection message on an invalid severity rather than validating locally", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/logs") {
+        return jsonResponse(
+          { message: "severity must be one of DEFAULT, DEBUG, ..." },
+          400,
+        );
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await expect(
+      deploymentLogs(client, "alice/road-detector", {
+        severity: "NOT_A_REAL_SEVERITY",
+      }),
+    ).rejects.toThrow(/severity must be one of/);
+  });
+
+  test("defaults the owner from the account summary for a bare slug", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/deployments/alice/road-detector/logs") {
+        return jsonResponse({ entries: [], nextPageToken: null });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await deploymentLogs(client, "road-detector");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/deployments/alice/road-detector/logs",
     ]);
   });
 });

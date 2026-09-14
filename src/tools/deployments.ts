@@ -155,3 +155,39 @@ export async function deploymentHealth(
     data: result,
   };
 }
+
+/** Read one deployment's logs by `owner/deployment` or a bare slug.
+ *
+ * `severity` is passed through as a plain, comma-separated string, never
+ * validated client-side: it is an exact-match filter against the server's
+ * eight-value set (`DEBUG`…`EMERGENCY`), not a minimum-severity threshold,
+ * and a bad value's rejection is the server's message, not a local allowlist
+ * firing. `entries` and `nextPageToken` are surfaced verbatim, including an
+ * empty `entries` on a fresh deployment, which is a valid result, not an
+ * error.
+ */
+export async function deploymentLogs(
+  client: UltralyticsClient,
+  deployment: string,
+  options: { severity?: string; limit?: number; pageToken?: string } = {},
+): Promise<NormalizedToolResult> {
+  const { owner: refOwner, deployment: slug } = splitDeploymentRef(deployment);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}/logs`,
+    {
+      severity: options.severity,
+      limit: options.limit,
+      pageToken: options.pageToken,
+    },
+  );
+  const fields = asRecord(data);
+  const entries = listField(data, "entries");
+  const nextPageToken =
+    typeof fields.nextPageToken === "string" ? fields.nextPageToken : null;
+
+  return {
+    summary: `Deployment '${slug}' for owner '${resolvedOwner}': ${entries.length} log entr${entries.length === 1 ? "y" : "ies"}${nextPageToken ? " (more available)" : ""}.`,
+    data: { entries, nextPageToken },
+  };
+}

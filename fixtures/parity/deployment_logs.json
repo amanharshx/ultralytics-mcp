@@ -1,0 +1,82 @@
+{
+  "tool": "deployment_logs",
+  "args": {
+    "deployment": "example-owner/example-deployment"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner/example-deployment/logs",
+      "response": {
+        "status": 200,
+        "json": {
+          "entries": [
+            {
+              "timestamp": "2026-01-01T00:09:01.638653Z",
+              "severity": "DEFAULT",
+              "message": "INFO:     Waiting for application startup."
+            },
+            {
+              "timestamp": "2026-01-01T00:08:41.249637Z",
+              "severity": "WARNING",
+              "message": "The request was aborted because there was no available instance. Additional troubleshooting documentation can be found at: https://cloud.google.com/run/docs/troubleshooting#abort-request",
+              "httpRequest": {
+                "method": "GET",
+                "url": "https://predict-000000000000000000000002-xxxxx.a.run.app/health",
+                "status": 429,
+                "latencyMs": 0,
+                "userAgent": "node"
+              }
+            },
+            {
+              "timestamp": "2026-01-01T00:08:33.404374Z",
+              "severity": "INFO",
+              "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+            },
+            {
+              "timestamp": "2026-01-01T00:07:35.586196Z",
+              "severity": "NOTICE",
+              "message": "{}"
+            }
+          ],
+          "nextPageToken": "example-page-token"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deployment 'example-deployment' for owner 'example-owner': 4 log entries (more available).",
+    "data": {
+      "entries": [
+        {
+          "timestamp": "2026-01-01T00:09:01.638653Z",
+          "severity": "DEFAULT",
+          "message": "INFO:     Waiting for application startup."
+        },
+        {
+          "timestamp": "2026-01-01T00:08:41.249637Z",
+          "severity": "WARNING",
+          "message": "The request was aborted because there was no available instance. Additional troubleshooting documentation can be found at: https://cloud.google.com/run/docs/troubleshooting#abort-request",
+          "httpRequest": {
+            "method": "GET",
+            "url": "https://predict-000000000000000000000002-xxxxx.a.run.app/health",
+            "status": 429,
+            "latencyMs": 0,
+            "userAgent": "node"
+          }
+        },
+        {
+          "timestamp": "2026-01-01T00:08:33.404374Z",
+          "severity": "INFO",
+          "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+        },
+        {
+          "timestamp": "2026-01-01T00:07:35.586196Z",
+          "severity": "NOTICE",
+          "message": "{}"
+        }
+      ],
+      "nextPageToken": "example-page-token"
+    }
+  }
+}

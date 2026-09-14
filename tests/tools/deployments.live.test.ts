@@ -23,9 +23,11 @@
 
 import { describe, expect, test } from "vitest";
 import { getApiBase } from "../../src/config.js";
+import { UltralyticsApiError } from "../../src/errors.js";
 import {
   deploymentGet,
   deploymentHealth,
+  deploymentLogs,
   deploymentsList,
 } from "../../src/tools/deployments.js";
 import {
@@ -273,6 +275,102 @@ describe.skipIf(!apiKey)("deployment_health live smoke", () => {
           expect(typeof stoppedData.latencyMs).toBe("number");
           expect(typeof stoppedData.error).toBe("string");
           expect(stoppedHealth.summary).toContain("unhealthy");
+
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+      );
+
+      const creditsAfter = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+      expect(creditsAfter).toBe(creditsBefore);
+
+      const listAfter = await deploymentsList(client, owner);
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
+      expect(remaining.some((item) => item.deployment === slug)).toBe(false);
+    },
+    8 * 60_000,
+  );
+});
+
+describe.skipIf(!apiKey)("deployment_logs live smoke", () => {
+  test(
+    "reads empty entries right after create, then real entries once ready, filters by severity, and surfaces a bad severity's own rejection",
+    async () => {
+      const records: RecordedCall[] = [];
+      const client = recordingClient(apiKey as string, records);
+      const owner = await client.getAccountOwner();
+
+      const creditsBefore = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+
+      const slug = disposableSlug("zz-mcp-ticket6");
+      const ref = `${owner}/${slug}`;
+
+      await withDisposableCleanup(
+        "deployment",
+        ref,
+        async () => {
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+        async () => {
+          await client.postJson(`/deployments/${owner}`, {
+            project: "pothole",
+            model: "yolo26s",
+            deployment: slug,
+            name: "zz mcp ticket6 delete me",
+            region: "europe-west1",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+
+          // Right after create, logs may legitimately be empty (verified live
+          // separately) or may already carry container-startup lines; either
+          // way this must read as a normal result, never an error.
+          const fresh = await deploymentLogs(client, ref);
+          const freshData = fresh.data as { entries: unknown[] };
+          expect(Array.isArray(freshData.entries)).toBe(true);
+          expect(fresh.summary).toContain("log entr");
+
+          await pollUntilReady(client, ref, 5 * 60_000);
+
+          const logs = await deploymentLogs(client, ref);
+          const data = logs.data as {
+            entries: Array<Record<string, unknown>>;
+            nextPageToken: string | null;
+          };
+          expect(Array.isArray(data.entries)).toBe(true);
+          for (const entry of data.entries) {
+            expect(typeof entry.timestamp).toBe("string");
+            expect(typeof entry.severity).toBe("string");
+            expect(typeof entry.message).toBe("string");
+          }
+
+          const limited = await deploymentLogs(client, ref, { limit: 2 });
+          const limitedData = limited.data as {
+            entries: Array<Record<string, unknown>>;
+          };
+          expect(limitedData.entries.length).toBeLessThanOrEqual(2);
+
+          const filtered = await deploymentLogs(client, ref, {
+            severity: "INFO",
+          });
+          const filteredData = filtered.data as {
+            entries: Array<Record<string, unknown>>;
+          };
+          expect(Array.isArray(filteredData.entries)).toBe(true);
+          for (const entry of filteredData.entries) {
+            expect(entry.severity).toBe("INFO");
+          }
+
+          const badSeverity = await deploymentLogs(client, ref, {
+            severity: "NOT_A_REAL_SEVERITY",
+          }).catch((error) => error as UltralyticsApiError);
+          expect(badSeverity).toBeInstanceOf(UltralyticsApiError);
+          expect((badSeverity as UltralyticsApiError).statusCode).toBe(400);
+          expect(
+            (badSeverity as UltralyticsApiError).apiMessage.length,
+          ).toBeGreaterThan(0);
 
           await client.delete(`/deployments/${owner}/${slug}`);
         },
