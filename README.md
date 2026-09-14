@@ -259,7 +259,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 
 - `ULTRALYTICS_API_KEY` is a bearer token; pass it via MCP client `env` and never commit real keys
 - `export_create` requires `confirm_cost: true`
-- `training_start` requires `confirm_cost: true`
+- `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run — that path replaces its status, epoch count, and per-epoch metric history irrecoverably
 - Ambiguous project or dataset refs fail instead of guessing
 - Signed upload and download URLs do not forward `Authorization`
 - Local upload tools read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
