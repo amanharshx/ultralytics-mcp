@@ -856,7 +856,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Read log entries for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). severity is passed through to the server unvalidated (illustrative values: DEFAULT, DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY); an invalid value returns the server's own rejection message. limit defaults to 50, max 200. nextPageToken pages through older entries.",
+      "Read log entries for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). severity is passed through to the server unvalidated (illustrative values: DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY); an invalid value returns the server's own rejection message. limit defaults to 50, max 200. nextPageToken pages through older entries.",
     inputSchema: {
       deployment: z
         .string()
@@ -865,7 +865,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          "Minimum log severity, passed through unvalidated (e.g. DEFAULT, INFO, WARNING, ERROR).",
+          "Comma-separated log severity levels, passed through unvalidated (e.g. INFO or WARNING,ERROR). Exact match, not a minimum threshold.",
         ),
       limit: z
         .number()

@@ -599,14 +599,14 @@ Metadata: read-only
 
 ### deployment_logs
 
-Read log entries for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). severity is passed through to the server unvalidated (illustrative values: DEFAULT, DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY); an invalid value returns the server's own rejection message. limit defaults to 50, max 200. nextPageToken pages through older entries.
+Read log entries for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). severity is passed through to the server unvalidated (illustrative values: DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY); an invalid value returns the server's own rejection message. limit defaults to 50, max 200. nextPageToken pages through older entries.
 
 Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
-| `severity` | string | No | Minimum log severity, passed through unvalidated (e.g. DEFAULT, INFO, WARNING, ERROR). |
+| `severity` | string | No | Comma-separated log severity levels, passed through unvalidated (e.g. INFO or WARNING,ERROR). Exact match, not a minimum threshold. |
 | `limit` | number | No | Max entries to return (default 50, max 200). |
 | `pageToken` | string | No | Pagination token from a previous call's nextPageToken. |
 

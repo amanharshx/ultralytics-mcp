@@ -158,11 +158,13 @@ export async function deploymentHealth(
 
 /** Read one deployment's logs by `owner/deployment` or a bare slug.
  *
- * `severity` is passed through as a plain string, never validated against
- * the nine-value enum client-side: a bad value's rejection is the server's
- * message, not a local allowlist firing. `entries` and `nextPageToken` are
- * surfaced verbatim, including an empty `entries` on a fresh deployment,
- * which is a valid result, not an error.
+ * `severity` is passed through as a plain, comma-separated string, never
+ * validated client-side: it is an exact-match filter against the server's
+ * eight-value set (`DEBUG`…`EMERGENCY`), not a minimum-severity threshold,
+ * and a bad value's rejection is the server's message, not a local allowlist
+ * firing. `entries` and `nextPageToken` are surfaced verbatim, including an
+ * empty `entries` on a fresh deployment, which is a valid result, not an
+ * error.
  */
 export async function deploymentLogs(
   client: UltralyticsClient,
