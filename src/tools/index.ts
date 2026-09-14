@@ -26,7 +26,11 @@ import {
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
-import { deploymentGet, deploymentsList } from "./deployments.js";
+import {
+  deploymentGet,
+  deploymentHealth,
+  deploymentsList,
+} from "./deployments.js";
 import { modelDownload } from "./downloads.js";
 import {
   exportCancel,
@@ -61,7 +65,11 @@ export {
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
-export { deploymentGet, deploymentsList } from "./deployments.js";
+export {
+  deploymentGet,
+  deploymentHealth,
+  deploymentsList,
+} from "./deployments.js";
 export { modelDownload } from "./downloads.js";
 export {
   exportCancel,
@@ -821,6 +829,25 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       (getClient) =>
       async ({ deployment }) =>
         toMcpTextResult(await deploymentGet(getClient(), deployment as string)),
+  }),
+  tool({
+    name: "deployment_health",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Probe one deployment's health by owner/deployment or a bare slug (owner defaults to the account owner). status is the upstream HTTP status the health probe observed at the deployment's own service URL, not the status of this tool call.",
+    inputSchema: {
+      deployment: z
+        .string()
+        .describe("Deployment ref by owner/deployment or a bare slug."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    createHandler:
+      (getClient) =>
+      async ({ deployment }) =>
+        toMcpTextResult(
+          await deploymentHealth(getClient(), deployment as string),
+        ),
   }),
   tool({
     name: "training_monitor",

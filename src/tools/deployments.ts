@@ -123,3 +123,35 @@ export async function deploymentGet(
     data: result,
   };
 }
+
+/** Probe one deployment's health by `owner/deployment` or a bare slug.
+ *
+ * `status` is the upstream HTTP status the health probe observed at the
+ * deployment's own service URL, not the status of this MCP call; the two
+ * are never the same thing and are never conflated here.
+ */
+export async function deploymentHealth(
+  client: UltralyticsClient,
+  deployment: string,
+): Promise<NormalizedToolResult> {
+  const { owner: refOwner, deployment: slug } = splitDeploymentRef(deployment);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}/health`,
+  );
+  const fields = asRecord(data);
+  const healthy = fields.healthy ?? null;
+  const status = typeof fields.status === "number" ? fields.status : null;
+  const latencyMs =
+    typeof fields.latencyMs === "number" ? fields.latencyMs : null;
+
+  const result: Record<string, unknown> = { healthy, status, latencyMs };
+  if (typeof fields.error === "string") {
+    result.error = fields.error;
+  }
+
+  return {
+    summary: `Deployment '${slug}' for owner '${resolvedOwner}': ${healthy ? "healthy" : "unhealthy"} (probe status ${status ?? "unknown"}, ${latencyMs ?? "unknown"}ms).`,
+    data: result,
+  };
+}
