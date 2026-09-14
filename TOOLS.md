@@ -563,6 +563,20 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 | `export_id` | string | Yes | Export job id. |
 | `project` | string | No | Project ref required when model is given by slug. |
 
+## Deployments
+
+1 tools.
+
+### deployments_list
+
+List model deployments in your Ultralytics workspace.
+
+Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `owner` | string | No | Workspace owner; defaults to the account owner. |
+
 ## Infrastructure
 
 1 tools.

@@ -12,6 +12,7 @@ const GROUP_ORDER = [
   "Models",
   "Training",
   "Exports",
+  "Deployments",
   "Infrastructure",
 ];
 
@@ -27,6 +28,9 @@ function inferGroup(name) {
   if (name.startsWith("models_") || name.startsWith("model_")) return "Models";
   if (name.startsWith("training_")) return "Training";
   if (name.startsWith("exports_") || name.startsWith("export_")) return "Exports";
+  if (name.startsWith("deployments_") || name.startsWith("deployment_")) {
+    return "Deployments";
+  }
   return "Infrastructure";
 }
 
