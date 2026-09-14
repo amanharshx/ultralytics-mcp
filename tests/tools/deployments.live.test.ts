@@ -28,6 +28,7 @@ import {
   lastStatus,
   type RecordedCall,
   recordingClient,
+  withDisposableCleanup,
 } from "./live-harness.js";
 
 const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
@@ -100,8 +101,12 @@ describe.skipIf(!apiKey)("deployments_list live smoke", () => {
   }, 60_000);
 });
 
-/** Deployments have no trash and no restore: cleanup must run even when an
- * assertion throws, so creation and deletion are wrapped in try/finally. */
+/** Deployments have no trash and no restore. `withDisposableCleanup` runs its
+ * `cleanup` argument only as a safety net when `body` throws; the happy path
+ * must delete the resource itself as its last step, exactly as the
+ * projects/datasets/models live suites do (see `projectsDelete` called
+ * inside `body` in projects.live.test.ts), so both the assertion-throws and
+ * create-then-crash failure paths still delete it. */
 describe.skipIf(!apiKey)("deployment_get live smoke", () => {
   test(
     "reads a deployment at deploying and again at ready, then is gone after delete",
@@ -116,41 +121,45 @@ describe.skipIf(!apiKey)("deployment_get live smoke", () => {
 
       const slug = disposableSlug("zz-mcp-ticket4");
       const ref = `${owner}/${slug}`;
-      let created = false;
-      try {
-        await client.postJson(`/deployments/${owner}`, {
-          project: "pothole",
-          model: "yolo26s",
-          deployment: slug,
-          name: "zz mcp ticket4 delete me",
-          region: "europe-west1",
-        });
-        expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
-        created = true;
 
-        const deploying = await deploymentGet(client, ref);
-        expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
-        const deployingData = deploying.data as Record<string, unknown>;
-        expect(deployingData.status).not.toBe("ready");
-        expect(deployingData.serviceUrl).toBeNull();
-        expect(deployingData.deployedAt).toBeNull();
-        expect(deploying.summary).toContain("not yet available");
-
-        const ready = await pollUntilReady(client, ref, 5 * 60_000);
-        expect(typeof ready.serviceUrl).toBe("string");
-        expect(typeof ready.deployedAt).toBe("string");
-        expect(ready.resources).toMatchObject({
-          cpu: expect.any(Number),
-          memoryGi: expect.any(Number),
-          minInstances: expect.any(Number),
-          maxInstances: expect.any(Number),
-        });
-        expect(ready).not.toHaveProperty("apiKeyId");
-      } finally {
-        if (created) {
+      await withDisposableCleanup(
+        "deployment",
+        ref,
+        async () => {
           await client.delete(`/deployments/${owner}/${slug}`);
-        }
-      }
+        },
+        async () => {
+          await client.postJson(`/deployments/${owner}`, {
+            project: "pothole",
+            model: "yolo26s",
+            deployment: slug,
+            name: "zz mcp ticket4 delete me",
+            region: "europe-west1",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+
+          const deploying = await deploymentGet(client, ref);
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
+          const deployingData = deploying.data as Record<string, unknown>;
+          expect(deployingData.status).not.toBe("ready");
+          expect(deployingData.serviceUrl).toBeNull();
+          expect(deployingData.deployedAt).toBeNull();
+          expect(deploying.summary).toContain("not yet available");
+
+          const ready = await pollUntilReady(client, ref, 5 * 60_000);
+          expect(typeof ready.serviceUrl).toBe("string");
+          expect(typeof ready.deployedAt).toBe("string");
+          expect(ready.resources).toMatchObject({
+            cpu: expect.any(Number),
+            memoryGi: expect.any(Number),
+            minInstances: expect.any(Number),
+            maxInstances: expect.any(Number),
+          });
+          expect(ready).not.toHaveProperty("apiKeyId");
+
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+      );
 
       const creditsAfter = (
         (await client.get("/account/summary")) as Record<string, unknown>
