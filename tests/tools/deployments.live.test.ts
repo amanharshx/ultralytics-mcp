@@ -106,11 +106,12 @@ async function pollUntilStopped(
 
 /** Stop a deployment through the raw PATCH endpoint.
  *
- * No `deployment_stop` tool ships in this ticket (ticket 9, pass 1) -- the
- * client has no generic PATCH verb yet either, since only ticket 9 needs
- * one. This calls the endpoint directly, exactly as `deployment_get`'s live
- * suite calls `postJson`/`delete` directly to set up and tear down a
- * deployment outside of any tool under test.
+ * A raw setup helper for suites where reaching `stopped` is a precondition
+ * (health, logs, metrics, predict), kept separate from `deployment_stop`
+ * itself, which has its own suite below as the tool under test. Calls the
+ * endpoint directly, exactly as `deployment_get`'s live suite calls
+ * `postJson`/`delete` directly to set up and tear down a deployment outside
+ * of any tool under test.
  */
 async function rawPatchStop(apiKeyValue: string, path: string): Promise<void> {
   const response = await fetch(`${getApiBase()}${path}`, {

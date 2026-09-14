@@ -1,4 +1,4 @@
-/** Deployment tools: reads, plus the bounded-cost `predict` verb. */
+/** Deployment tools: reads, the bounded-cost `predict` verb, and the `stop` off-switch. */
 
 import { readFile, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
