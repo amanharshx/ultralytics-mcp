@@ -1337,9 +1337,7 @@ export async function datasetClassStats(
       `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}/class-stats`,
     ),
   );
-  const classes = Array.isArray(data.classes)
-    ? (data.classes as Record<string, unknown>[])
-    : [];
+  const classes = listField(data, "classes");
   const totalAnnotations = classes.reduce(
     (sum, entry) => sum + (typeof entry.count === "number" ? entry.count : 0),
     0,
@@ -1367,7 +1365,7 @@ export async function datasetClassStats(
       `${totalAnnotations} total annotation(s). Omitted histogram/heatmap groups ` +
       `(pass include_histograms: true to include): ${omittedGroups.join(", ")}.`,
     data: {
-      classes: data.classes ?? [],
+      classes,
       classNames: data.classNames ?? null,
       cached: data.cached ?? null,
       sampleSize: data.sampleSize ?? null,
