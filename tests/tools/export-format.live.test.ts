@@ -44,9 +44,8 @@ const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
 const INVALID_FORMAT = "mcp-smoke-not-a-real-format";
 
 /** The old client-side allowlist blocked this format; the server accepts it.
- * Its presence in the server's own refusal message proves the allowlist
- * removal actually took: a reintroduced client-side gate would still block
- * it, but it wouldn't be visible in a passed-through server message. */
+ * Sending it through the tool and seeing the request actually reach the
+ * network — rather than being rejected locally — proves the removal took. */
 const FORMERLY_BLOCKED_FORMAT = "litert";
 
 async function catchApiError(
@@ -68,6 +67,22 @@ describe.skipIf(!apiKey)("export format validation live smoke", () => {
     const records: RecordedCall[] = [];
     const client = recordingClient(apiKey as string, records);
     const owner = await client.getAccountOwner();
+
+    // Prove `litert` reaches the server as valid input rather than being
+    // rejected by the tool itself: sent against a model that cannot exist,
+    // the request still reaches the network and fails on "model not found"
+    // rather than "unrecognized format" or a client-thrown error. A
+    // reintroduced client-side gate blocking this specific format would
+    // fail this assertion even if it left every other format alone. Because
+    // the model doesn't exist, no export job is ever created.
+    const nonexistentModelRef = `${owner}/${disposableSlug("mcp-smoke-missing-project")}/${disposableSlug("missing-model")}`;
+    const notFoundError = await catchApiError(
+      exportCreate(client, nonexistentModelRef, FORMERLY_BLOCKED_FORMAT, {
+        confirmCost: true,
+      }),
+    );
+    expect(lastStatus(records)).toBe(404);
+    expect(notFoundError.statusCode).toBe(404);
 
     const projectSlug = disposableSlug("mcp-smoke");
     const projectRef = `${owner}/${projectSlug}`;
