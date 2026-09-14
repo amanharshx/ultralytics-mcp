@@ -198,7 +198,7 @@ test("server registers all available tools over the protocol", async () => {
   ]);
   expect(trainingStart?.annotations).toMatchObject({
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
     openWorldHint: true,
   });

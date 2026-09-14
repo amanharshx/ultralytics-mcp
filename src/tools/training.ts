@@ -107,6 +107,32 @@ function modelDatabaseId(data: unknown): string {
   return id;
 }
 
+const UNTRAINED_STATUSES = new Set(["pending", "untrained"]);
+
+interface ModelHistorySummary {
+  hasHistory: boolean;
+  status: string | null;
+  epochsRecorded: number;
+}
+
+/** Decide, from the model record alone, whether restarting training would
+ * destroy a recorded run. A model is treated as having history once it has
+ * left the untrained states or already carries per-epoch results — both
+ * signals the platform clears (status, epoch count, `trainResults`) the
+ * moment a new job starts. This makes no network call beyond the model fetch
+ * the caller already made, so the decision is free to check. */
+function modelHistorySummary(data: unknown): ModelHistorySummary {
+  const fields = asRecord(asRecord(data).model);
+  const status = typeof fields.status === "string" ? fields.status : null;
+  const trainResults = Array.isArray(fields.trainResults)
+    ? fields.trainResults
+    : [];
+  const hasHistory =
+    trainResults.length > 0 ||
+    (status !== null && !UNTRAINED_STATUSES.has(status));
+  return { hasHistory, status, epochsRecorded: trainResults.length };
+}
+
 /** Read the database id off a model create response: flat `{id, ...}`. */
 function createdModelId(data: unknown): string {
   const id = asRecord(data).id;
@@ -377,7 +403,15 @@ export async function trainingCancel(
  * running. Starting is billable immediately: the platform has no cost
  * preview before that, so the projected cost and remaining balance are only
  * known from the start response, and are surfaced verbatim rather than
- * discarded.
+ * discarded. Training an existing model that already has a recorded run
+ * (any status past pending/untrained, or existing `trainResults`) replaces
+ * that run's status, epoch count, and per-epoch metric history the moment
+ * the new job starts; the previously uploaded weights survive but the
+ * metric history does not, and the API has no way to recover it. This is a
+ * separate consent from spending money, so it needs its own
+ * `confirmHistoryLoss` flag rather than piggybacking on `confirmCost`.
+ * Checkpoint mode always creates a new model, so nothing is ever destroyed
+ * there.
  */
 export async function trainingStart(
   client: UltralyticsClient,
@@ -392,6 +426,7 @@ export async function trainingStart(
     batch?: number;
     name?: string;
     confirmCost?: boolean;
+    confirmHistoryLoss?: boolean;
   },
 ): Promise<NormalizedToolResult> {
   const {
@@ -405,6 +440,7 @@ export async function trainingStart(
     batch,
     name,
     confirmCost = false,
+    confirmHistoryLoss = false,
   } = options;
   if (!confirmCost) {
     throw new Error(
@@ -462,6 +498,16 @@ export async function trainingStart(
     if (trainModel === null) {
       throw new Error(
         "Resolved model has no stored base checkpoint; pass a base checkpoint like `yolo26x.pt` instead.",
+      );
+    }
+    const history = modelHistorySummary(modelData);
+    if (history.hasHistory && !confirmHistoryLoss) {
+      throw new Error(
+        `Model '${resolvedModel.model}' already has a recorded run (status=${history.status}, ` +
+          `${history.epochsRecorded} recorded epoch(s)). Starting training again replaces this ` +
+          "model's status, epoch count, and per-epoch metric history, and that history cannot be " +
+          "recovered through the API; the previously uploaded weights survive. Set " +
+          "confirm_history_loss=true to proceed. This is separate from confirm_cost.",
       );
     }
     trainArgs.model = trainModel;

@@ -353,6 +353,7 @@ const TOOL_RUNNERS: Record<
       batch: args.batch as number | undefined,
       name: args.name as string | undefined,
       confirmCost: args.confirm_cost as boolean | undefined,
+      confirmHistoryLoss: args.confirm_history_loss as boolean | undefined,
     }),
   exports_list: (client, args) =>
     exportsList(
@@ -451,6 +452,7 @@ describe("parity fixtures", () => {
         "training_start.json",
         "training_start_checkpoint.json",
         "training_start_no_checkpoint.json",
+        "training_start_history_warning.json",
         "exports_list.json",
         "exports_list_empty.json",
         "export_status.json",
@@ -490,7 +492,8 @@ describe("parity fixtures", () => {
     if (
       fixtureFile === "training_cancel_refused.json" ||
       fixtureFile === "export_cancel_refused.json" ||
-      fixtureFile === "training_start_no_checkpoint.json"
+      fixtureFile === "training_start_no_checkpoint.json" ||
+      fixtureFile === "training_start_history_warning.json"
     ) {
       continue;
     }
@@ -560,6 +563,32 @@ describe("parity fixtures", () => {
     // our own guard: the platform has no base checkpoint to resume from.
     const raw = readFileSync(
       join(fixtureDir, "training_start_no_checkpoint.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await trainingStart(client, {
+      model: fixture.args.model as string,
+      project: fixture.args.project as string,
+      dataset: fixture.args.dataset as string,
+      gpuType: fixture.args.gpu_type as string,
+      confirmCost: fixture.args.confirm_cost as boolean,
+    }).catch((e) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: training_start_history_warning.json", async () => {
+    // Live capture: GET /api/models/{owner}/{project}/{model} on a completed
+    // model with recorded trainResults. The refusal below is our own guard,
+    // sent instead of the POST /api/training/start that would otherwise
+    // overwrite this model's status, epoch count, and metric history.
+    const raw = readFileSync(
+      join(fixtureDir, "training_start_history_warning.json"),
       "utf8",
     );
     const fixture = fixtureSchema.parse(JSON.parse(raw));
