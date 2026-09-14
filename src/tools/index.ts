@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
 import {
+  datasetClassStats,
   datasetExport,
   datasetImagesList,
   datasetsCreate,
@@ -45,6 +46,7 @@ import {
 import { trainingCancel, trainingMonitor, trainingStart } from "./training.js";
 
 export {
+  datasetClassStats,
   datasetExport,
   datasetImagesList,
   datasetsCreate,
@@ -421,6 +423,29 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           await datasetExport(getClient(), {
             dataset: dataset as string,
             version: version as number | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_class_stats",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Get per-class annotation counts for a dataset by slug, owner/slug, or dataset ul:// URI. By default omits the bulky histogram and heatmap groups (image size, file size, format, points-per-annotation, bbox distributions, and location/dimension heatmaps), naming them in the summary; pass include_histograms: true to get the full payload unmodified.",
+    inputSchema: {
+      dataset: z
+        .string()
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+      include_histograms: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, include_histograms }) =>
+        toMcpTextResult(
+          await datasetClassStats(getClient(), {
+            dataset: dataset as string,
+            includeHistograms: include_histograms as boolean | undefined,
           }),
         ),
   }),

@@ -1,0 +1,163 @@
+{
+  "tool": "dataset_class_stats",
+  "args": {
+    "dataset": "example-roads",
+    "include_histograms": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/account/summary",
+      "response": {
+        "status": 200,
+        "json": {
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1790,
+          "plan": "free",
+          "counts": {
+            "projects": 32,
+            "datasets": 27,
+            "models": 14
+          },
+          "teams": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-roads/class-stats",
+      "response": {
+        "status": 200,
+        "json": {
+          "classes": [
+            { "classId": 0, "count": 75, "imageCount": 44 },
+            { "classId": 1, "count": 107, "imageCount": 62 },
+            { "classId": 2, "count": 59, "imageCount": 49 },
+            { "classId": 3, "count": 48, "imageCount": 41 },
+            { "classId": 4, "count": 121, "imageCount": 94 }
+          ],
+          "imageStats": {
+            "widthHistogram": [{ "bin": 600, "count": 103, "size": 100 }],
+            "heightHistogram": [{ "bin": 600, "count": 103, "size": 100 }],
+            "pointsHistogram": [],
+            "formatDistribution": { "jpg": 103 },
+            "fileSizeHistogram": [
+              { "bin": 0, "count": 71, "size": 100000 },
+              { "bin": 100000, "count": 32, "size": 100000 }
+            ],
+            "objectsPerImageHistogram": [
+              { "bin": 0, "count": 29, "size": 3 },
+              { "bin": 3, "count": 58, "size": 3 },
+              { "bin": 6, "count": 8, "size": 3 },
+              { "bin": 9, "count": 7, "size": 3 },
+              { "bin": 21, "count": 1, "size": 3 }
+            ],
+            "bboxWidthHistogram": [
+              { "bin": 0, "count": 134, "size": 70 },
+              { "bin": 70, "count": 149, "size": 70 }
+            ],
+            "bboxHeightHistogram": [
+              { "bin": 0, "count": 122, "size": 70 },
+              { "bin": 70, "count": 131, "size": 70 }
+            ],
+            "bboxWidthNormHistogram": [
+              { "bin": 0, "count": 117, "size": 0.1 },
+              { "bin": 0.1, "count": 152, "size": 0.1 }
+            ],
+            "bboxHeightNormHistogram": [
+              { "bin": 0, "count": 104, "size": 0.1 },
+              { "bin": 0.1, "count": 146, "size": 0.1 }
+            ]
+          },
+          "locationHeatmap": {
+            "bins": [[0, 1], [1, 0]],
+            "maxCount": 14
+          },
+          "dimensionHeatmap": {
+            "bins": [[103, 0], [0, 0]],
+            "maxCount": 103,
+            "minWidth": 640,
+            "maxWidth": 640,
+            "minHeight": 640,
+            "maxHeight": 640
+          },
+          "classNames": [
+            "example-class-0",
+            "example-class-1",
+            "example-class-2",
+            "example-class-3",
+            "example-class-4"
+          ],
+          "cached": false
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Class stats for dataset 'example-roads' for owner 'example-owner': 5 class(es), 410 total annotation(s). Full histogram and heatmap payload included.",
+    "data": {
+      "classes": [
+        { "classId": 0, "count": 75, "imageCount": 44 },
+        { "classId": 1, "count": 107, "imageCount": 62 },
+        { "classId": 2, "count": 59, "imageCount": 49 },
+        { "classId": 3, "count": 48, "imageCount": 41 },
+        { "classId": 4, "count": 121, "imageCount": 94 }
+      ],
+      "imageStats": {
+        "widthHistogram": [{ "bin": 600, "count": 103, "size": 100 }],
+        "heightHistogram": [{ "bin": 600, "count": 103, "size": 100 }],
+        "pointsHistogram": [],
+        "formatDistribution": { "jpg": 103 },
+        "fileSizeHistogram": [
+          { "bin": 0, "count": 71, "size": 100000 },
+          { "bin": 100000, "count": 32, "size": 100000 }
+        ],
+        "objectsPerImageHistogram": [
+          { "bin": 0, "count": 29, "size": 3 },
+          { "bin": 3, "count": 58, "size": 3 },
+          { "bin": 6, "count": 8, "size": 3 },
+          { "bin": 9, "count": 7, "size": 3 },
+          { "bin": 21, "count": 1, "size": 3 }
+        ],
+        "bboxWidthHistogram": [
+          { "bin": 0, "count": 134, "size": 70 },
+          { "bin": 70, "count": 149, "size": 70 }
+        ],
+        "bboxHeightHistogram": [
+          { "bin": 0, "count": 122, "size": 70 },
+          { "bin": 70, "count": 131, "size": 70 }
+        ],
+        "bboxWidthNormHistogram": [
+          { "bin": 0, "count": 117, "size": 0.1 },
+          { "bin": 0.1, "count": 152, "size": 0.1 }
+        ],
+        "bboxHeightNormHistogram": [
+          { "bin": 0, "count": 104, "size": 0.1 },
+          { "bin": 0.1, "count": 146, "size": 0.1 }
+        ]
+      },
+      "locationHeatmap": {
+        "bins": [[0, 1], [1, 0]],
+        "maxCount": 14
+      },
+      "dimensionHeatmap": {
+        "bins": [[103, 0], [0, 0]],
+        "maxCount": 103,
+        "minWidth": 640,
+        "maxWidth": 640,
+        "minHeight": 640,
+        "maxHeight": 640
+      },
+      "classNames": [
+        "example-class-0",
+        "example-class-1",
+        "example-class-2",
+        "example-class-3",
+        "example-class-4"
+      ],
+      "cached": false
+    }
+  }
+}

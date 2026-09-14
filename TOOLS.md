@@ -93,7 +93,7 @@ Metadata: state-changing, destructive, non-idempotent
 
 ## Datasets
 
-12 tools.
+13 tools.
 
 ### datasets_list
 
@@ -172,6 +172,17 @@ Metadata: read-only
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `version` | number | No |  |
+
+### dataset_class_stats
+
+Get per-class annotation counts for a dataset by slug, owner/slug, or dataset ul:// URI. By default omits the bulky histogram and heatmap groups (image size, file size, format, points-per-annotation, bbox distributions, and location/dimension heatmaps), naming them in the summary; pass include_histograms: true to get the full payload unmodified.
+
+Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
+| `include_histograms` | boolean | No |  |
 
 ### dataset_version_create
 
