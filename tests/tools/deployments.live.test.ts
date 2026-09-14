@@ -352,6 +352,17 @@ describe.skipIf(!apiKey)("deployment_logs live smoke", () => {
           };
           expect(limitedData.entries.length).toBeLessThanOrEqual(2);
 
+          const filtered = await deploymentLogs(client, ref, {
+            severity: "INFO",
+          });
+          const filteredData = filtered.data as {
+            entries: Array<Record<string, unknown>>;
+          };
+          expect(Array.isArray(filteredData.entries)).toBe(true);
+          for (const entry of filteredData.entries) {
+            expect(entry.severity).toBe("INFO");
+          }
+
           const badSeverity = await deploymentLogs(client, ref, {
             severity: "NOT_A_REAL_SEVERITY",
           }).catch((error) => error as UltralyticsApiError);
