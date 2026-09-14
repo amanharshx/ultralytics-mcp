@@ -1309,3 +1309,66 @@ export async function datasetVersionCreate(
     },
   };
 }
+
+export interface DatasetClassStatsOptions {
+  dataset: string;
+  includeHistograms?: boolean;
+}
+
+/** Get per-class annotation counts, optionally with the full histogram payload.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and reads the live
+ * owner-scoped endpoint. By default only `classes`, `classNames`, `cached`,
+ * and `sampleSize` are surfaced; the response's `imageStats` histograms and
+ * the `locationHeatmap`/`dimensionHeatmap` grids are large (a 23-class
+ * dataset carries thousands of numbers across them) and are omitted, named
+ * in the summary so the caller knows they exist rather than silently
+ * dropped. `includeHistograms: true` returns the server payload unmodified.
+ */
+export async function datasetClassStats(
+  client: UltralyticsClient,
+  options: DatasetClassStatsOptions,
+): Promise<NormalizedToolResult> {
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = asRecord(
+    await client.get(
+      `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}/class-stats`,
+    ),
+  );
+  const classes = listField(data, "classes");
+  const totalAnnotations = classes.reduce(
+    (sum, entry) => sum + (typeof entry.count === "number" ? entry.count : 0),
+    0,
+  );
+  const datasetRef = `dataset '${refSlug}' for owner '${resolvedOwner}'`;
+
+  if (options.includeHistograms) {
+    return {
+      summary:
+        `Class stats for ${datasetRef}: ${classes.length} class(es), ` +
+        `${totalAnnotations} total annotation(s). Full histogram and heatmap payload included.`,
+      data,
+    };
+  }
+
+  const imageStats = asRecord(data.imageStats);
+  const omittedGroups = [
+    ...Object.keys(imageStats),
+    ...["locationHeatmap", "dimensionHeatmap"].filter((key) => key in data),
+  ];
+
+  return {
+    summary:
+      `Class stats for ${datasetRef}: ${classes.length} class(es), ` +
+      `${totalAnnotations} total annotation(s). Omitted histogram/heatmap groups ` +
+      `(pass include_histograms: true to include): ${omittedGroups.join(", ")}.`,
+    data: {
+      classes,
+      classNames: data.classNames ?? null,
+      cached: data.cached ?? null,
+      sampleSize: data.sampleSize ?? null,
+    },
+  };
+}

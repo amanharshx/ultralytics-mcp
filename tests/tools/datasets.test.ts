@@ -6,6 +6,7 @@ import { describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import {
+  datasetClassStats,
   datasetExport,
   datasetImagesList,
   datasetsCreate,
@@ -992,6 +993,135 @@ describe("datasetExport", () => {
     await expect(
       datasetExport(client, { dataset: "alice/cars", version: 999999 }),
     ).rejects.toThrow(/Version not found/);
+  });
+});
+
+describe("datasetClassStats", () => {
+  const liveResponse = {
+    classes: [
+      { classId: 0, count: 10, imageCount: 8 },
+      { classId: 1, count: 5, imageCount: 5 },
+    ],
+    imageStats: {
+      widthHistogram: [{ bin: 600, count: 12, size: 100 }],
+      heightHistogram: [{ bin: 600, count: 12, size: 100 }],
+      pointsHistogram: [],
+      formatDistribution: { jpg: 12 },
+      fileSizeHistogram: [{ bin: 0, count: 12, size: 100000 }],
+      objectsPerImageHistogram: [{ bin: 0, count: 12, size: 2 }],
+      bboxWidthHistogram: [],
+      bboxHeightHistogram: [],
+      bboxWidthNormHistogram: [],
+      bboxHeightNormHistogram: [],
+    },
+    locationHeatmap: { bins: [[0]], maxCount: 0 },
+    dimensionHeatmap: {
+      bins: [[12]],
+      maxCount: 12,
+      minWidth: 640,
+      maxWidth: 640,
+      minHeight: 640,
+      maxHeight: 640,
+    },
+    classNames: ["car", "truck"],
+    cached: true,
+  };
+
+  function clientForClassStats(
+    response: unknown,
+    options: { accountOwner?: string } = {},
+  ) {
+    return routeClient((path) => {
+      if (options.accountOwner && path === "/api/account/summary") {
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (path === "/api/datasets/alice/cars/class-stats") {
+        return jsonResponse(response);
+      }
+      return jsonResponse({}, 404);
+    });
+  }
+
+  test("default omits the histogram and heatmap groups, naming them in the summary", async () => {
+    const { client, calls } = clientForClassStats(liveResponse);
+
+    const result = await datasetClassStats(client, { dataset: "alice/cars" });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/datasets/alice/cars/class-stats",
+    ]);
+    expect(result.summary).toBe(
+      "Class stats for dataset 'cars' for owner 'alice': 2 class(es), " +
+        "15 total annotation(s). Omitted histogram/heatmap groups " +
+        "(pass include_histograms: true to include): widthHistogram, " +
+        "heightHistogram, pointsHistogram, formatDistribution, " +
+        "fileSizeHistogram, objectsPerImageHistogram, bboxWidthHistogram, " +
+        "bboxHeightHistogram, bboxWidthNormHistogram, bboxHeightNormHistogram, " +
+        "locationHeatmap, dimensionHeatmap.",
+    );
+    expect(result.data).toEqual({
+      classes: liveResponse.classes,
+      classNames: liveResponse.classNames,
+      cached: true,
+      sampleSize: null,
+    });
+  });
+
+  test("include_histograms passes the server payload through unmodified", async () => {
+    const { client } = clientForClassStats(liveResponse);
+
+    const result = await datasetClassStats(client, {
+      dataset: "alice/cars",
+      includeHistograms: true,
+    });
+
+    expect(result.summary).toBe(
+      "Class stats for dataset 'cars' for owner 'alice': 2 class(es), " +
+        "15 total annotation(s). Full histogram and heatmap payload included.",
+    );
+    expect(result.data).toEqual(liveResponse);
+  });
+
+  test("a dataset with no annotations reports zero counts without throwing", async () => {
+    const emptyResponse = {
+      ...liveResponse,
+      classes: [{ classId: 0, count: 0, imageCount: 0 }],
+      classNames: ["fish"],
+      cached: false,
+    };
+    const { client } = clientForClassStats(emptyResponse);
+
+    const result = await datasetClassStats(client, { dataset: "alice/cars" });
+
+    expect(result.summary).toContain("1 class(es), 0 total annotation(s)");
+    expect(result.data).toEqual({
+      classes: [{ classId: 0, count: 0, imageCount: 0 }],
+      classNames: ["fish"],
+      cached: false,
+      sampleSize: null,
+    });
+  });
+
+  test("fills a missing owner from the account summary for a bare slug", async () => {
+    const { client, calls } = clientForClassStats(liveResponse, {
+      accountOwner: "alice",
+    });
+
+    const result = await datasetClassStats(client, { dataset: "cars" });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/datasets/alice/cars/class-stats",
+    ]);
+    expect(result.summary).toContain("for owner 'alice'");
+  });
+
+  test("rejects a bare id without any network call", async () => {
+    const { client, calls } = clientForClassStats(liveResponse);
+    await expect(
+      datasetClassStats(client, { dataset: "a".repeat(24) }),
+    ).rejects.toThrow(/not addressable.*slug.*owner\/slug.*ul:\/\//s);
+    expect(calls).toHaveLength(0);
   });
 });
 

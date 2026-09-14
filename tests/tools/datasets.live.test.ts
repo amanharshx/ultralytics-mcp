@@ -41,6 +41,7 @@ import { deflateSync } from "node:zlib";
 
 import { describe, expect, test } from "vitest";
 import {
+  datasetClassStats,
   datasetExport,
   datasetImagesList,
   datasetsCreate,
@@ -69,6 +70,7 @@ const EXPECTED_STATUS = {
   create: 201,
   get: 200,
   images: 200,
+  classStats: 200,
   export: 200,
   versionCreate: 200,
   signedUrl: 200,
@@ -333,6 +335,33 @@ describe.skipIf(!apiKey)("datasets live smoke", () => {
         expect(Array.isArray(imagesData.classes)).toBe(true);
         expect(typeof imagesData.errorCount).toBe("number");
         expect(Array.isArray(imagesData.images)).toBe(true);
+
+        // No annotations exist yet on this freshly created dataset: the
+        // no-annotations shape (empty classes array) reads as a clean
+        // result, not an error.
+        const classStats = await datasetClassStats(client, { dataset: ref });
+        expect(lastStatus(records)).toBe(EXPECTED_STATUS.classStats);
+        const classStatsData = classStats.data as Record<string, unknown>;
+        expect(classStatsData.classes).toEqual([]);
+        expect(classStatsData.sampleSize).toBeNull();
+        expect(classStats.summary).toContain(
+          "0 class(es), 0 total annotation(s)",
+        );
+        expect(classStats.summary).toContain(
+          "Omitted histogram/heatmap groups",
+        );
+
+        const classStatsFull = await datasetClassStats(client, {
+          dataset: ref,
+          includeHistograms: true,
+        });
+        expect(lastStatus(records)).toBe(EXPECTED_STATUS.classStats);
+        expect(classStatsFull.data).toHaveProperty("imageStats");
+        expect(classStatsFull.data).toHaveProperty("locationHeatmap");
+        expect(classStatsFull.data).toHaveProperty("dimensionHeatmap");
+        expect(classStatsFull.summary).toContain(
+          "Full histogram and heatmap payload included.",
+        );
 
         const exported = await datasetExport(client, { dataset: ref });
         expect(lastStatus(records)).toBe(EXPECTED_STATUS.export);
