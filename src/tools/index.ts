@@ -792,7 +792,10 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "List model deployments in your Ultralytics workspace.",
     inputSchema: {
-      owner: z.string().optional(),
+      owner: z
+        .string()
+        .optional()
+        .describe("Workspace owner; defaults to the account owner."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:

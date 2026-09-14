@@ -575,7 +575,7 @@ Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `owner` | string | No |  |
+| `owner` | string | No | Workspace owner; defaults to the account owner. |
 
 ## Infrastructure
 
