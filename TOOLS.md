@@ -565,7 +565,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Deployments
 
-4 tools.
+5 tools.
 
 ### deployments_list
 
@@ -609,6 +609,18 @@ Metadata: read-only
 | `severity` | string | No | Comma-separated log severity levels, passed through unvalidated (e.g. INFO or WARNING,ERROR). Exact match, not a minimum threshold. |
 | `limit` | number | No | Max entries to return (default 50, max 200). |
 | `pageToken` | string | No | Pagination token from a previous call's nextPageToken. |
+
+### deployment_metrics
+
+Read metrics for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). The response is one of two shapes selected by sparkline: the default shape carries timeRange (a {start, end} object)/summary/timeSeries, sparkline=true carries requests24h (an array of per-hour points, not a total)/totalRequests/errorRate/avgLatencyMs. The two are never merged; which shape came back is returned as-is. range is one of 1h, 6h, 24h, 7d, 30d (default 24h), passed through to the server unvalidated.
+
+Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
+| `range` | string | No | Time range, passed through unvalidated (one of 1h, 6h, 24h, 7d, 30d; default 24h). |
+| `sparkline` | boolean | No | When true, selects the compact sparkline shape (requests24h, totalRequests, errorRate, avgLatencyMs) instead of the detailed shape. |
 
 ## Infrastructure
 

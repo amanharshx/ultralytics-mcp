@@ -30,6 +30,7 @@ import {
   deploymentGet,
   deploymentHealth,
   deploymentLogs,
+  deploymentMetrics,
   deploymentsList,
 } from "./deployments.js";
 import { modelDownload } from "./downloads.js";
@@ -70,6 +71,7 @@ export {
   deploymentGet,
   deploymentHealth,
   deploymentLogs,
+  deploymentMetrics,
   deploymentsList,
 } from "./deployments.js";
 export { modelDownload } from "./downloads.js";
@@ -887,6 +889,40 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             severity: severity as string | undefined,
             limit: limit as number | undefined,
             pageToken: pageToken as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "deployment_metrics",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Read metrics for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). The response is one of two shapes selected by sparkline: the default shape carries timeRange (a {start, end} object)/summary/timeSeries, sparkline=true carries requests24h (an array of per-hour points, not a total)/totalRequests/errorRate/avgLatencyMs. The two are never merged; which shape came back is returned as-is. range is one of 1h, 6h, 24h, 7d, 30d (default 24h), passed through to the server unvalidated.",
+    inputSchema: {
+      deployment: z
+        .string()
+        .describe("Deployment ref by owner/deployment or a bare slug."),
+      range: z
+        .string()
+        .optional()
+        .describe(
+          "Time range, passed through unvalidated (one of 1h, 6h, 24h, 7d, 30d; default 24h).",
+        ),
+      sparkline: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, selects the compact sparkline shape (requests24h, totalRequests, errorRate, avgLatencyMs) instead of the detailed shape.",
+        ),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    createHandler:
+      (getClient) =>
+      async ({ deployment, range, sparkline }) =>
+        toMcpTextResult(
+          await deploymentMetrics(getClient(), deployment as string, {
+            range: range as string | undefined,
+            sparkline: sparkline as boolean | undefined,
           }),
         ),
   }),

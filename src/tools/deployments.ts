@@ -27,6 +27,21 @@ function splitDeploymentRef(ref: string): {
   };
 }
 
+/** Split a deployment ref and fill a missing owner from the account summary.
+ *
+ * Every single-deployment tool (`deployment_get`, `_health`, `_logs`,
+ * `_metrics`) needs exactly this pair of steps before it can build a path,
+ * so it lives once here rather than four times.
+ */
+async function resolveDeploymentRef(
+  client: UltralyticsClient,
+  ref: string,
+): Promise<{ owner: string; slug: string }> {
+  const { owner: refOwner, deployment: slug } = splitDeploymentRef(ref);
+  const owner = refOwner ?? (await client.getAccountOwner());
+  return { owner, slug };
+}
+
 /** List deployments in the workspace, optionally for an explicit owner.
  *
  * Reads the live owner-scoped endpoint. When no owner is given, the owner is
@@ -81,8 +96,10 @@ export async function deploymentGet(
   client: UltralyticsClient,
   deployment: string,
 ): Promise<NormalizedToolResult> {
-  const { owner: refOwner, deployment: slug } = splitDeploymentRef(deployment);
-  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const { owner: resolvedOwner, slug } = await resolveDeploymentRef(
+    client,
+    deployment,
+  );
   const data = await client.get(
     `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}`,
   );
@@ -134,8 +151,10 @@ export async function deploymentHealth(
   client: UltralyticsClient,
   deployment: string,
 ): Promise<NormalizedToolResult> {
-  const { owner: refOwner, deployment: slug } = splitDeploymentRef(deployment);
-  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const { owner: resolvedOwner, slug } = await resolveDeploymentRef(
+    client,
+    deployment,
+  );
   const data = await client.get(
     `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}/health`,
   );
@@ -171,8 +190,10 @@ export async function deploymentLogs(
   deployment: string,
   options: { severity?: string; limit?: number; pageToken?: string } = {},
 ): Promise<NormalizedToolResult> {
-  const { owner: refOwner, deployment: slug } = splitDeploymentRef(deployment);
-  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const { owner: resolvedOwner, slug } = await resolveDeploymentRef(
+    client,
+    deployment,
+  );
   const data = await client.get(
     `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}/logs`,
     {
@@ -189,5 +210,64 @@ export async function deploymentLogs(
   return {
     summary: `Deployment '${slug}' for owner '${resolvedOwner}': ${entries.length} log entr${entries.length === 1 ? "y" : "ies"}${nextPageToken ? " (more available)" : ""}.`,
     data: { entries, nextPageToken },
+  };
+}
+
+/** Read one deployment's metrics by `owner/deployment` or a bare slug.
+ *
+ * The 200 response is an `anyOf` of two schemas selected by `sparkline`:
+ * the default branch carries `timeRange` (an observed `{start, end}` object,
+ * not the requested range string), `summary`, and `timeSeries`; the
+ * `sparkline=true` branch carries `requests24h` (observed live as an array of
+ * per-hour points, not a scalar), `totalRequests`, `errorRate`, and
+ * `avgLatencyMs`. The two are never flattened, merged, or normalised into
+ * one shape — which branch came back is information the caller asked for.
+ * `timeSeries` only appears on the default branch, so its presence is the
+ * discriminator. `range` and `sparkline` pass straight through as query
+ * params with no client-side validation.
+ */
+export async function deploymentMetrics(
+  client: UltralyticsClient,
+  deployment: string,
+  options: { range?: string; sparkline?: boolean } = {},
+): Promise<NormalizedToolResult> {
+  const { owner: resolvedOwner, slug } = await resolveDeploymentRef(
+    client,
+    deployment,
+  );
+  const rangeLabel = options.range ?? "24h";
+  const data = await client.get(
+    `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}/metrics`,
+    { range: options.range, sparkline: options.sparkline },
+  );
+  const fields = asRecord(data);
+
+  if ("timeSeries" in fields) {
+    const summary = asRecord(fields.summary);
+    const result = {
+      deploymentId:
+        typeof fields.deploymentId === "string" ? fields.deploymentId : null,
+      region: typeof fields.region === "string" ? fields.region : null,
+      timeRange: fields.timeRange ?? null,
+      summary: fields.summary ?? null,
+      timeSeries: fields.timeSeries ?? null,
+    };
+    return {
+      summary: `Deployment '${slug}' for owner '${resolvedOwner}': ${rangeLabel} metrics, ${summary.totalRequests ?? "unknown"} total requests.`,
+      data: result,
+    };
+  }
+
+  const result = {
+    requests24h: Array.isArray(fields.requests24h) ? fields.requests24h : null,
+    totalRequests:
+      typeof fields.totalRequests === "number" ? fields.totalRequests : null,
+    errorRate: typeof fields.errorRate === "number" ? fields.errorRate : null,
+    avgLatencyMs:
+      typeof fields.avgLatencyMs === "number" ? fields.avgLatencyMs : null,
+  };
+  return {
+    summary: `Deployment '${slug}' for owner '${resolvedOwner}': sparkline metrics, ${result.totalRequests ?? "unknown"} total requests, ${result.errorRate ?? "unknown"} error rate.`,
+    data: result,
   };
 }

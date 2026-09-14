@@ -1,0 +1,72 @@
+{
+  "tool": "deployment_metrics",
+  "args": {
+    "deployment": "example-owner/example-deployment",
+    "range": "1h"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner/example-deployment/metrics",
+      "query": { "range": "1h" },
+      "response": {
+        "status": 200,
+        "json": {
+          "deploymentId": "000000000000000000000002",
+          "region": "europe-west1",
+          "timeRange": {
+            "start": "2026-01-01T23:00:00.000Z",
+            "end": "2026-01-02T00:00:00.000Z"
+          },
+          "summary": {
+            "totalRequests": 0,
+            "errorCount": 0,
+            "errorRate": 0,
+            "avgLatencyMs": 0,
+            "p50LatencyMs": 0,
+            "p95LatencyMs": 0,
+            "p99LatencyMs": 0
+          },
+          "timeSeries": {
+            "requests": [],
+            "errors": [],
+            "latencyP50": [],
+            "latencyP95": [],
+            "cpuUtilization": [],
+            "memoryUtilization": [],
+            "instanceCount": []
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deployment 'example-deployment' for owner 'example-owner': 1h metrics, 0 total requests.",
+    "data": {
+      "deploymentId": "000000000000000000000002",
+      "region": "europe-west1",
+      "timeRange": {
+        "start": "2026-01-01T23:00:00.000Z",
+        "end": "2026-01-02T00:00:00.000Z"
+      },
+      "summary": {
+        "totalRequests": 0,
+        "errorCount": 0,
+        "errorRate": 0,
+        "avgLatencyMs": 0,
+        "p50LatencyMs": 0,
+        "p95LatencyMs": 0,
+        "p99LatencyMs": 0
+      },
+      "timeSeries": {
+        "requests": [],
+        "errors": [],
+        "latencyP50": [],
+        "latencyP95": [],
+        "cpuUtilization": [],
+        "memoryUtilization": [],
+        "instanceCount": []
+      }
+    }
+  }
+}
