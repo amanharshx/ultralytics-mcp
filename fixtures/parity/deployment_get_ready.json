@@ -1,0 +1,63 @@
+{
+  "tool": "deployment_get",
+  "args": {
+    "deployment": "example-owner/example-deployment"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner/example-deployment",
+      "response": {
+        "status": 200,
+        "json": {
+          "deployment": {
+            "id": "000000000000000000000002",
+            "owner": "example-owner",
+            "project": "example-project",
+            "model": "example-model",
+            "task": "detect",
+            "deployment": "example-deployment",
+            "name": "Example deployment",
+            "status": "ready",
+            "region": "europe-west1",
+            "serviceUrl": "https://predict-000000000000000000000002-xxxxx.a.run.app",
+            "resources": {
+              "cpu": 1,
+              "memoryGi": 2,
+              "minInstances": 0,
+              "maxInstances": 1
+            },
+            "deployedAt": "2026-01-01T00:00:57Z",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-01T00:00:57Z"
+          },
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deployment 'example-deployment' for owner 'example-owner': status ready, serviceUrl https://predict-000000000000000000000002-xxxxx.a.run.app.",
+    "data": {
+      "id": "000000000000000000000002",
+      "owner": "example-owner",
+      "project": "example-project",
+      "model": "example-model",
+      "task": "detect",
+      "deployment": "example-deployment",
+      "name": "Example deployment",
+      "status": "ready",
+      "region": "europe-west1",
+      "serviceUrl": "https://predict-000000000000000000000002-xxxxx.a.run.app",
+      "resources": {
+        "cpu": 1,
+        "memoryGi": 2,
+        "minInstances": 0,
+        "maxInstances": 1
+      },
+      "deployedAt": "2026-01-01T00:00:57Z",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-01-01T00:00:57Z"
+    }
+  }
+}

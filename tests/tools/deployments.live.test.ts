@@ -1,4 +1,4 @@
-/** Live smoke test for the deployment list tool.
+/** Live smoke tests for the deployment read tools.
  *
  * Fails when the platform changes its contract underneath us (paths,
  * statuses, or response field names). Skipped silently without a key so
@@ -14,17 +14,21 @@
  *
  * `deployments_list` is a pure read: it creates nothing and so needs no
  * disposable-resource cleanup, unlike the projects/datasets/models live
- * suites. Deployment creation is out of scope for this tool (see the
- * deploy-eval epic's pass 1 read surface) so this suite only proves the
- * read path against whatever the workspace already has.
+ * suites, and its suite below only proves the read path against whatever
+ * the workspace already has. `deployment_get` needs an actual deployment to
+ * read, though, and no `deploy` tool ships in this epic's pass 1 (see the
+ * deploy-eval epic's Pass 2 section) -- so its suite creates one directly
+ * through the client, not through a tool, and deletes it in a `finally`.
  */
 
 import { describe, expect, test } from "vitest";
-import { deploymentsList } from "../../src/tools/deployments.js";
+import { deploymentGet, deploymentsList } from "../../src/tools/deployments.js";
 import {
+  disposableSlug,
   lastStatus,
   type RecordedCall,
   recordingClient,
+  withDisposableCleanup,
 } from "./live-harness.js";
 
 const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
@@ -32,7 +36,34 @@ const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
 const EXPECTED_STATUS = {
   accountSummary: 200,
   list: 200,
+  create: 201,
+  get: 200,
 } as const;
+
+/** Poll a deployment until `status` reaches `ready`, or give up.
+ *
+ * Provisioning takes 40-60s (verified live, twice); this caps at 5 minutes
+ * so a stuck provision fails the test instead of hanging it.
+ */
+async function pollUntilReady(
+  client: Parameters<typeof deploymentGet>[0],
+  ref: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  let last: Record<string, unknown> = {};
+  while (Date.now() < deadline) {
+    const result = await deploymentGet(client, ref);
+    last = result.data as Record<string, unknown>;
+    if (last.status === "ready") {
+      return last;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+  throw new Error(
+    `deployment '${ref}' did not reach ready within ${timeoutMs}ms (last status: ${String(last.status)})`,
+  );
+}
 
 describe.skipIf(!apiKey)("deployments_list live smoke", () => {
   test("lists deployments for the default owner and an explicit owner", async () => {
@@ -68,4 +99,77 @@ describe.skipIf(!apiKey)("deployments_list live smoke", () => {
     );
     expect(explicit.data).toEqual(defaulted.data);
   }, 60_000);
+});
+
+/** Deployments have no trash and no restore. `withDisposableCleanup` runs its
+ * `cleanup` argument only as a safety net when `body` throws; the happy path
+ * must delete the resource itself as its last step, exactly as the
+ * projects/datasets/models live suites do (see `projectsDelete` called
+ * inside `body` in projects.live.test.ts), so both the assertion-throws and
+ * create-then-crash failure paths still delete it. */
+describe.skipIf(!apiKey)("deployment_get live smoke", () => {
+  test(
+    "reads a deployment at deploying and again at ready, then is gone after delete",
+    async () => {
+      const records: RecordedCall[] = [];
+      const client = recordingClient(apiKey as string, records);
+      const owner = await client.getAccountOwner();
+
+      const creditsBefore = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+
+      const slug = disposableSlug("zz-mcp-ticket4");
+      const ref = `${owner}/${slug}`;
+
+      await withDisposableCleanup(
+        "deployment",
+        ref,
+        async () => {
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+        async () => {
+          await client.postJson(`/deployments/${owner}`, {
+            project: "pothole",
+            model: "yolo26s",
+            deployment: slug,
+            name: "zz mcp ticket4 delete me",
+            region: "europe-west1",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+
+          const deploying = await deploymentGet(client, ref);
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
+          const deployingData = deploying.data as Record<string, unknown>;
+          expect(deployingData.status).not.toBe("ready");
+          expect(deployingData.serviceUrl).toBeNull();
+          expect(deployingData.deployedAt).toBeNull();
+          expect(deploying.summary).toContain("not yet available");
+
+          const ready = await pollUntilReady(client, ref, 5 * 60_000);
+          expect(typeof ready.serviceUrl).toBe("string");
+          expect(typeof ready.deployedAt).toBe("string");
+          expect(ready.resources).toMatchObject({
+            cpu: expect.any(Number),
+            memoryGi: expect.any(Number),
+            minInstances: expect.any(Number),
+            maxInstances: expect.any(Number),
+          });
+          expect(ready).not.toHaveProperty("apiKeyId");
+
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+      );
+
+      const creditsAfter = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+      expect(creditsAfter).toBe(creditsBefore);
+
+      const listAfter = await deploymentsList(client, owner);
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
+      expect(remaining.some((item) => item.deployment === slug)).toBe(false);
+    },
+    6 * 60_000,
+  );
 });
