@@ -24,6 +24,7 @@ import {
   datasetUploadFolder,
   datasetUploadVideo,
   datasetVersionCreate,
+  deploymentsList,
   exploreDatasets,
   exploreProjects,
   exportCancel,
@@ -225,6 +226,8 @@ const TOOL_RUNNERS: Record<
       args.username as string | undefined,
     ),
   datasets_get: (client, args) => datasetsGet(client, args.dataset as string),
+  deployments_list: (client, args) =>
+    deploymentsList(client, args.owner as string | undefined),
   dataset_class_stats: (client, args) =>
     datasetClassStats(client, {
       dataset: args.dataset as string,
@@ -449,6 +452,7 @@ describe("parity fixtures", () => {
         "projects_delete.json",
         "projects_get.json",
         "projects_list.json",
+        "deployments_list.json",
         "training_monitor_history.json",
         "training_monitor_active.json",
         "training_monitor_private.json",

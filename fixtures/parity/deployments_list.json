@@ -1,0 +1,42 @@
+{
+  "tool": "deployments_list",
+  "args": {},
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/account/summary",
+      "response": {
+        "status": 200,
+        "json": {
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1786,
+          "plan": "free",
+          "counts": {
+            "projects": 8,
+            "datasets": 22,
+            "models": 14
+          },
+          "teams": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner",
+      "response": {
+        "status": 200,
+        "json": {
+          "deployments": [],
+          "total": 0,
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "0 deployment(s) for owner 'example-owner'.",
+    "data": []
+  }
+}

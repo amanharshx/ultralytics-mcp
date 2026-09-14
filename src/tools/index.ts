@@ -26,6 +26,7 @@ import {
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
+import { deploymentsList } from "./deployments.js";
 import { modelDownload } from "./downloads.js";
 import {
   exportCancel,
@@ -60,6 +61,7 @@ export {
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
+export { deploymentsList } from "./deployments.js";
 export { modelDownload } from "./downloads.js";
 export {
   exportCancel,
@@ -783,6 +785,22 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     },
     createHandler: (getClient) => async () =>
       toMcpTextResult(await gpuAvailability(getClient())),
+  }),
+  tool({
+    name: "deployments_list",
+    registrationGroup: "read",
+    stateChanging: false,
+    description: "List model deployments in your Ultralytics workspace.",
+    inputSchema: {
+      owner: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    createHandler:
+      (getClient) =>
+      async ({ owner }) =>
+        toMcpTextResult(
+          await deploymentsList(getClient(), owner as string | undefined),
+        ),
   }),
   tool({
     name: "training_monitor",
