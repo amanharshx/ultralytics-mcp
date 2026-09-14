@@ -40,6 +40,7 @@ import {
   projectsList,
   trainingCancel,
   trainingMonitor,
+  trainingStart,
 } from "../src/tools/index.js";
 
 const responseSchema = z.object({
@@ -340,6 +341,19 @@ const TOOL_RUNNERS: Record<
       args.model as string,
       args.project as string | undefined,
     ),
+  training_start: (client, args) =>
+    trainingStart(client, {
+      model: args.model as string,
+      project: args.project as string,
+      dataset: args.dataset as string | string[],
+      gpuType: args.gpu_type as string,
+      trainArgs: args.train_args as Record<string, unknown> | undefined,
+      epochs: args.epochs as number | undefined,
+      imgsz: args.imgsz as number | undefined,
+      batch: args.batch as number | undefined,
+      name: args.name as string | undefined,
+      confirmCost: args.confirm_cost as boolean | undefined,
+    }),
   exports_list: (client, args) =>
     exportsList(
       client,
@@ -434,6 +448,9 @@ describe("parity fixtures", () => {
         "training_monitor_untrained.json",
         "training_cancel.json",
         "training_cancel_refused.json",
+        "training_start.json",
+        "training_start_checkpoint.json",
+        "training_start_no_checkpoint.json",
         "exports_list.json",
         "exports_list_empty.json",
         "export_status.json",
@@ -472,7 +489,8 @@ describe("parity fixtures", () => {
     // Replayed by the dedicated test below, which asserts the refusal.
     if (
       fixtureFile === "training_cancel_refused.json" ||
-      fixtureFile === "export_cancel_refused.json"
+      fixtureFile === "export_cancel_refused.json" ||
+      fixtureFile === "training_start_no_checkpoint.json"
     ) {
       continue;
     }
@@ -532,6 +550,31 @@ describe("parity fixtures", () => {
       fixture.args.model as string,
       fixture.args.export_id as string,
     ).catch((e) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: training_start_no_checkpoint.json", async () => {
+    // Live capture: GET /api/models/{owner}/{project}/{model} on an
+    // untrained shell with no stored trainArgs.model. The refusal below is
+    // our own guard: the platform has no base checkpoint to resume from.
+    const raw = readFileSync(
+      join(fixtureDir, "training_start_no_checkpoint.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await trainingStart(client, {
+      model: fixture.args.model as string,
+      project: fixture.args.project as string,
+      dataset: fixture.args.dataset as string,
+      gpuType: fixture.args.gpu_type as string,
+      confirmCost: fixture.args.confirm_cost as boolean,
+    }).catch((e) => e as Error);
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe(fixture.expectedError?.message);
   });

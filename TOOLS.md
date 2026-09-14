@@ -402,7 +402,7 @@ Metadata: read-only, external/live
 
 ### training_start
 
-Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Requires confirm_cost=true.
+Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; checkpoint mode also checks the checkpoint's task against every dataset's task up front. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.
 
 Metadata: state-changing, non-idempotent, external/live
 
@@ -410,14 +410,14 @@ Metadata: state-changing, non-idempotent, external/live
 | --- | --- | --- | --- |
 | `model` | string | Yes | Existing model ref, or official YOLO base checkpoint such as yolo11n.pt or yolo11n-seg.pt. Checkpoint mode auto-creates a project model. |
 | `project` | string | Yes | Project ref that owns the training job and resolved model. |
-| `dataset` | string | Yes | Dataset ref used as training data for the job. |
+| `dataset` | union | Yes | Dataset ref by slug, owner/slug, or ul:// URI, or a list of refs to fine-tune on sequentially. |
 | `gpu_type` | string | Yes | Cloud GPU type to allocate for training. |
 | `train_args` | record<string, unknown> | No |  |
 | `epochs` | number | No |  |
 | `imgsz` | number | No |  |
 | `batch` | number | No |  |
 | `name` | string | No |  |
-| `confirm_cost` | boolean | No | Must be true to allow a credit-costing training run. |
+| `confirm_cost` | boolean | No | Must be true to allow a credit-costing training run. Starting is billable immediately; the platform has no cost preview before that, so the estimated cost and remaining balance are only reported after the job starts. |
 
 Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt` trigger checkpoint mode, auto-create a project model, and require dataset-task compatibility.
 
@@ -427,7 +427,7 @@ Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt`
 {
   "model": "team/project/my-model",
   "project": "team/project",
-  "dataset": "team/datasets/warehouse-items",
+  "dataset": "team/warehouse-items",
   "gpu_type": "rtx-4090",
   "confirm_cost": true
 }
@@ -439,7 +439,22 @@ Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt`
 {
   "model": "yolo11n-seg.pt",
   "project": "team/project",
-  "dataset": "team/datasets/road-segments",
+  "dataset": "team/road-segments",
+  "gpu_type": "rtx-4090",
+  "confirm_cost": true
+}
+```
+
+#### Fine-tune sequentially across multiple datasets
+
+```json
+{
+  "model": "team/project/my-model",
+  "project": "team/project",
+  "dataset": [
+    "team/road-segments",
+    "team/warehouse-items"
+  ],
   "gpu_type": "rtx-4090",
   "confirm_cost": true
 }

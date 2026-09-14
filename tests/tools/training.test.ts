@@ -608,9 +608,20 @@ describe("trainingMonitor", () => {
 });
 
 describe("trainingStart", () => {
-  const MODEL = "a".repeat(24);
-  const PROJECT = "b".repeat(24);
-  const DATASET = "c".repeat(24);
+  const OWNER = "alice";
+  const PROJECT = "road";
+  const MODEL = "exp";
+  const DATASET = "road-data";
+  const MODEL_REF = `${OWNER}/${PROJECT}/${MODEL}`;
+  const PROJECT_REF = `${OWNER}/${PROJECT}`;
+  const DATASET_REF = `${OWNER}/${DATASET}`;
+  const DATASET_URI = `ul://${OWNER}/datasets/${DATASET}`;
+  const MODEL_PATH = `/api/models/${OWNER}/${PROJECT}/${MODEL}`;
+  const DATASET_PATH = `/api/datasets/${OWNER}/${DATASET}`;
+  const CREATE_MODEL_PATH = "/api/models";
+  const START_PATH = "/api/training/start";
+  const MODEL_DB_ID = "d".repeat(24);
+  const ORIGIN = "https://platform.ultralytics.com";
 
   function throwingClient() {
     return new UltralyticsClient({
@@ -622,13 +633,28 @@ describe("trainingStart", () => {
     });
   }
 
+  function startResponse(overrides: Record<string, unknown> = {}) {
+    return {
+      modelId: MODEL_DB_ID,
+      status: "starting",
+      gpuType: "l4",
+      estimatedCost: { pricePerHour: 0.39, gpuMemoryGb: 24 },
+      billing: {
+        estimatedCostCents: 10,
+        estimatedCostDisplay: "$0.10",
+        balanceCents: 1790,
+      },
+      ...overrides,
+    };
+  }
+
   test("rejects when confirm_cost is false before any network call", async () => {
     await expect(
       trainingStart(throwingClient(), {
-        model: MODEL,
-        project: PROJECT,
-        dataset: DATASET,
-        gpuType: "rtx-4090",
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
       }),
     ).rejects.toThrow(/Set confirm_cost=true/);
   });
@@ -636,47 +662,150 @@ describe("trainingStart", () => {
   test("requires gpu_type", async () => {
     await expect(
       trainingStart(throwingClient(), {
-        model: MODEL,
-        project: PROJECT,
-        dataset: DATASET,
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
         gpuType: "  ",
         confirmCost: true,
       }),
     ).rejects.toThrow(/`gpu_type` is required/);
   });
 
-  test("validates positive epochs (ids resolve without network)", async () => {
+  test("validates positive epochs before any network call", async () => {
     await expect(
       trainingStart(throwingClient(), {
-        model: MODEL,
-        project: PROJECT,
-        dataset: DATASET,
-        gpuType: "rtx-4090",
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
         epochs: 0,
         confirmCost: true,
       }),
     ).rejects.toThrow(/`epochs` must be greater than 0/);
   });
 
-  test("posts the training payload and summarizes the job", async () => {
+  test.each([
+    0, -2,
+  ])("rejects invalid batch=%s before any network call", async (batch) => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        batch,
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/batch/);
+  });
+
+  test("allows batch=-1 for auto-batch", async () => {
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const path = new URL(String(url)).pathname;
+      if (path === MODEL_PATH) {
+        return jsonResponse({
+          model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+        });
+      }
+      if (path === START_PATH) {
+        const body = JSON.parse(String(init.body));
+        expect(body.trainArgs.batch).toBe(-1);
+        return jsonResponse(startResponse());
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    await trainingStart(client, {
+      model: MODEL_REF,
+      project: PROJECT_REF,
+      dataset: DATASET_REF,
+      gpuType: "l4",
+      batch: -1,
+      confirmCost: true,
+    });
+  });
+
+  test.each([
+    "data",
+    "model",
+  ])("rejects reserved train_args key %s before any network call", async (key) => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        trainArgs: { [key]: "x" },
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/reserved/);
+  });
+
+  test("rejects a bare model id without any network call", async () => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: "b".repeat(24),
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/not addressable/);
+  });
+
+  test("rejects a bare project id without any network call", async () => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL_REF,
+        project: "b".repeat(24),
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/not addressable/);
+  });
+
+  test("rejects a bare dataset id without any network call", async () => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: "c".repeat(24),
+        gpuType: "l4",
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/not addressable/);
+  });
+
+  test("starts training from an existing model through the owner-scoped path", async () => {
     const calls: { url: string; method: string; body: unknown }[] = [];
     const impl = (async (url: string | URL, init: RequestInit = {}) => {
       let body: unknown;
-      if (typeof init.body === "string") {
-        body = JSON.parse(init.body);
-      }
+      if (typeof init.body === "string") body = JSON.parse(init.body);
       calls.push({
         url: String(url),
         method: (init.method ?? "GET").toUpperCase(),
         body,
       });
       const path = new URL(String(url)).pathname;
-      if (path === `/api/models/${MODEL}`) {
+      if (path === MODEL_PATH) {
         return jsonResponse({
-          model: { _id: MODEL, trainArgs: { model: "yolo26n.pt" } },
+          model: {
+            id: MODEL_DB_ID,
+            trainArgs: { model: "ul://ultralytics/yolo26/yolo26x" },
+          },
+          isOwner: true,
         });
       }
-      return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
+      if (path === START_PATH) {
+        return jsonResponse(startResponse());
+      }
+      return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
     const client = new UltralyticsClient({
       apiKey: KEY,
@@ -685,42 +814,99 @@ describe("trainingStart", () => {
     });
 
     const result = await trainingStart(client, {
-      model: MODEL,
-      project: PROJECT,
-      dataset: DATASET,
-      gpuType: "rtx-4090",
-      epochs: 100,
+      model: MODEL_REF,
+      project: PROJECT_REF,
+      dataset: DATASET_REF,
+      gpuType: "l4",
+      epochs: 1,
       confirmCost: true,
     });
 
+    expect(calls).toMatchObject([
+      { url: `${ORIGIN}${MODEL_PATH}`, method: "GET" },
+      {
+        url: `${ORIGIN}${START_PATH}`,
+        method: "POST",
+        body: {
+          modelId: MODEL_DB_ID,
+          gpuType: "l4",
+          trainArgs: {
+            data: DATASET_URI,
+            model: "ul://ultralytics/yolo26/yolo26x",
+            epochs: 1,
+          },
+        },
+      },
+    ]);
     expect(result.summary).toBe(
-      `Started training job ${"j".repeat(24)} status=queued.`,
+      "Started training for model 'exp' for owner 'alice' project 'road': " +
+        "status=starting on l4. Estimated cost $0.10 (0.39/hr); balance after start $17.90.",
     );
-    expect(calls[1]).toMatchObject({
-      url: `${BASE}/training/start`,
-      method: "POST",
-      body: {
-        modelId: MODEL,
-        projectId: PROJECT,
-        gpuType: "rtx-4090",
-        trainArgs: { model: "yolo26n.pt", data: DATASET, epochs: 100 },
+    expect(result.data).toEqual({
+      owner: OWNER,
+      project: PROJECT,
+      model: MODEL,
+      modelId: MODEL_DB_ID,
+      status: "starting",
+      gpuType: "l4",
+      estimatedCost: { pricePerHour: 0.39, gpuMemoryGb: 24 },
+      billing: {
+        estimatedCostCents: 10,
+        estimatedCostDisplay: "$0.10",
+        balanceCents: 1790,
       },
     });
   });
 
-  test("merges train_args into trainArgs while preserving MCP fields", async () => {
-    const calls: { body: unknown }[] = [];
-    const impl = (async (_url: string | URL, init: RequestInit = {}) => {
-      calls.push({
-        body: typeof init.body === "string" ? JSON.parse(init.body) : null,
-      });
-      const path = new URL(String(_url)).pathname;
-      if (path === `/api/models/${MODEL}`) {
+  test("accepts a ul:// model URI and a ul:// dataset URI without network for resolution", async () => {
+    const calls: { path: string }[] = [];
+    const impl = (async (url: string | URL) => {
+      const path = new URL(String(url)).pathname;
+      calls.push({ path });
+      if (path === MODEL_PATH) {
         return jsonResponse({
-          model: { _id: MODEL, trainArgs: { model: "yolo26n.pt" } },
+          model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
         });
       }
-      return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
+      if (path === START_PATH) {
+        return jsonResponse(startResponse());
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    await trainingStart(client, {
+      model: `ul://${OWNER}/${PROJECT}/${MODEL}`,
+      project: `ul://${OWNER}/${PROJECT}`,
+      dataset: `ul://${OWNER}/${DATASET}`,
+      gpuType: "l4",
+      confirmCost: true,
+    });
+
+    expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
+  });
+
+  test("fills a missing owner from the account summary for bare slugs", async () => {
+    const calls: { path: string }[] = [];
+    const impl = (async (url: string | URL) => {
+      const path = new URL(String(url)).pathname;
+      calls.push({ path });
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: OWNER });
+      }
+      if (path === MODEL_PATH) {
+        return jsonResponse({
+          model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+        });
+      }
+      if (path === START_PATH) {
+        return jsonResponse(startResponse());
+      }
+      return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
     const client = new UltralyticsClient({
       apiKey: KEY,
@@ -732,13 +918,82 @@ describe("trainingStart", () => {
       model: MODEL,
       project: PROJECT,
       dataset: DATASET,
-      gpuType: "rtx-4090",
+      gpuType: "l4",
+      confirmCost: true,
+    });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      MODEL_PATH,
+      START_PATH,
+    ]);
+  });
+
+  test("errors clearly when an existing model has no stored base checkpoint", async () => {
+    const { client } = routeClient((path) => {
+      if (path === MODEL_PATH) {
+        return jsonResponse({ model: { id: MODEL_DB_ID, trainArgs: {} } });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await expect(
+      trainingStart(client, {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/no stored base checkpoint/);
+  });
+
+  test("surfaces the API message for a model that does not exist", async () => {
+    const { client } = routeClient((path) => {
+      if (path === MODEL_PATH) {
+        return jsonResponse({ error: "Model not found" }, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await expect(
+      trainingStart(client, {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      }),
+    ).rejects.toThrow(/Model not found/);
+  });
+
+  test("merges train_args into trainArgs while preserving resolved data and model", async () => {
+    const calls: { body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      calls.push({
+        body: typeof init.body === "string" ? JSON.parse(init.body) : null,
+      });
+      const path = new URL(String(url)).pathname;
+      if (path === MODEL_PATH) {
+        return jsonResponse({
+          model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+        });
+      }
+      return jsonResponse(startResponse());
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    await trainingStart(client, {
+      model: MODEL_REF,
+      project: PROJECT_REF,
+      dataset: DATASET_REF,
+      gpuType: "l4",
       epochs: 100,
-      trainArgs: {
-        mosaic: 0,
-        mixup: 0,
-        copy_paste: 0,
-      },
+      trainArgs: { mosaic: 0, mixup: 0, copy_paste: 0 },
       confirmCost: true,
     });
 
@@ -746,7 +1001,7 @@ describe("trainingStart", () => {
       body: {
         trainArgs: {
           model: "yolo26n.pt",
-          data: DATASET,
+          data: DATASET_URI,
           epochs: 100,
           mosaic: 0,
           mixup: 0,
@@ -756,445 +1011,408 @@ describe("trainingStart", () => {
     });
   });
 
-  test.each([
-    "data",
-    "model",
-  ])("rejects reserved train_args key %s", async (key) => {
-    await expect(
-      trainingStart(throwingClient(), {
-        model: MODEL,
-        project: PROJECT,
-        dataset: DATASET,
-        gpuType: "rtx-4090",
-        trainArgs: { [key]: "x" },
-        confirmCost: true,
-      }),
-    ).rejects.toThrow(/train_args/);
-  });
+  describe("checkpoint mode", () => {
+    const CREATED_MODEL_ID = "m".repeat(24);
+    const CREATED_SLUG = "exp-2";
 
-  test("keeps model and data reserved in train_args", async () => {
-    for (const key of ["data", "model"]) {
-      await expect(
-        trainingStart(throwingClient(), {
-          model: MODEL,
-          project: PROJECT,
-          dataset: DATASET,
-          gpuType: "rtx-4090",
-          trainArgs: { [key]: "x" },
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(/reserved/);
-    }
-  });
-
-  test("reuses stored trainArgs.model when training from an existing model id", async () => {
-    const calls: { url: string; method: string; body: unknown }[] = [];
-    const impl = (async (url: string | URL, init: RequestInit = {}) => {
-      let body: unknown;
-      if (typeof init.body === "string") {
-        body = JSON.parse(init.body);
-      }
-      calls.push({
-        url: String(url),
-        method: (init.method ?? "GET").toUpperCase(),
-        body,
-      });
-      const path = new URL(String(url)).pathname;
-      if (path === `/api/models/${MODEL}`) {
-        return jsonResponse({
-          model: {
-            _id: MODEL,
-            trainArgs: { model: "ul://ultralytics/yolo26/yolo26x" },
-          },
+    test("creates a project model from owner and project slug, then starts training", async () => {
+      const calls: { url: string; method: string; body: unknown }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        let body: unknown;
+        if (typeof init.body === "string") body = JSON.parse(init.body);
+        calls.push({
+          url: String(url),
+          method: (init.method ?? "GET").toUpperCase(),
+          body,
         });
-      }
-      if (path === "/api/training/start") {
-        return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
-      }
-      return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: impl,
-    });
-
-    await trainingStart(client, {
-      model: MODEL,
-      project: PROJECT,
-      dataset: DATASET,
-      gpuType: "rtx-4090",
-      epochs: 100,
-      confirmCost: true,
-    });
-
-    expect(calls).toMatchObject([
-      {
-        url: `${BASE}/models/${MODEL}`,
-        method: "GET",
-      },
-      {
-        url: `${BASE}/training/start`,
-        method: "POST",
-        body: {
-          modelId: MODEL,
-          projectId: PROJECT,
-          gpuType: "rtx-4090",
-          trainArgs: {
-            model: "ul://ultralytics/yolo26/yolo26x",
-            data: DATASET,
-            epochs: 100,
-          },
-        },
-      },
-    ]);
-  });
-
-  test("errors clearly when an existing model has no stored base checkpoint", async () => {
-    const { client } = routeClient((path) => {
-      if (path === `/api/models/${MODEL}`) {
-        return jsonResponse({ model: { _id: MODEL, trainArgs: {} } });
-      }
-      return jsonResponse({}, 404);
-    });
-
-    await expect(
-      trainingStart(client, {
-        model: MODEL,
-        project: PROJECT,
-        dataset: DATASET,
-        gpuType: "rtx-4090",
-        confirmCost: true,
-      }),
-    ).rejects.toThrow(/no stored base checkpoint/);
-  });
-
-  test("creates a model record before starting training from a detect checkpoint", async () => {
-    const createdModelId = "m".repeat(24);
-    const calls: { url: string; method: string; body: unknown }[] = [];
-    const impl = (async (url: string | URL, init: RequestInit = {}) => {
-      let body: unknown;
-      if (typeof init.body === "string") {
-        body = JSON.parse(init.body);
-      }
-      calls.push({
-        url: String(url),
-        method: (init.method ?? "GET").toUpperCase(),
-        body,
-      });
-      const path = new URL(String(url)).pathname;
-      if (path === `/api/datasets/${DATASET}`) {
-        return jsonResponse({ dataset: { _id: DATASET, task: "detect" } });
-      }
-      if (path === "/api/models") {
-        return jsonResponse({ model: { _id: createdModelId, task: "detect" } });
-      }
-      if (path === "/api/training/start") {
-        return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
-      }
-      return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: impl,
-    });
-
-    await trainingStart(client, {
-      model: "yolo26n.pt",
-      project: PROJECT,
-      dataset: DATASET,
-      gpuType: "rtx-4090",
-      epochs: 100,
-      confirmCost: true,
-    });
-
-    expect(calls).toMatchObject([
-      {
-        url: `${BASE}/datasets/${DATASET}`,
-        method: "GET",
-      },
-      {
-        url: `${BASE}/models`,
-        method: "POST",
-        body: {
-          projectId: PROJECT,
-          task: "detect",
-          name: "yolo26n",
-        },
-      },
-      {
-        url: `${BASE}/training/start`,
-        method: "POST",
-        body: {
-          modelId: createdModelId,
-          projectId: PROJECT,
-          gpuType: "rtx-4090",
-          trainArgs: {
-            model: "yolo26n.pt",
-            data: DATASET,
-            epochs: 100,
-          },
-        },
-      },
-    ]);
-  });
-
-  test("reads top-level modelId from the real create-model response shape", async () => {
-    const createdModelId = "m".repeat(24);
-    const calls: { url: string; method: string; body: unknown }[] = [];
-    const impl = (async (url: string | URL, init: RequestInit = {}) => {
-      let body: unknown;
-      if (typeof init.body === "string") {
-        body = JSON.parse(init.body);
-      }
-      calls.push({
-        url: String(url),
-        method: (init.method ?? "GET").toUpperCase(),
-        body,
-      });
-      const path = new URL(String(url)).pathname;
-      if (path === `/api/datasets/${DATASET}`) {
-        return jsonResponse({ dataset: { _id: DATASET, task: "detect" } });
-      }
-      if (path === "/api/models") {
-        return jsonResponse({
-          modelId: createdModelId,
-          slug: "yolo26x",
-          region: "eu",
-        });
-      }
-      if (path === "/api/training/start") {
-        return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
-      }
-      return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: impl,
-    });
-
-    await trainingStart(client, {
-      model: "yolo26x.pt",
-      project: PROJECT,
-      dataset: DATASET,
-      gpuType: "rtx-4090",
-      confirmCost: true,
-    });
-
-    expect(calls[2]).toMatchObject({
-      body: { modelId: createdModelId },
-    });
-  });
-
-  test("routes official ultralytics ul:// refs through checkpoint mode", async () => {
-    const createdModelId = "m".repeat(24);
-    const calls: { url: string; method: string; body: unknown }[] = [];
-    const impl = (async (url: string | URL, init: RequestInit = {}) => {
-      let body: unknown;
-      if (typeof init.body === "string") {
-        body = JSON.parse(init.body);
-      }
-      calls.push({
-        url: String(url),
-        method: (init.method ?? "GET").toUpperCase(),
-        body,
-      });
-      const path = new URL(String(url)).pathname;
-      if (path === `/api/datasets/${DATASET}`) {
-        return jsonResponse({ dataset: { _id: DATASET, task: "detect" } });
-      }
-      if (path === "/api/models") {
-        return jsonResponse({ modelId: createdModelId, slug: "yolo26x" });
-      }
-      if (path === "/api/training/start") {
-        return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
-      }
-      return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: impl,
-    });
-
-    await trainingStart(client, {
-      model: "ul://ultralytics/yolo26/yolo26x",
-      project: PROJECT,
-      dataset: DATASET,
-      gpuType: "rtx-4090",
-      batch: -1,
-      confirmCost: true,
-    });
-
-    expect(calls).toMatchObject([
-      {
-        url: `${BASE}/datasets/${DATASET}`,
-        method: "GET",
-      },
-      {
-        url: `${BASE}/models`,
-        method: "POST",
-        body: {
-          projectId: PROJECT,
-          task: "detect",
-          name: "yolo26x",
-        },
-      },
-      {
-        url: `${BASE}/training/start`,
-        method: "POST",
-        body: {
-          modelId: createdModelId,
-          projectId: PROJECT,
-          gpuType: "rtx-4090",
-          trainArgs: {
-            model: "yolo26x.pt",
-            data: DATASET,
-            batch: -1,
-          },
-        },
-      },
-    ]);
-  });
-
-  test("does not treat user-owned ul:// models as checkpoints", async () => {
-    const projectId = "p".repeat(24);
-    const calls: { path: string; params: URLSearchParams }[] = [];
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: (async (url: string | URL, _init: RequestInit = {}) => {
-        const parsed = new URL(String(url));
-        calls.push({ path: parsed.pathname, params: parsed.searchParams });
-        const path = parsed.pathname;
-        if (path === "/api/projects") {
+        const path = new URL(String(url)).pathname;
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
-            projects: [
-              { _id: projectId, username: "aman-harsh", slug: "jellyfish" },
-            ],
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+            region: "eu",
           });
         }
-        if (path === "/api/models") {
-          return jsonResponse({
-            models: [{ _id: MODEL, slug: "yolo26x" }],
-          });
-        }
-        if (path === `/api/models/${MODEL}`) {
-          return jsonResponse({
-            model: { _id: MODEL, trainArgs: { model: "yolo26n.pt" } },
-          });
-        }
-        if (path === "/api/training/start") {
-          return jsonResponse({
-            job: { _id: "j".repeat(24), status: "queued" },
-          });
+        if (path === START_PATH) {
+          return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
         }
         return jsonResponse({}, 404);
-      }) as unknown as typeof fetch,
-    });
-
-    await trainingStart(client, {
-      model: "ul://aman-harsh/jellyfish/yolo26x",
-      project: PROJECT,
-      dataset: DATASET,
-      gpuType: "rtx-4090",
-      confirmCost: true,
-    });
-
-    expect(calls.map((call) => call.path)).toEqual([
-      "/api/projects",
-      "/api/models",
-      `/api/models/${MODEL}`,
-      "/api/training/start",
-    ]);
-  });
-
-  test("allows semantic checkpoints for segment datasets and creates a semantic model", async () => {
-    const calls: { url: string; method: string; body: unknown }[] = [];
-    const impl = (async (url: string | URL, init: RequestInit = {}) => {
-      let body: unknown;
-      if (typeof init.body === "string") {
-        body = JSON.parse(init.body);
-      }
-      calls.push({
-        url: String(url),
-        method: (init.method ?? "GET").toUpperCase(),
-        body,
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
       });
-      const path = new URL(String(url)).pathname;
-      if (path === `/api/datasets/${DATASET}`) {
-        return jsonResponse({ dataset: { _id: DATASET, task: "segment" } });
-      }
-      if (path === "/api/models") {
-        return jsonResponse({
-          model: { _id: "m".repeat(24), task: "semantic" },
+
+      const result = await trainingStart(client, {
+        model: "yolo26n.pt",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        epochs: 1,
+        confirmCost: true,
+      });
+
+      expect(calls).toMatchObject([
+        { url: `${ORIGIN}${DATASET_PATH}`, method: "GET" },
+        {
+          url: `${ORIGIN}${CREATE_MODEL_PATH}`,
+          method: "POST",
+          body: { owner: OWNER, project: PROJECT, task: "detect" },
+        },
+        {
+          url: `${ORIGIN}${START_PATH}`,
+          method: "POST",
+          body: {
+            modelId: CREATED_MODEL_ID,
+            gpuType: "l4",
+            trainArgs: {
+              model: "yolo26n.pt",
+              data: DATASET_URI,
+              epochs: 1,
+            },
+          },
+        },
+      ]);
+      expect(result.data).toMatchObject({
+        owner: OWNER,
+        project: PROJECT,
+        model: CREATED_SLUG,
+        modelId: CREATED_MODEL_ID,
+      });
+    });
+
+    test("does not send a name field to the create-model endpoint", async () => {
+      const calls: { body: unknown }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const path = new URL(String(url)).pathname;
+        if (path === CREATE_MODEL_PATH) {
+          calls.push({
+            body: typeof init.body === "string" ? JSON.parse(init.body) : null,
+          });
+        }
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await trainingStart(client, {
+        model: "yolo26n.pt",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        name: "my-run",
+        confirmCost: true,
+      });
+
+      expect(calls[0]?.body).not.toHaveProperty("name");
+    });
+
+    test("routes official ultralytics ul:// refs through checkpoint mode", async () => {
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        let body: unknown;
+        if (typeof init.body === "string") body = JSON.parse(init.body);
+        const path = new URL(String(url)).pathname;
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        if (path === START_PATH) {
+          expect(body).toMatchObject({
+            trainArgs: { model: "yolo26x.pt" },
+          });
+          return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await trainingStart(client, {
+        model: "ul://ultralytics/yolo26/yolo26x",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+    });
+
+    test("does not treat a user-owned ul:// model as a checkpoint", async () => {
+      const calls: { path: string }[] = [];
+      const impl = (async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        calls.push({ path });
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+          });
+        }
+        return jsonResponse(startResponse());
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await trainingStart(client, {
+        model: `ul://${OWNER}/${PROJECT}/${MODEL}`,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+
+      expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
+    });
+
+    test("allows semantic checkpoints for segment datasets", async () => {
+      const calls: { url: string; body: unknown }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        let body: unknown;
+        if (typeof init.body === "string") body = JSON.parse(init.body);
+        calls.push({ url: String(url), body });
+        const path = new URL(String(url)).pathname;
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "segment" } });
+        }
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await trainingStart(client, {
+        model: "yolo26n-sem.pt",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+
+      expect(calls[1]).toMatchObject({
+        url: `${ORIGIN}${CREATE_MODEL_PATH}`,
+        body: { task: "semantic" },
+      });
+    });
+
+    test("rejects incompatible checkpoint and dataset task combinations", async () => {
+      const { client, calls } = routeClient((path) => {
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "semantic" } });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-seg.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/not compatible/);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.path).toBe(DATASET_PATH);
+    });
+
+    test("throws clearly when the create-model response has no id", async () => {
+      const { client } = routeClient((path) => {
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({ owner: OWNER, project: PROJECT });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/did not include an id/);
+    });
+  });
+
+  describe("multiple datasets", () => {
+    const DATASET_2 = "road-data-2";
+    const DATASET_2_REF = `${OWNER}/${DATASET_2}`;
+    const DATASET_2_URI = `ul://${OWNER}/datasets/${DATASET_2}`;
+    const DATASET_2_PATH = `/api/datasets/${OWNER}/${DATASET_2}`;
+
+    test("rejects an empty dataset list before any network call", async () => {
+      await expect(
+        trainingStart(throwingClient(), {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: [],
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/`dataset` must include at least one/);
+    });
+
+    test("builds trainArgs.data as a list of URIs, in order, for an existing model", async () => {
+      const calls: { body: unknown }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        calls.push({
+          body: typeof init.body === "string" ? JSON.parse(init.body) : null,
         });
-      }
-      if (path === "/api/training/start") {
-        return jsonResponse({ job: { _id: "j".repeat(24), status: "queued" } });
-      }
-      return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: impl,
-    });
+        const path = new URL(String(url)).pathname;
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+          });
+        }
+        return jsonResponse(startResponse());
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
 
-    await trainingStart(client, {
-      model: "yolo26n-sem.pt",
-      project: PROJECT,
-      dataset: DATASET,
-      gpuType: "rtx-4090",
-      confirmCost: true,
-    });
-
-    expect(calls[1]).toMatchObject({
-      url: `${BASE}/models`,
-      method: "POST",
-      body: {
-        projectId: PROJECT,
-        task: "semantic",
-        name: "yolo26n-sem",
-      },
-    });
-  });
-
-  test("rejects incompatible checkpoint and dataset task combinations", async () => {
-    const { client, calls } = routeClient((path) => {
-      if (path === `/api/datasets/${DATASET}`) {
-        return jsonResponse({ dataset: { _id: DATASET, task: "semantic" } });
-      }
-      return jsonResponse({}, 404);
-    });
-
-    await expect(
-      trainingStart(client, {
-        model: "yolo26n-seg.pt",
-        project: PROJECT,
-        dataset: DATASET,
-        gpuType: "rtx-4090",
+      await trainingStart(client, {
+        model: MODEL_REF,
+        project: PROJECT_REF,
+        dataset: [DATASET_REF, DATASET_2_REF],
+        gpuType: "l4",
         confirmCost: true,
-      }),
-    ).rejects.toThrow(/not compatible/);
+      });
 
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.path).toBe(`/api/datasets/${DATASET}`);
-  });
+      expect(calls[1]).toMatchObject({
+        body: { trainArgs: { data: [DATASET_URI, DATASET_2_URI] } },
+      });
+    });
 
-  test.each([0, -2])("rejects invalid batch=%s", async (batch) => {
-    await expect(
-      trainingStart(throwingClient(), {
-        model: MODEL,
-        project: PROJECT,
-        dataset: DATASET,
-        gpuType: "rtx-4090",
-        batch,
+    test("checkpoint mode fetches and task-validates every dataset before creating the model", async () => {
+      const calls: { url: string; method: string; body: unknown }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        let body: unknown;
+        if (typeof init.body === "string") body = JSON.parse(init.body);
+        calls.push({
+          url: String(url),
+          method: (init.method ?? "GET").toUpperCase(),
+          body,
+        });
+        const path = new URL(String(url)).pathname;
+        if (path === DATASET_PATH || path === DATASET_2_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: "m".repeat(24),
+            owner: OWNER,
+            project: PROJECT,
+            model: "exp-2",
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse(startResponse({ modelId: "m".repeat(24) }));
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await trainingStart(client, {
+        model: "yolo26n.pt",
+        project: PROJECT_REF,
+        dataset: [DATASET_REF, DATASET_2_REF],
+        gpuType: "l4",
         confirmCost: true,
-      }),
-    ).rejects.toThrow(/batch/);
+      });
+
+      expect(calls[0]?.url).toBe(`${ORIGIN}${DATASET_PATH}`);
+      expect(calls[1]?.url).toBe(`${ORIGIN}${DATASET_2_PATH}`);
+      expect(calls[3]).toMatchObject({
+        url: `${ORIGIN}${START_PATH}`,
+        body: {
+          trainArgs: {
+            data: [DATASET_URI, DATASET_2_URI],
+            model: "yolo26n.pt",
+          },
+        },
+      });
+    });
+
+    test("refuses when one dataset in the list is task-incompatible, naming it", async () => {
+      const { client, calls } = routeClient((path) => {
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === DATASET_2_PATH) {
+          return jsonResponse({ dataset: { task: "classify" } });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n.pt",
+          project: PROJECT_REF,
+          dataset: [DATASET_REF, DATASET_2_REF],
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(
+        new RegExp(
+          `not compatible.*${OWNER}/${DATASET_2}`.replace(/\//g, "\\/"),
+        ),
+      );
+
+      expect(calls).toHaveLength(2);
+      expect(calls[1]?.path).toBe(DATASET_2_PATH);
+    });
   });
 });
 
