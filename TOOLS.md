@@ -565,7 +565,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Deployments
 
-3 tools.
+4 tools.
 
 ### deployments_list
 
@@ -596,6 +596,19 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
+
+### deployment_logs
+
+Read log entries for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). severity is passed through to the server unvalidated (illustrative values: DEFAULT, DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY); an invalid value returns the server's own rejection message. limit defaults to 50, max 200. nextPageToken pages through older entries.
+
+Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
+| `severity` | string | No | Minimum log severity, passed through unvalidated (e.g. DEFAULT, INFO, WARNING, ERROR). |
+| `limit` | number | No | Max entries to return (default 50, max 200). |
+| `pageToken` | string | No | Pagination token from a previous call's nextPageToken. |
 
 ## Infrastructure
 
