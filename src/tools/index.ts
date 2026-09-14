@@ -31,6 +31,7 @@ import {
   deploymentHealth,
   deploymentLogs,
   deploymentMetrics,
+  deploymentPredict,
   deploymentsList,
 } from "./deployments.js";
 import { modelDownload } from "./downloads.js";
@@ -72,6 +73,7 @@ export {
   deploymentHealth,
   deploymentLogs,
   deploymentMetrics,
+  deploymentPredict,
   deploymentsList,
 } from "./deployments.js";
 export { modelDownload } from "./downloads.js";
@@ -923,6 +925,55 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           await deploymentMetrics(getClient(), deployment as string, {
             range: range as string | undefined,
             sparkline: sparkline as boolean | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "deployment_predict",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Run inference through a deployment's own serving endpoint on a local image file, by owner/deployment or a bare slug (owner defaults to the account owner). Returns images/metadata verbatim, including undocumented metadata fields. No per-request cost is documented for this endpoint; costs follow the deployment's own resource configuration. A cold start on a scaled-to-zero deployment may respond slowly or with a 503 — check deployment_health rather than retrying blindly.",
+    inputSchema: {
+      deployment: z
+        .string()
+        .describe("Deployment ref by owner/deployment or a bare slug."),
+      imagePath: z
+        .string()
+        .describe(
+          "Local path to an image file (.jpg, .jpeg, .png, .webp, .bmp, .tif, .tiff).",
+        ),
+      conf: z
+        .number()
+        .optional()
+        .describe(
+          "Confidence threshold (0.01-1, server default applies if omitted).",
+        ),
+      iou: z
+        .number()
+        .optional()
+        .describe("IoU threshold (0-0.95, server default applies if omitted)."),
+      imgsz: z
+        .number()
+        .optional()
+        .describe(
+          "Inference image size (32-1280, server default applies if omitted).",
+        ),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ deployment, imagePath, conf, iou, imgsz }) =>
+        toMcpTextResult(
+          await deploymentPredict(getClient(), deployment as string, {
+            imagePath: imagePath as string,
+            conf: conf as number | undefined,
+            iou: iou as number | undefined,
+            imgsz: imgsz as number | undefined,
           }),
         ),
   }),

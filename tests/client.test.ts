@@ -148,6 +148,48 @@ describe("UltralyticsClient.get", () => {
     expect(String(err)).toMatch(/method not allowed/i);
   });
 
+  test("extracts the nested message when an edge-layer error wraps {code, message} instead of a plain string", async () => {
+    // Live capture: POST .../deployments/{owner}/{deployment}/predict with an
+    // oversized file -> 413 {"error":{"code":"413","message":"Request Entity Too Large"}}.
+    // This 413 is generated in front of the app (a body-size gate), so it
+    // does not follow the app's own ErrorResponse.error: string contract.
+    const { impl } = makeFetch([
+      new Response(
+        JSON.stringify({
+          error: { code: "413", message: "Request Entity Too Large" },
+        }),
+        { status: 413 },
+      ),
+    ]);
+    const err = await client(impl)
+      .get("/deployments/alice/road-detector/predict")
+      .catch((e) => e as UltralyticsApiError);
+    expect(err).toBeInstanceOf(UltralyticsApiError);
+    expect(err.statusCode).toBe(413);
+    expect(err.apiMessage).toBe("Request Entity Too Large");
+    expect(String(err)).toMatch(/Request Entity Too Large/);
+  });
+
+  test("falls through to message and then the default on an empty-string error, rather than surfacing blank", async () => {
+    const emptyError = makeFetch([
+      new Response(JSON.stringify({ error: "" }), { status: 400 }),
+    ]);
+    const err = await client(emptyError.impl)
+      .get("/projects")
+      .catch((e) => e as UltralyticsApiError);
+    expect(err.apiMessage).toBe("request failed");
+
+    const emptyErrorWithMessage = makeFetch([
+      new Response(JSON.stringify({ error: "", message: "Fallback message" }), {
+        status: 400,
+      }),
+    ]);
+    const errWithFallback = await client(emptyErrorWithMessage.impl)
+      .get("/projects")
+      .catch((e) => e as UltralyticsApiError);
+    expect(errWithFallback.apiMessage).toBe("Fallback message");
+  });
+
   test("retries a 429 once then succeeds", async () => {
     const { impl, calls } = makeFetch([
       new Response(JSON.stringify({ error: "rate" }), {

@@ -16,6 +16,44 @@ export function listField(
   return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
 }
 
+/** Standard inference tuning knobs shared by every predict endpoint. */
+export interface PredictParams {
+  conf?: number;
+  iou?: number;
+  imgsz?: number;
+}
+
+export interface ProjectedPrediction {
+  images: Record<string, unknown>[];
+  metadata: Record<string, unknown> | null;
+  detectionCount: number;
+}
+
+/** Project a predict endpoint's raw `{images[], metadata}` response.
+ *
+ * Shared by `model_predict` and `deployment_predict`: both endpoints return
+ * this same shape, and both pass `images`/`metadata` through verbatim
+ * (never re-keyed, so undocumented fields survive) while summing detections
+ * across images for the summary line.
+ */
+export function projectPredictResult(result: unknown): ProjectedPrediction {
+  const images = listField(result, "images");
+  const metadataField = asRecord(result).metadata;
+  const metadata =
+    metadataField && typeof metadataField === "object"
+      ? (metadataField as Record<string, unknown>)
+      : null;
+  const detectionCount = images.reduce(
+    (total, image) =>
+      total +
+      (Array.isArray(asRecord(image).results)
+        ? (asRecord(image).results as unknown[]).length
+        : 0),
+    0,
+  );
+  return { images, metadata, detectionCount };
+}
+
 /** Render a summary field like Python's `dict.get(key)`: missing -> "None". */
 export function pyField(value: unknown): string {
   return value === undefined || value === null ? "None" : String(value);

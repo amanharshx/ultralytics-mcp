@@ -3,7 +3,7 @@
 import type { UltralyticsClient } from "../client.js";
 import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { asRecord, listField } from "./shared.js";
+import { type PredictParams, projectPredictResult } from "./shared.js";
 
 /** Run inference from an image URL or base64 source. Local paths are not accepted.
  *
@@ -24,12 +24,9 @@ import { asRecord, listField } from "./shared.js";
 export async function modelPredict(
   client: UltralyticsClient,
   model: string,
-  options: {
+  options: PredictParams & {
     source: string;
     project?: string;
-    conf?: number;
-    iou?: number;
-    imgsz?: number;
   },
 ): Promise<NormalizedToolResult> {
   const { source, project, conf = 0.25, iou = 0.7, imgsz = 640 } = options;
@@ -68,20 +65,7 @@ export async function modelPredict(
     },
   );
 
-  const images = listField(result, "images");
-  const metadataRecord = asRecord(result).metadata;
-  const metadata =
-    metadataRecord && typeof metadataRecord === "object"
-      ? (metadataRecord as Record<string, unknown>)
-      : null;
-  const detectionCount = images.reduce(
-    (total, image) =>
-      total +
-      (Array.isArray(asRecord(image).results)
-        ? (asRecord(image).results as unknown[]).length
-        : 0),
-    0,
-  );
+  const { images, metadata, detectionCount } = projectPredictResult(result);
   return {
     summary:
       `Model '${resolved.model}' for owner '${resolvedOwner}' ` +
