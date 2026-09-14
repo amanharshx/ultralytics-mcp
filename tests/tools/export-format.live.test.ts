@@ -167,13 +167,13 @@ describe.skipIf(!apiKey)("export format validation live smoke", () => {
             );
           },
         );
-      },
-    );
 
-    assertDeleted(
-      "project",
-      projectRef,
-      await projectsDelete(client, projectRef),
+        assertDeleted(
+          "project",
+          projectRef,
+          await projectsDelete(client, projectRef),
+        );
+      },
     );
   }, 60_000);
 });
