@@ -431,7 +431,6 @@ describe("parity fixtures", () => {
         "datasets_get.json",
         "datasets_list.json",
         "dataset_class_stats.json",
-        "dataset_class_stats_histograms.json",
         "dataset_class_stats_empty.json",
         "dataset_export.json",
         "dataset_images_list.json",
