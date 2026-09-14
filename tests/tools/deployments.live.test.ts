@@ -1,4 +1,4 @@
-/** Live smoke test for the deployment list tool.
+/** Live smoke tests for the deployment read tools.
  *
  * Fails when the platform changes its contract underneath us (paths,
  * statuses, or response field names). Skipped silently without a key so
@@ -14,9 +14,11 @@
  *
  * `deployments_list` is a pure read: it creates nothing and so needs no
  * disposable-resource cleanup, unlike the projects/datasets/models live
- * suites. Deployment creation is out of scope for this tool (see the
- * deploy-eval epic's pass 1 read surface) so this suite only proves the
- * read path against whatever the workspace already has.
+ * suites, and its suite below only proves the read path against whatever
+ * the workspace already has. `deployment_get` needs an actual deployment to
+ * read, though, and no `deploy` tool ships in this epic's pass 1 (see the
+ * deploy-eval epic's Pass 2 section) -- so its suite creates one directly
+ * through the client, not through a tool, and deletes it in a `finally`.
  */
 
 import { describe, expect, test } from "vitest";
@@ -98,12 +100,8 @@ describe.skipIf(!apiKey)("deployments_list live smoke", () => {
   }, 60_000);
 });
 
-/** `deployment_get` needs an actual deployment to read, and no `deploy` tool
- * ships in this epic's pass 1 (see the deploy-eval epic's Pass 2 section) --
- * so this suite creates one directly through the client, exactly as the
- * epic's probe scripts did, and deletes it in a `finally`. Deployments have
- * no trash and no restore: cleanup must run even when an assertion throws.
- */
+/** Deployments have no trash and no restore: cleanup must run even when an
+ * assertion throws, so creation and deletion are wrapped in try/finally. */
 describe.skipIf(!apiKey)("deployment_get live smoke", () => {
   test(
     "reads a deployment at deploying and again at ready, then is gone after delete",

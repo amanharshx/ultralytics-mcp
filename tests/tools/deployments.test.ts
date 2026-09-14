@@ -307,7 +307,7 @@ describe("deploymentGet", () => {
     expect(result.data).not.toHaveProperty("apiKeyId");
   });
 
-  test("resolves a bare 24-hex id as an opaque deployment slug, not an addressable resource", async () => {
+  test("passes an owner-qualified 24-hex id straight through, not treated as addressable", async () => {
     const id = "c".repeat(24);
     const { client, calls } = routeClient((path) => {
       if (path === `/api/deployments/alice/${id}`) {
@@ -320,6 +320,25 @@ describe("deploymentGet", () => {
       /HTTP 404/,
     );
     expect(calls.map((call) => call.path)).toEqual([
+      `/api/deployments/alice/${id}`,
+    ]);
+  });
+
+  test("treats a bare 24-hex id as an opaque slug, defaulting the owner like any other bare slug", async () => {
+    const id = "d".repeat(24);
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === `/api/deployments/alice/${id}`) {
+        return jsonResponse({}, 404);
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await expect(deploymentGet(client, id)).rejects.toThrow(/HTTP 404/);
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
       `/api/deployments/alice/${id}`,
     ]);
   });
