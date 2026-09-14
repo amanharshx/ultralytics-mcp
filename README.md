@@ -334,3 +334,17 @@ set to `owner/slug` for a ready dataset with ingested images. It skips
 without the variable. Re-creating an unchanged version is a no-op, but an
 opted-in fixture that changed since its last snapshot gains an immutable
 snapshot version.
+
+Also covers the model, training, and export tools. One disposable
+`mcp-smoke-*` model (list, get, training status, and the training-cancel
+refusal for a job that never started) is created and deleted again even on
+failure. Starting training or creating an export bills the account, so
+neither runs here; that live verification runs separately. The surfaces that
+need a model with real weights and history — downloading weights, running
+inference, the training-cancel refusal for a job that already finished, and
+the export tools' field shapes, including a cancel refusal on a finished
+export — run against one existing fixture, opted into with
+`ULTRALYTICS_SMOKE_EXPORT_REF=owner/project/model:exportId`. The fixture must
+be a trained model with downloadable weights, a terminal training status, and
+an export whose own job has also reached a terminal status. It skips without
+the variable.
