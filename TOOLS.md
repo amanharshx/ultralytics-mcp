@@ -388,7 +388,7 @@ Notes: Writes model weights to a local filesystem path.
 
 ### training_monitor
 
-Report a model's training status and progress (works for private and public projects).
+Report a model's training status and progress (works for private and public projects). timing.elapsedMs is wall-clock since model creation, evaluated at request time: it tracks elapsed run time while training is active, but for a finished model it reflects the model's age, not training duration. Billed training time is computeCost.durationMs.
 
 Metadata: read-only, external/live
 
@@ -396,7 +396,6 @@ Metadata: read-only, external/live
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
-| `include_metrics` | boolean | No |  |
 | `include_history` | boolean | No |  |
 | `history_last_n` | number | No |  |
 

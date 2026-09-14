@@ -184,10 +184,12 @@ test("server registers all available tools over the protocol", async () => {
     destructiveHint: false,
   });
   expect(trainingMonitor?.inputSchema?.properties).toMatchObject({
-    include_metrics: expect.any(Object),
     include_history: expect.any(Object),
     history_last_n: expect.any(Object),
   });
+  expect(trainingMonitor?.inputSchema?.properties).not.toHaveProperty(
+    "include_metrics",
+  );
 
   const trainingStart = tools.find((tool) => tool.name === "training_start");
   expect(trainingStart?.inputSchema?.required).toEqual([

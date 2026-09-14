@@ -1,0 +1,130 @@
+{
+  "tool": "training_monitor",
+  "args": {
+    "model": "example-owner/example-project-1/example-active-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-active-1",
+      "response": {
+        "status": 200,
+        "json": {
+          "model": {
+            "id": "000000000000000000000004",
+            "owner": "example-owner",
+            "project": "example-project-1",
+            "projectName": "example-project-1",
+            "projectIconColor": "cyan",
+            "model": "example-active-1",
+            "visibility": "private",
+            "name": "example-active-1",
+            "status": "starting",
+            "task": "detect",
+            "datasetId": "000000000000000000000005",
+            "baseModel": "yolo26n.pt",
+            "epochs": 1,
+            "trainArgs": {
+              "model": "yolo26n.pt",
+              "data": "ul://example-owner/datasets/example-dataset-1",
+              "epochs": 1,
+              "batch": 8,
+              "imgsz": 320,
+              "project": "example-owner/example-project-1",
+              "name": "example-active-1"
+            },
+            "hasWeights": false,
+            "starCount": 0,
+            "isStarred": false,
+            "computeCost": {
+              "gpuType": "l4",
+              "gpuDisplayName": "L4",
+              "pricePerHour": 0.39,
+              "totalCost": 0
+            },
+            "cloudJob": {
+              "gpuDisplayName": "L4"
+            },
+            "createdAt": "2026-09-14T09:53:38.022Z",
+            "updatedAt": "2026-09-14T09:53:42.843Z",
+            "dataset": {
+              "owner": "example-owner",
+              "dataset": "example-dataset-1"
+            },
+            "metadata": {}
+          },
+          "isOwner": true
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/models/example-owner/example-project-1/example-active-1/training",
+      "response": {
+        "status": 200,
+        "json": {
+          "job": {
+            "id": "000000000000000000000004",
+            "status": "starting",
+            "progress": {
+              "currentEpoch": 0,
+              "totalEpochs": 1,
+              "percentage": 0
+            },
+            "timing": {
+              "elapsedMs": 0,
+              "timePerEpochMs": 0,
+              "etaMs": 0
+            },
+            "compute": {
+              "gpuType": "l4",
+              "gpuDisplayName": "L4",
+              "gpuMemoryGb": 24
+            },
+            "trainArgs": {
+              "model": "yolo26n.pt",
+              "epochs": 1,
+              "batch": 8,
+              "imgsz": 320
+            },
+            "epochMetrics": null,
+            "error": null,
+            "createdAt": "2026-09-14T09:53:38.022Z",
+            "updatedAt": "2026-09-14T09:53:42.843Z"
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Model 'example-active-1' for owner 'example-owner' project 'example-project-1': training status=starting job=starting; epoch 0/1; ~0%",
+    "data": {
+      "owner": "example-owner",
+      "project": "example-project-1",
+      "model": "example-active-1",
+      "modelId": "000000000000000000000004",
+      "status": "starting",
+      "jobStatus": "starting",
+      "epochsDone": 0,
+      "totalEpochs": 1,
+      "progressPercentage": 0,
+      "etaMs": 0,
+      "bestEpoch": null,
+      "bestFitness": null,
+      "latestMetrics": {},
+      "computeCost": {
+        "gpuType": "l4",
+        "gpuDisplayName": "L4",
+        "pricePerHour": 0.39,
+        "totalCost": 0
+      },
+      "trainingError": null,
+      "progressSource": "models/{owner}/{project}/{model}/training",
+      "timing": {
+        "etaMs": 0,
+        "timePerEpochMs": 0,
+        "elapsedMs": 0
+      }
+    }
+  }
+}

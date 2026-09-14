@@ -9,6 +9,7 @@ import {
   resolveProject,
 } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
+import { projectModelTraining } from "./model-training-projection.js";
 import { asRecord, pyField } from "./shared.js";
 
 const KEY_METRICS = [
@@ -175,7 +176,6 @@ function validateCheckpointCompatibility(
 }
 
 interface TrainingMonitorOptions {
-  includeMetrics?: boolean;
   includeHistory?: boolean;
   historyLastN?: number;
 }
@@ -186,12 +186,19 @@ interface TrainingMonitorOptions {
  * addressable), fills a missing owner from the account summary, and reads
  * the model record and its training job through the live owner-scoped
  * endpoints. Per-epoch history and key metrics come from the model record's
- * `trainResults`; live progress and timing come from the training job. A
- * never-trained model reports a `pending` or `untrained` job with null args
- * and metrics, while an absent job (null or a 404 from the training endpoint) falls back
- * to `trainResults`-derived progress. The job status is surfaced verbatim so
- * a cancelled or failed run stays distinguishable from a running one. The
+ * `trainResults` via the shared training projection; live progress and
+ * timing come from the training job. A never-trained model reports a
+ * `pending` or `untrained` job with null args and metrics, while an absent
+ * job (null or a 404 from the training endpoint) falls back to
+ * `trainResults`-derived progress. The job status is surfaced verbatim so a
+ * cancelled or failed run stays distinguishable from a running one. The
  * recorded compute cost and the training error are surfaced when present.
+ * This tool answers "how is this training run going right now?" only: the
+ * top-level `metrics` object and `trainArgs` belong to `model_metrics`.
+ * `timing.elapsedMs` is wall-clock since model creation, evaluated at
+ * request time: it tracks elapsed run time while training is active, but
+ * for a finished model it reflects the model's age, not training duration.
+ * Billed training time is `computeCost.durationMs`.
  * Evaluation plots are deliberately omitted: the platform disclaims their
  * shape as unstable.
  */
@@ -201,11 +208,7 @@ export async function trainingMonitor(
   project?: string,
   options: TrainingMonitorOptions = {},
 ): Promise<NormalizedToolResult> {
-  const {
-    includeMetrics = false,
-    includeHistory = false,
-    historyLastN = 20,
-  } = options;
+  const { includeHistory = false, historyLastN = 20 } = options;
   validateHistoryLastN(historyLastN);
 
   const resolved = resolveModel(model, project);
@@ -213,13 +216,12 @@ export async function trainingMonitor(
   const basePath = `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}`;
   const data = await client.get(basePath);
   const fields = asRecord(asRecord(data).model);
+  const projection = projectModelTraining(fields);
 
   const status = fields.status ?? null;
   const totalEpochs = fields.epochs;
   const hasTotal = typeof totalEpochs === "number" && totalEpochs > 0;
-  const trainResults = Array.isArray(fields.trainResults)
-    ? fields.trainResults
-    : [];
+  const trainResults = projection.trainResults;
   const epochsDone = trainResults.length;
   const latestMetrics =
     epochsDone > 0
@@ -238,10 +240,7 @@ export async function trainingMonitor(
       metrics: asRecord(record.metrics),
     };
   });
-  const computeCost =
-    fields.computeCost && typeof fields.computeCost === "object"
-      ? asRecord(fields.computeCost)
-      : null;
+  const computeCost = projection.computeCost;
   const modelTrainingError = fields.trainingError ?? null;
 
   let job: Record<string, unknown> | null = null;
@@ -325,17 +324,13 @@ export async function trainingMonitor(
       totalEpochs: hasTotal ? (totalEpochs as number) : null,
       progressPercentage: progressPct,
       etaMs,
-      bestEpoch: fields.bestEpoch ?? null,
-      bestFitness: fields.bestFitness ?? null,
-      latestMetrics: includeMetrics ? latestMetrics : keyMetrics,
+      bestEpoch: projection.bestEpoch,
+      bestFitness: projection.bestFitness,
+      latestMetrics: keyMetrics,
       computeCost,
       trainingError,
       progressSource: source,
-      ...(includeMetrics
-        ? {
-            timing,
-          }
-        : {}),
+      timing,
       ...(includeHistory ? { metricsHistory } : {}),
     },
   };

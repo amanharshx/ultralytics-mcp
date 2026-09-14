@@ -135,6 +135,7 @@ describe("trainingMonitor", () => {
       },
       trainingError: null,
       progressSource: LIVE_SOURCE,
+      timing: { etaMs: 0, timePerEpochMs: 1322.8, elapsedMs: 139413 },
     });
   });
 
@@ -355,6 +356,7 @@ describe("trainingMonitor", () => {
       computeCost: null,
       trainingError: null,
       progressSource: LIVE_SOURCE,
+      timing: { etaMs: 0, timePerEpochMs: 0, elapsedMs: 0 },
     });
   });
 
@@ -449,7 +451,7 @@ describe("trainingMonitor", () => {
     expect(error.statusCode).toBe(429);
   });
 
-  test("include_metrics returns full latest metrics with live timing", async () => {
+  test("current-epoch metrics stay filtered to key metrics and timing is always present, with no flag", async () => {
     const { client } = monitorClient({
       modelBody: {
         model: {
@@ -481,15 +483,11 @@ describe("trainingMonitor", () => {
       },
     });
 
-    const result = await trainingMonitor(client, REF, undefined, {
-      includeMetrics: true,
-    });
+    const result = await trainingMonitor(client, REF);
     expect(result.data).toMatchObject({
       latestMetrics: {
-        "train/box_loss": 0.72179,
         "metrics/mAP50(B)": 0.58282,
         "metrics/mAP50-95(M)": 0.48394,
-        lr: 0.000114,
       },
       timing: {
         etaMs: 432343,
@@ -498,6 +496,8 @@ describe("trainingMonitor", () => {
       },
     });
     expect(result.data).not.toHaveProperty("instanceStatus");
+    expect(result.data).not.toHaveProperty("metrics");
+    expect(result.data).not.toHaveProperty("trainArgs");
   });
 
   test("include_history returns recent verbatim series", async () => {
