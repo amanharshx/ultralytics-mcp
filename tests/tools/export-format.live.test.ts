@@ -159,9 +159,21 @@ describe.skipIf(!apiKey)("export format validation live smoke", () => {
             // No export job was created by any of the above.
             const listed = await exportsList(client, modelRef);
             expect(listed.data).toEqual([]);
+
+            assertDeleted(
+              "model",
+              modelRef,
+              await modelsDelete(client, modelRef),
+            );
           },
         );
       },
+    );
+
+    assertDeleted(
+      "project",
+      projectRef,
+      await projectsDelete(client, projectRef),
     );
   }, 60_000);
 });
