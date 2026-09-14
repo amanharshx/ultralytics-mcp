@@ -24,20 +24,30 @@
  *
  * Starting training or creating an export bills the account, so neither is
  * exercised here: `training_start` and `export_create` keep their own live
- * verification in their tickets. Export status shape is instead covered
- * against an existing export chosen out-of-band, opted into with
- * `ULTRALYTICS_SMOKE_EXPORT_REF=owner/project/model:exportId`. It skips when
- * the variable is absent, so this suite never selects or cancels an
- * arbitrary export.
+ * verification. The surfaces that need a model with real weights and history
+ * — `model_download`, `model_predict`, a terminal-status `training_cancel`
+ * refusal, and the export tools' field shapes — are covered against one
+ * existing fixture chosen out-of-band, opted into with
+ * `ULTRALYTICS_SMOKE_EXPORT_REF=owner/project/model:exportId`. The fixture
+ * must be a trained model with downloadable weights, a terminal training
+ * status, and an export whose own job has also reached a terminal status.
+ * This suite skips that coverage when the variable is absent, so it never
+ * selects an arbitrary model or export on its own.
  */
 
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, test } from "vitest";
+import { modelDownload } from "../../src/tools/downloads.js";
 import {
   exportCancel,
   exportStatus,
   exportsList,
 } from "../../src/tools/exports.js";
 import { modelsDelete, modelsGet, modelsList } from "../../src/tools/models.js";
+import { modelPredict } from "../../src/tools/predict.js";
 import { projectsCreate, projectsDelete } from "../../src/tools/projects.js";
 import { trainingCancel, trainingMonitor } from "../../src/tools/training.js";
 import {
@@ -65,6 +75,10 @@ function parseExportFixtureRef(ref: string): {
     exportId: ref.slice(separator + 1),
   };
 }
+
+/** A public, stable sample image `model_predict` can fetch without a local
+ * upload path or a base64 payload near the tool's argument-size limits. */
+const SAMPLE_IMAGE_URL = "https://ultralytics.com/images/bus.jpg";
 
 const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
 
@@ -179,21 +193,14 @@ describe.skipIf(!apiKey)(
               // The published contract disagrees with the platform twice over
               // (REST docs claim 409, the OpenAPI spec claims a `warning`
               // field); live behavior is a 400 whose message names the job's
-              // actual status. `training_cancel` must surface that message
-              // verbatim rather than branch on either documented shape.
+              // actual status. This pins the refusal for a job that never
+              // started; the fixture-backed test below pins the same
+              // refusal for a job that already finished, since those are
+              // different states and either could regress independently.
               await expect(trainingCancel(client, modelRef)).rejects.toThrow(
                 /cannot cancel training with status: untrained/i,
               );
 
-              const exported = await exportsList(client, modelRef);
-              expect(lastStatus(records)).toBe(EXPECTED_STATUS.exportsList);
-              expect(exported.data).toEqual([]);
-
-              // `model_download` and `model_predict` are also model-scoped
-              // reads, but this fixture is created fresh and never trained,
-              // so it has no weights to download or predict against. Their
-              // own live verification already covers those endpoints; a
-              // disposable model here would only exercise the 404 path.
               const deletedModel = await modelsDelete(client, modelRef);
               expect(lastStatus(records)).toBe(EXPECTED_STATUS.modelDelete);
               assertDeleted("model", modelRef, deletedModel);
@@ -207,16 +214,20 @@ describe.skipIf(!apiKey)(
       );
     }, 120_000);
 
-    test("export status shape and cancel refusal on a terminal export", async (ctx) => {
-      // Explicit fixture only: never auto-select an export to read or cancel.
-      // Creating one costs credits and belongs to export_create's own live
-      // verification, not this smoke test.
+    test("download, predict, terminal cancel, and export shape on a trained fixture", async (ctx) => {
+      // Explicit fixture only: never auto-select a model or export to read,
+      // download, predict against, or cancel. The fixture must already be a
+      // trained model with downloadable weights, a terminal training status,
+      // and an export whose own job has also reached a terminal status —
+      // creating any of that costs credits and belongs to training_start's
+      // and export_create's own live verification, not this smoke test.
       const exportRef = process.env.ULTRALYTICS_SMOKE_EXPORT_REF?.trim();
       if (!exportRef) {
         ctx.skip(
-          "export status coverage needs ULTRALYTICS_SMOKE_EXPORT_REF=" +
-            "owner/project/model:exportId pointing at an export whose job has " +
-            "reached a terminal status (completed or cancelled).",
+          "this coverage needs ULTRALYTICS_SMOKE_EXPORT_REF=" +
+            "owner/project/model:exportId pointing at a trained model with " +
+            "downloadable weights, a terminal training status, and an " +
+            "export whose job has also reached a terminal status.",
         );
       }
       const { modelRef, exportId } = parseExportFixtureRef(exportRef);
@@ -224,21 +235,81 @@ describe.skipIf(!apiKey)(
       const records: RecordedCall[] = [];
       const client = recordingClient(apiKey as string, records);
 
+      // `model_download` reads real weights through the signed-URL flow.
+      // The output goes to a disposable temp directory removed in `finally`,
+      // since this test only proves the download path works, not a file the
+      // suite wants to keep.
+      const downloadDir = await mkdtemp(join(tmpdir(), "mcp-smoke-dl-"));
+      try {
+        const outputPath = join(downloadDir, "weights.pt");
+        const downloaded = await modelDownload(client, modelRef, {
+          outputPath,
+        });
+        const downloadedData = downloaded.data as Record<string, unknown>;
+        expect(downloadedData.path).toBe(outputPath);
+        expect(typeof downloadedData.bytes).toBe("number");
+        expect(downloadedData.bytes as number).toBeGreaterThan(0);
+      } finally {
+        await rm(downloadDir, { recursive: true, force: true });
+      }
+
+      // `model_predict` runs real inference against a public sample image.
+      const predicted = await modelPredict(client, modelRef, {
+        source: SAMPLE_IMAGE_URL,
+      });
+      const predictedData = predicted.data as { images: unknown };
+      expect(Array.isArray(predictedData.images)).toBe(true);
+      const images = predictedData.images as Array<Record<string, unknown>>;
+      expect(images.length).toBeGreaterThan(0);
+      expect(Array.isArray(images[0].shape)).toBe(true);
+      expect(typeof images[0].speed).toBe("object");
+      expect(Array.isArray(images[0].results)).toBe(true);
+
+      // `training_cancel` on a job that already finished must surface the
+      // platform's own message naming that terminal status, not the
+      // documented 409/warning shape — the case the untrained-model test
+      // above cannot reach, since that job never started.
+      const monitored = await trainingMonitor(client, modelRef);
+      const monitoredData = monitored.data as Record<string, unknown>;
+      const terminalJobStatus = monitoredData.jobStatus as string;
+      expect(["completed", "failed", "cancelled"]).toContain(terminalJobStatus);
+      await expect(trainingCancel(client, modelRef)).rejects.toThrow(
+        new RegExp(
+          `cannot cancel training with status: ${terminalJobStatus}`,
+          "i",
+        ),
+      );
+
+      // `exports_list` must actually contain this export id with its mapped
+      // fields. A same-shaped empty array on a renamed `exports` field would
+      // pass a check that only asserts an empty list on a fresh model, so
+      // this asserts a real match instead.
+      const listed = await exportsList(client, modelRef);
+      expect(lastStatus(records)).toBe(EXPECTED_STATUS.exportsList);
+      const listedItems = listed.data as Array<Record<string, unknown>>;
+      const listedMatch = listedItems.find((item) => item.id === exportId);
+      expect(listedMatch).toBeDefined();
+      expect(typeof listedMatch?.format).toBe("string");
+      expect(["completed", "failed", "cancelled"]).toContain(
+        listedMatch?.status,
+      );
+
       const status = await exportStatus(client, modelRef, exportId);
       expect(lastStatus(records)).toBe(EXPECTED_STATUS.get);
       const statusData = status.data as Record<string, unknown>;
       expect(statusData.id).toBe(exportId);
-      expect(typeof statusData.format).toBe("string");
-      expect(typeof statusData.status).toBe("string");
+      expect(statusData.format).toBe(listedMatch?.format);
       expect(typeof statusData.createdAt).toBe("string");
       // `export_cancel` reads exactly this field to decide whether the
       // destructive verb is safe to send; a terminal status here must refuse.
-      const terminalStatus = statusData.status as string;
-      expect(["completed", "cancelled", "failed"]).toContain(terminalStatus);
+      const terminalExportStatus = statusData.status as string;
+      expect(["completed", "cancelled", "failed"]).toContain(
+        terminalExportStatus,
+      );
 
       await expect(exportCancel(client, modelRef, exportId)).rejects.toThrow(
         /is not active/i,
       );
-    }, 60_000);
+    }, 180_000);
   },
 );
