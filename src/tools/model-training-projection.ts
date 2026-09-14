@@ -1,9 +1,10 @@
 /** Shared projection over a model record's training data.
  *
- * `training_monitor` and `model_metrics` both read `trainResults`,
- * `metrics`, `bestEpoch`, `bestFitness`, `trainArgs`, and `computeCost` off
- * the same model detail response. A single projection keeps both tools
- * reading those fields the same way rather than drifting apart.
+ * `training_monitor` reads `trainResults`, `bestEpoch`, `bestFitness`, and
+ * `computeCost` off a model detail response's `model` fields through this
+ * projection. `metrics` and `trainArgs` are projected too so a future
+ * evaluation tool reading the same response can import this module
+ * unmodified, rather than re-deriving these six fields its own way.
  */
 
 import { asRecord } from "./shared.js";
