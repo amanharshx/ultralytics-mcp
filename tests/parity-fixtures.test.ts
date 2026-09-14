@@ -29,6 +29,7 @@ import {
   deploymentLogs,
   deploymentMetrics,
   deploymentPredict,
+  deploymentStop,
   deploymentsList,
   exploreDatasets,
   exploreProjects,
@@ -254,6 +255,8 @@ const TOOL_RUNNERS: Record<
       range: args.range as string | undefined,
       sparkline: args.sparkline as boolean | undefined,
     }),
+  deployment_stop: (client, args) =>
+    deploymentStop(client, args.deployment as string),
   dataset_class_stats: (client, args) =>
     datasetClassStats(client, {
       dataset: args.dataset as string,
@@ -487,6 +490,8 @@ describe("parity fixtures", () => {
         "deployment_metrics.json",
         "deployment_metrics_sparkline.json",
         "deployment_predict.json",
+        "deployment_stop.json",
+        "deployment_stop_already_stopped.json",
         "training_monitor_history.json",
         "training_monitor_active.json",
         "training_monitor_private.json",
@@ -539,7 +544,8 @@ describe("parity fixtures", () => {
       fixtureFile === "training_cancel_refused.json" ||
       fixtureFile === "export_cancel_refused.json" ||
       fixtureFile === "training_start_no_checkpoint.json" ||
-      fixtureFile === "training_start_history_warning.json"
+      fixtureFile === "training_start_history_warning.json" ||
+      fixtureFile === "deployment_stop_already_stopped.json"
     ) {
       continue;
     }
@@ -573,6 +579,29 @@ describe("parity fixtures", () => {
     const error = await trainingCancel(
       client,
       fixture.args.model as string,
+    ).catch((e) => e as UltralyticsApiError);
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(fixture.expectedError?.status);
+    expect(error.apiMessage).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: deployment_stop_already_stopped.json", async () => {
+    // Live capture: PATCH .../deployments/{owner}/{deployment} {action:stop}
+    // on an already-stopped deployment -> 400 {"error":"Cannot stop
+    // deployment with status: stopped"}.
+    const raw = readFileSync(
+      join(fixtureDir, "deployment_stop_already_stopped.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await deploymentStop(
+      client,
+      fixture.args.deployment as string,
     ).catch((e) => e as UltralyticsApiError);
     expect(error).toBeInstanceOf(UltralyticsApiError);
     expect(error.statusCode).toBe(fixture.expectedError?.status);

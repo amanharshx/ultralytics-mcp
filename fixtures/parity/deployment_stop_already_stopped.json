@@ -1,0 +1,23 @@
+{
+  "tool": "deployment_stop",
+  "args": {
+    "deployment": "example-owner/example-deployment"
+  },
+  "api": [
+    {
+      "method": "PATCH",
+      "path": "/api/deployments/example-owner/example-deployment",
+      "json": { "action": "stop" },
+      "response": {
+        "status": 400,
+        "json": {
+          "error": "Cannot stop deployment with status: stopped"
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 400,
+    "message": "Cannot stop deployment with status: stopped"
+  }
+}

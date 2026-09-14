@@ -95,10 +95,7 @@ export class UltralyticsClient {
     payload: unknown,
     options: { retryOn429?: boolean } = {},
   ): Promise<unknown> {
-    return this.request("POST", path, {
-      jsonBody: payload,
-      retryOn429: options.retryOn429 ?? false,
-    });
+    return this.jsonRequest("POST", path, payload, options);
   }
 
   /** POST multipart/form-data. Defaults to no retry. */
@@ -129,6 +126,15 @@ export class UltralyticsClient {
       formBody: form,
       retryOn429: options.retryOn429 ?? false,
     });
+  }
+
+  /** PATCH JSON. Defaults to no retry to avoid duplicate state-changing calls. */
+  async patchJson(
+    path: string,
+    payload: unknown,
+    options: { retryOn429?: boolean } = {},
+  ): Promise<unknown> {
+    return this.jsonRequest("PATCH", path, payload, options);
   }
 
   /** DELETE requests are state-changing and do not retry 429 responses. */
@@ -245,6 +251,19 @@ export class UltralyticsClient {
   }
 
   // -- internals -----------------------------------------------------------
+
+  /** Shared body for `postJson`/`patchJson`: only the HTTP verb differs. */
+  private async jsonRequest(
+    method: "POST" | "PATCH",
+    path: string,
+    payload: unknown,
+    options: { retryOn429?: boolean },
+  ): Promise<unknown> {
+    return this.request(method, path, {
+      jsonBody: payload,
+      retryOn429: options.retryOn429 ?? false,
+    });
+  }
 
   private buildUrl(path: string, params?: Record<string, unknown>): string {
     const suffix = path.startsWith("/") ? path : `/${path}`;

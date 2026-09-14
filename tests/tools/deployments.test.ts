@@ -10,6 +10,7 @@ import {
   deploymentLogs,
   deploymentMetrics,
   deploymentPredict,
+  deploymentStop,
   deploymentsList,
 } from "../../src/tools/deployments.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
@@ -883,5 +884,81 @@ describe("deploymentPredict", () => {
     await expect(
       deploymentPredict(client, "alice/road-detector", { imagePath }),
     ).rejects.toThrow(/Deployment is not ready/);
+  });
+});
+
+describe("deploymentStop", () => {
+  test("sends only {action: stop} and reports the resulting status", async () => {
+    const calls: { path: string; method: string; body: string }[] = [];
+    const fetchImpl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+        body: String(init.body ?? ""),
+      });
+      if (parsed.pathname === "/api/deployments/alice/road-detector") {
+        return jsonResponse({
+          success: true,
+          status: "stopped",
+          message: "Deployment stopped",
+        });
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+    });
+
+    const result = await deploymentStop(client, "alice/road-detector");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("PATCH");
+    expect(calls[0].body).toBe(JSON.stringify({ action: "stop" }));
+    expect(result.data).toEqual({
+      success: true,
+      status: "stopped",
+      message: "Deployment stopped",
+    });
+    expect(result.summary).toContain("stopped");
+  });
+
+  test("surfaces the server's rejection when stopping an already-stopped deployment", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector") {
+        return jsonResponse(
+          { error: "Cannot stop deployment with status: stopped" },
+          400,
+        );
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await expect(deploymentStop(client, "alice/road-detector")).rejects.toThrow(
+      /Cannot stop deployment with status: stopped/,
+    );
+  });
+
+  test("defaults the owner from the account summary for a bare slug", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/deployments/alice/road-detector") {
+        return jsonResponse({
+          success: true,
+          status: "stopped",
+          message: "Deployment stopped",
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await deploymentStop(client, "road-detector");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/deployments/alice/road-detector",
+    ]);
   });
 });

@@ -358,3 +358,37 @@ export async function deploymentPredict(
     data: { owner: resolvedOwner, deployment: slug, images, metadata },
   };
 }
+
+/** Stop one deployment by `owner/deployment` or a bare slug.
+ *
+ * Sends only `{"action":"stop"}`; the endpoint's other three PATCH actions
+ * (`start`, `resize`, `replace`) are unreachable from this tool. `stop` is a
+ * money-off switch, consistent with `training_cancel` and `export_cancel`,
+ * so it ships ungated. The endpoint preserves the deployment's URL and
+ * configuration and still counts toward deployment quota. Stopping an
+ * already-stopped deployment is rejected with a 400 (observed:
+ * `Cannot stop deployment with status: stopped`), surfaced as-is rather than
+ * treated as a success.
+ */
+export async function deploymentStop(
+  client: UltralyticsClient,
+  deployment: string,
+): Promise<NormalizedToolResult> {
+  const { owner: resolvedOwner, slug } = await resolveDeploymentRef(
+    client,
+    deployment,
+  );
+  const data = await client.patchJson(
+    `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}`,
+    { action: "stop" },
+  );
+  const fields = asRecord(data);
+  const status = typeof fields.status === "string" ? fields.status : null;
+  const message = typeof fields.message === "string" ? fields.message : null;
+  const success = fields.success ?? null;
+
+  return {
+    summary: `Deployment '${slug}' for owner '${resolvedOwner}': ${message ?? `status ${status ?? "unknown"}`}.`,
+    data: { success, status, message },
+  };
+}
