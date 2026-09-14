@@ -10,6 +10,7 @@
 
 import { UltralyticsClient } from "../../src/client.js";
 import { UltralyticsApiError } from "../../src/errors.js";
+import type { NormalizedToolResult } from "../../src/tool-result.js";
 
 export interface RecordedCall {
   method: string;
@@ -92,6 +93,21 @@ export function lastStatus(records: RecordedCall[]): number {
     throw new Error("expected at least one recorded API call");
   }
   return last.status;
+}
+
+/** Assert a delete tool's result reported `success: true`, naming the
+ * disposable resource on failure. Shared by the cleanup callback passed to
+ * `withDisposableCleanup` and by an explicit happy-path delete, so both paths
+ * fail the same way if the platform ever reports a delete that didn't work. */
+export function assertDeleted(
+  kind: string,
+  ref: string,
+  result: NormalizedToolResult,
+): void {
+  const data = result.data as Record<string, unknown>;
+  if (data.success !== true) {
+    throw new Error(`${kind} delete reported success:false for '${ref}'`);
+  }
 }
 
 /** A workspace-unique slug that is obviously disposable. */

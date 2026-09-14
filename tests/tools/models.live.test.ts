@@ -41,12 +41,30 @@ import { modelsDelete, modelsGet, modelsList } from "../../src/tools/models.js";
 import { projectsCreate, projectsDelete } from "../../src/tools/projects.js";
 import { trainingCancel, trainingMonitor } from "../../src/tools/training.js";
 import {
+  assertDeleted,
   disposableSlug,
   lastStatus,
   type RecordedCall,
   recordingClient,
   withDisposableCleanup,
 } from "./live-harness.js";
+
+/** Split `owner/project/model:exportId` into its model ref and export id. */
+function parseExportFixtureRef(ref: string): {
+  modelRef: string;
+  exportId: string;
+} {
+  const separator = ref.lastIndexOf(":");
+  if (separator === -1) {
+    throw new Error(
+      `ULTRALYTICS_SMOKE_EXPORT_REF must be 'owner/project/model:exportId', got '${ref}'.`,
+    );
+  }
+  return {
+    modelRef: ref.slice(0, separator),
+    exportId: ref.slice(separator + 1),
+  };
+}
 
 const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
 
@@ -78,13 +96,11 @@ describe.skipIf(!apiKey)(
         "project",
         projectRef,
         async () => {
-          const cleanup = await projectsDelete(client, projectRef);
-          const cleanupData = cleanup.data as Record<string, unknown>;
-          if (cleanupData.success !== true) {
-            throw new Error(
-              `cleanup delete reported success:false for '${projectRef}'`,
-            );
-          }
+          assertDeleted(
+            "project",
+            projectRef,
+            await projectsDelete(client, projectRef),
+          );
         },
         async () => {
           const project = await projectsCreate(client, {
@@ -116,13 +132,11 @@ describe.skipIf(!apiKey)(
             "model",
             modelRef,
             async () => {
-              const cleanup = await modelsDelete(client, modelRef);
-              const cleanupData = cleanup.data as Record<string, unknown>;
-              if (cleanupData.success !== true) {
-                throw new Error(
-                  `cleanup delete reported success:false for '${modelRef}'`,
-                );
-              }
+              assertDeleted(
+                "model",
+                modelRef,
+                await modelsDelete(client, modelRef),
+              );
             },
             async () => {
               const listed = await modelsList(client, projectRef);
@@ -175,19 +189,20 @@ describe.skipIf(!apiKey)(
               expect(lastStatus(records)).toBe(EXPECTED_STATUS.exportsList);
               expect(exported.data).toEqual([]);
 
+              // `model_download` and `model_predict` are also model-scoped
+              // reads, but this fixture is created fresh and never trained,
+              // so it has no weights to download or predict against. Their
+              // own live verification already covers those endpoints; a
+              // disposable model here would only exercise the 404 path.
               const deletedModel = await modelsDelete(client, modelRef);
               expect(lastStatus(records)).toBe(EXPECTED_STATUS.modelDelete);
-              expect(
-                (deletedModel.data as Record<string, unknown>).success,
-              ).toBe(true);
+              assertDeleted("model", modelRef, deletedModel);
             },
           );
 
           const deletedProject = await projectsDelete(client, projectRef);
           expect(lastStatus(records)).toBe(EXPECTED_STATUS.projectDelete);
-          expect((deletedProject.data as Record<string, unknown>).success).toBe(
-            true,
-          );
+          assertDeleted("project", projectRef, deletedProject);
         },
       );
     }, 120_000);
@@ -204,14 +219,7 @@ describe.skipIf(!apiKey)(
             "reached a terminal status (completed or cancelled).",
         );
       }
-      const separator = (exportRef as string).lastIndexOf(":");
-      if (separator === -1) {
-        throw new Error(
-          `ULTRALYTICS_SMOKE_EXPORT_REF must be 'owner/project/model:exportId', got '${exportRef}'.`,
-        );
-      }
-      const modelRef = (exportRef as string).slice(0, separator);
-      const exportId = (exportRef as string).slice(separator + 1);
+      const { modelRef, exportId } = parseExportFixtureRef(exportRef);
 
       const records: RecordedCall[] = [];
       const client = recordingClient(apiKey as string, records);
