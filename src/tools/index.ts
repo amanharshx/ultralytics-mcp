@@ -32,6 +32,7 @@ import {
   deploymentLogs,
   deploymentMetrics,
   deploymentPredict,
+  deploymentStop,
   deploymentsList,
 } from "./deployments.js";
 import { modelDownload } from "./downloads.js";
@@ -74,6 +75,7 @@ export {
   deploymentLogs,
   deploymentMetrics,
   deploymentPredict,
+  deploymentStop,
   deploymentsList,
 } from "./deployments.js";
 export { modelDownload } from "./downloads.js";
@@ -975,6 +977,30 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             iou: iou as number | undefined,
             imgsz: imgsz as number | undefined,
           }),
+        ),
+  }),
+  tool({
+    name: "deployment_stop",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Stop a deployment by owner/deployment or a bare slug (owner defaults to the account owner). Sends only {action: stop}; the endpoint's start/resize/replace actions are unreachable from this tool. Stopping preserves the deployment's URL and configuration and still counts toward deployment quota; it is a money-off switch and ships ungated, consistent with training_cancel and export_cancel. Stopping an already-stopped deployment is rejected by the server (400) rather than treated as a success. Reversing this (start) is not available in this tool set.",
+    inputSchema: {
+      deployment: z
+        .string()
+        .describe("Deployment ref by owner/deployment or a bare slug."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ deployment }) =>
+        toMcpTextResult(
+          await deploymentStop(getClient(), deployment as string),
         ),
   }),
   tool({

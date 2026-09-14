@@ -1,0 +1,29 @@
+{
+  "tool": "deployment_stop",
+  "args": {
+    "deployment": "example-owner/example-deployment"
+  },
+  "api": [
+    {
+      "method": "PATCH",
+      "path": "/api/deployments/example-owner/example-deployment",
+      "json": { "action": "stop" },
+      "response": {
+        "status": 200,
+        "json": {
+          "success": true,
+          "status": "stopped",
+          "message": "Deployment stopped"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deployment 'example-deployment' for owner 'example-owner': Deployment stopped.",
+    "data": {
+      "success": true,
+      "status": "stopped",
+      "message": "Deployment stopped"
+    }
+  }
+}

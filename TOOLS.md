@@ -566,7 +566,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Deployments
 
-6 tools.
+7 tools.
 
 ### deployments_list
 
@@ -636,6 +636,16 @@ Metadata: read-only, external/live
 | `conf` | number | No | Confidence threshold (0.01-1, server default applies if omitted). |
 | `iou` | number | No | IoU threshold (0-0.95, server default applies if omitted). |
 | `imgsz` | number | No | Inference image size (32-1280, server default applies if omitted). |
+
+### deployment_stop
+
+Stop a deployment by owner/deployment or a bare slug (owner defaults to the account owner). Sends only {action: stop}; the endpoint's start/resize/replace actions are unreachable from this tool. Stopping preserves the deployment's URL and configuration and still counts toward deployment quota; it is a money-off switch and ships ungated, consistent with training_cancel and export_cancel. Stopping an already-stopped deployment is rejected by the server (400) rather than treated as a success. Reversing this (start) is not available in this tool set.
+
+Metadata: state-changing, destructive, non-idempotent, external/live
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
 
 ## Infrastructure
 

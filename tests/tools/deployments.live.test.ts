@@ -33,6 +33,7 @@ import {
   deploymentLogs,
   deploymentMetrics,
   deploymentPredict,
+  deploymentStop,
   deploymentsList,
 } from "../../src/tools/deployments.js";
 import {
@@ -105,11 +106,12 @@ async function pollUntilStopped(
 
 /** Stop a deployment through the raw PATCH endpoint.
  *
- * No `deployment_stop` tool ships in this ticket (ticket 9, pass 1) -- the
- * client has no generic PATCH verb yet either, since only ticket 9 needs
- * one. This calls the endpoint directly, exactly as `deployment_get`'s live
- * suite calls `postJson`/`delete` directly to set up and tear down a
- * deployment outside of any tool under test.
+ * A raw setup helper for suites where reaching `stopped` is a precondition
+ * (health, logs, metrics, predict), kept separate from `deployment_stop`
+ * itself, which has its own suite below as the tool under test. Calls the
+ * endpoint directly, exactly as `deployment_get`'s live suite calls
+ * `postJson`/`delete` directly to set up and tear down a deployment outside
+ * of any tool under test.
  */
 async function rawPatchStop(apiKeyValue: string, path: string): Promise<void> {
   const response = await fetch(`${getApiBase()}${path}`, {
@@ -603,5 +605,80 @@ describe.skipIf(!apiKey)("deployment_predict live smoke", () => {
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     10 * 60_000,
+  );
+});
+
+describe.skipIf(!apiKey)("deployment_stop live smoke", () => {
+  test(
+    "stops a running deployment preserving its URL, and refuses to stop it again",
+    async () => {
+      const records: RecordedCall[] = [];
+      const client = recordingClient(apiKey as string, records);
+      const owner = await client.getAccountOwner();
+
+      const creditsBefore = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+
+      const slug = disposableSlug("zz-mcp-ticket9");
+      const ref = `${owner}/${slug}`;
+
+      await withDisposableCleanup(
+        "deployment",
+        ref,
+        async () => {
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+        async () => {
+          await client.postJson(`/deployments/${owner}`, {
+            project: "pothole",
+            model: "yolo26s",
+            deployment: slug,
+            name: "zz mcp ticket9 delete me",
+            region: "europe-west1",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+
+          const ready = await pollUntilReady(client, ref, 5 * 60_000);
+          const serviceUrl = ready.serviceUrl;
+          expect(typeof serviceUrl).toBe("string");
+
+          const stopped = await deploymentStop(client, ref);
+          const stoppedData = stopped.data as Record<string, unknown>;
+          expect(stoppedData.success).toBe(true);
+          expect(stoppedData.status).toBe("stopped");
+          expect(typeof stoppedData.message).toBe("string");
+          expect(stopped.summary).toContain("stopped");
+
+          const afterStop = await deploymentGet(client, ref);
+          const afterStopData = afterStop.data as Record<string, unknown>;
+          expect(afterStopData.status).toBe("stopped");
+          expect(afterStopData.serviceUrl).toBe(serviceUrl);
+
+          // Observed live: stopping an already-stopped deployment is
+          // rejected with a 400, not treated as a repeatable no-op.
+          const repeatError = await deploymentStop(client, ref).catch(
+            (error) => error as UltralyticsApiError,
+          );
+          expect(repeatError).toBeInstanceOf(UltralyticsApiError);
+          expect((repeatError as UltralyticsApiError).statusCode).toBe(400);
+          expect(
+            (repeatError as UltralyticsApiError).apiMessage.length,
+          ).toBeGreaterThan(0);
+
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+      );
+
+      const creditsAfter = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+      expect(creditsAfter).toBe(creditsBefore);
+
+      const listAfter = await deploymentsList(client, owner);
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
+      expect(remaining.some((item) => item.deployment === slug)).toBe(false);
+    },
+    8 * 60_000,
   );
 });

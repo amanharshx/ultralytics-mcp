@@ -243,6 +243,36 @@ describe("UltralyticsClient POST", () => {
   });
 });
 
+describe("UltralyticsClient.patchJson", () => {
+  test("sends a PATCH request with a JSON content-type and body", async () => {
+    const { impl, calls } = makeFetch([
+      new Response(JSON.stringify({ success: true, status: "stopped" }), {
+        status: 200,
+      }),
+    ]);
+    const result = await client(impl).patchJson("/deployments/alice/road", {
+      action: "stop",
+    });
+    expect(result).toEqual({ success: true, status: "stopped" });
+    expect(calls[0].init.method).toBe("PATCH");
+    expect(headersOf(calls[0].init)["Content-Type"]).toBe("application/json");
+    expect(calls[0].init.body).toBe(JSON.stringify({ action: "stop" }));
+  });
+
+  test("does not retry a 429 (no duplicate state-changing calls)", async () => {
+    const { impl, calls } = makeFetch([
+      new Response(JSON.stringify({ error: "rate" }), {
+        status: 429,
+        headers: { "Retry-After": "0" },
+      }),
+    ]);
+    await expect(
+      client(impl).patchJson("/deployments/alice/road", { action: "stop" }),
+    ).rejects.toThrowError(UltralyticsApiError);
+    expect(calls).toHaveLength(1);
+  });
+});
+
 describe("UltralyticsClient.getAccountOwner", () => {
   test("reads the owner from the account summary", async () => {
     const { impl, calls } = makeFetch([
