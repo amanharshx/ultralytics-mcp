@@ -22,7 +22,12 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { deploymentGet, deploymentsList } from "../../src/tools/deployments.js";
+import { getApiBase } from "../../src/config.js";
+import {
+  deploymentGet,
+  deploymentHealth,
+  deploymentsList,
+} from "../../src/tools/deployments.js";
 import {
   disposableSlug,
   lastStatus,
@@ -63,6 +68,50 @@ async function pollUntilReady(
   throw new Error(
     `deployment '${ref}' did not reach ready within ${timeoutMs}ms (last status: ${String(last.status)})`,
   );
+}
+
+/** Poll a deployment until `status` reaches `stopped`, or give up. */
+async function pollUntilStopped(
+  client: Parameters<typeof deploymentGet>[0],
+  ref: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  let last: Record<string, unknown> = {};
+  while (Date.now() < deadline) {
+    const result = await deploymentGet(client, ref);
+    last = result.data as Record<string, unknown>;
+    if (last.status === "stopped") {
+      return last;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+  throw new Error(
+    `deployment '${ref}' did not reach stopped within ${timeoutMs}ms (last status: ${String(last.status)})`,
+  );
+}
+
+/** Stop a deployment through the raw PATCH endpoint.
+ *
+ * No `deployment_stop` tool ships in this ticket (ticket 9, pass 1) -- the
+ * client has no generic PATCH verb yet either, since only ticket 9 needs
+ * one. This calls the endpoint directly, exactly as `deployment_get`'s live
+ * suite calls `postJson`/`delete` directly to set up and tear down a
+ * deployment outside of any tool under test.
+ */
+async function rawPatchStop(apiKeyValue: string, path: string): Promise<void> {
+  const response = await fetch(`${getApiBase()}${path}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${apiKeyValue}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ action: "stop" }),
+  });
+  if (!response.ok) {
+    throw new Error(`PATCH ${path} failed: HTTP ${response.status}`);
+  }
 }
 
 describe.skipIf(!apiKey)("deployments_list live smoke", () => {
@@ -171,5 +220,73 @@ describe.skipIf(!apiKey)("deployment_get live smoke", () => {
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     6 * 60_000,
+  );
+});
+
+describe.skipIf(!apiKey)("deployment_health live smoke", () => {
+  test(
+    "probes health on a ready deployment and again once stopped",
+    async () => {
+      const records: RecordedCall[] = [];
+      const client = recordingClient(apiKey as string, records);
+      const owner = await client.getAccountOwner();
+
+      const creditsBefore = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+
+      const slug = disposableSlug("zz-mcp-ticket5");
+      const ref = `${owner}/${slug}`;
+
+      await withDisposableCleanup(
+        "deployment",
+        ref,
+        async () => {
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+        async () => {
+          await client.postJson(`/deployments/${owner}`, {
+            project: "pothole",
+            model: "yolo26s",
+            deployment: slug,
+            name: "zz mcp ticket5 delete me",
+            region: "europe-west1",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+
+          await pollUntilReady(client, ref, 5 * 60_000);
+
+          const health = await deploymentHealth(client, ref);
+          const data = health.data as Record<string, unknown>;
+          expect(data.healthy).toBe(true);
+          expect(typeof data.status).toBe("number");
+          expect(typeof data.latencyMs).toBe("number");
+          expect(health.summary).toContain("probe status");
+
+          await rawPatchStop(apiKey as string, `/deployments/${owner}/${slug}`);
+          await pollUntilStopped(client, ref, 2 * 60_000);
+
+          const stoppedHealth = await deploymentHealth(client, ref);
+          const stoppedData = stoppedHealth.data as Record<string, unknown>;
+          expect(stoppedData.healthy).toBe(false);
+          expect(typeof stoppedData.status).toBe("number");
+          expect(typeof stoppedData.latencyMs).toBe("number");
+          expect(typeof stoppedData.error).toBe("string");
+          expect(stoppedHealth.summary).toContain("unhealthy");
+
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+      );
+
+      const creditsAfter = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+      expect(creditsAfter).toBe(creditsBefore);
+
+      const listAfter = await deploymentsList(client, owner);
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
+      expect(remaining.some((item) => item.deployment === slug)).toBe(false);
+    },
+    8 * 60_000,
   );
 });

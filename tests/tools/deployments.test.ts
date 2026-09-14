@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { deploymentGet, deploymentsList } from "../../src/tools/deployments.js";
+import {
+  deploymentGet,
+  deploymentHealth,
+  deploymentsList,
+} from "../../src/tools/deployments.js";
 import { jsonResponse, routeClient } from "../helpers.js";
 
 describe("deploymentsList", () => {
@@ -340,6 +344,64 @@ describe("deploymentGet", () => {
     expect(calls.map((call) => call.path)).toEqual([
       "/api/account/summary",
       `/api/deployments/alice/${id}`,
+    ]);
+  });
+});
+
+describe("deploymentHealth", () => {
+  test("surfaces healthy, status, and latencyMs verbatim", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/health") {
+        return jsonResponse({ healthy: true, status: 200, latencyMs: 326 });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentHealth(client, "alice/road-detector");
+    expect(result.data).toEqual({ healthy: true, status: 200, latencyMs: 326 });
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/deployments/alice/road-detector/health",
+    ]);
+  });
+
+  test("surfaces error when present, on an unhealthy probe", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/health") {
+        return jsonResponse({
+          healthy: false,
+          status: 503,
+          latencyMs: 5000,
+          error: "service unavailable",
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentHealth(client, "alice/road-detector");
+    expect(result.data).toEqual({
+      healthy: false,
+      status: 503,
+      latencyMs: 5000,
+      error: "service unavailable",
+    });
+    expect(result.summary).toContain("unhealthy");
+  });
+
+  test("defaults the owner from the account summary for a bare slug", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/deployments/alice/road-detector/health") {
+        return jsonResponse({ healthy: true, status: 200, latencyMs: 100 });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await deploymentHealth(client, "road-detector");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/deployments/alice/road-detector/health",
     ]);
   });
 });

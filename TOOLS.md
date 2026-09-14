@@ -565,7 +565,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Deployments
 
-2 tools.
+3 tools.
 
 ### deployments_list
 
@@ -580,6 +580,16 @@ Metadata: read-only
 ### deployment_get
 
 Get details for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). serviceUrl and deployedAt are null until the deployment reaches status ready.
+
+Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
+
+### deployment_health
+
+Probe one deployment's health by owner/deployment or a bare slug (owner defaults to the account owner). status is the upstream HTTP status the health probe observed at the deployment's own service URL, not the status of this tool call.
 
 Metadata: read-only
 

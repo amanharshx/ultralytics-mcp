@@ -1,0 +1,28 @@
+{
+  "tool": "deployment_health",
+  "args": {
+    "deployment": "example-owner/example-deployment"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner/example-deployment/health",
+      "response": {
+        "status": 200,
+        "json": {
+          "healthy": true,
+          "status": 200,
+          "latencyMs": 332
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deployment 'example-deployment' for owner 'example-owner': healthy (probe status 200, 332ms).",
+    "data": {
+      "healthy": true,
+      "status": 200,
+      "latencyMs": 332
+    }
+  }
+}
