@@ -26,7 +26,7 @@ import {
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
-import { deploymentsList } from "./deployments.js";
+import { deploymentGet, deploymentsList } from "./deployments.js";
 import { modelDownload } from "./downloads.js";
 import {
   exportCancel,
@@ -61,7 +61,7 @@ export {
   datasetVersionCreate,
   exploreDatasets,
 } from "./datasets.js";
-export { deploymentsList } from "./deployments.js";
+export { deploymentGet, deploymentsList } from "./deployments.js";
 export { modelDownload } from "./downloads.js";
 export {
   exportCancel,
@@ -804,6 +804,23 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         toMcpTextResult(
           await deploymentsList(getClient(), owner as string | undefined),
         ),
+  }),
+  tool({
+    name: "deployment_get",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Get details for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). serviceUrl and deployedAt are null until the deployment reaches status ready.",
+    inputSchema: {
+      deployment: z
+        .string()
+        .describe("Deployment ref by owner/deployment or a bare slug."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    createHandler:
+      (getClient) =>
+      async ({ deployment }) =>
+        toMcpTextResult(await deploymentGet(getClient(), deployment as string)),
   }),
   tool({
     name: "training_monitor",

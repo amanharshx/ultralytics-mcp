@@ -565,7 +565,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Deployments
 
-1 tools.
+2 tools.
 
 ### deployments_list
 
@@ -576,6 +576,16 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `owner` | string | No | Workspace owner; defaults to the account owner. |
+
+### deployment_get
+
+Get details for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). serviceUrl and deployedAt are null until the deployment reaches status ready.
+
+Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
 
 ## Infrastructure
 

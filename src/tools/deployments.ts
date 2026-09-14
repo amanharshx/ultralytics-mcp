@@ -2,7 +2,30 @@
 
 import type { UltralyticsClient } from "../client.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { listField } from "./shared.js";
+import { asRecord, listField } from "./shared.js";
+
+/** Split a deployment ref into an optional owner and a bare deployment slug.
+ *
+ * Unlike project, dataset, and model refs, no resolver exists for
+ * deployments: a bare 24-hex id is not rejected here, since nothing on the
+ * platform rejects it either. `owner/deployment` splits on the last `/`;
+ * anything without a `/` is a bare slug, and the caller fills the owner from
+ * the account summary.
+ */
+function splitDeploymentRef(ref: string): {
+  owner: string | null;
+  deployment: string;
+} {
+  const trimmed = ref.trim();
+  const slashIndex = trimmed.lastIndexOf("/");
+  if (slashIndex === -1) {
+    return { owner: null, deployment: trimmed };
+  }
+  return {
+    owner: trimmed.slice(0, slashIndex),
+    deployment: trimmed.slice(slashIndex + 1),
+  };
+}
 
 /** List deployments in the workspace, optionally for an explicit owner.
  *
@@ -43,5 +66,60 @@ export async function deploymentsList(
   return {
     summary: `${items.length} deployment(s) for owner '${resolvedOwner}'.`,
     data: items,
+  };
+}
+
+/** Read one deployment by `owner/deployment` or a bare slug.
+ *
+ * `serviceUrl` and `deployedAt` are absent until the deployment reaches
+ * `ready`; both are reported as `null` rather than omitted so a caller never
+ * has to guess between "absent" and "not yet fetched". `apiKeyId` is never
+ * echoed even if the platform ever returns it: the Deployment object carries
+ * the key the endpoint authenticates with.
+ */
+export async function deploymentGet(
+  client: UltralyticsClient,
+  deployment: string,
+): Promise<NormalizedToolResult> {
+  const { owner: refOwner, deployment: slug } = splitDeploymentRef(deployment);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = await client.get(
+    `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}`,
+  );
+  const record = asRecord(data);
+  const fields = asRecord(record.deployment);
+  const serviceUrl =
+    typeof fields.serviceUrl === "string" ? fields.serviceUrl : null;
+  const deployedAt =
+    typeof fields.deployedAt === "string" ? fields.deployedAt : null;
+  const status = fields.status ?? null;
+
+  const result: Record<string, unknown> = {
+    id: fields.id ?? null,
+    owner: fields.owner ?? null,
+    project: fields.project ?? null,
+    model: fields.model ?? null,
+    task: fields.task ?? null,
+    deployment: fields.deployment ?? null,
+    name: fields.name ?? null,
+    status,
+    region: fields.region ?? null,
+    serviceUrl,
+    resources: fields.resources ?? null,
+    deployedAt,
+    createdAt: fields.createdAt ?? null,
+    updatedAt: fields.updatedAt ?? null,
+  };
+  if (typeof fields.metered === "boolean") {
+    result.metered = fields.metered;
+  }
+  if (typeof fields.statusMessage === "string") {
+    result.statusMessage = fields.statusMessage;
+  }
+
+  const urlNote = serviceUrl ?? "not yet available";
+  return {
+    summary: `Deployment '${slug}' for owner '${resolvedOwner}': status ${status ?? "unknown"}, serviceUrl ${urlNote}.`,
+    data: result,
   };
 }
