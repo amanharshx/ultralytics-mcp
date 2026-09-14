@@ -263,7 +263,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 - `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run — that path replaces its status, epoch count, and per-epoch metric history irrecoverably
 - Ambiguous project or dataset refs fail instead of guessing
 - Signed upload and download URLs do not forward `Authorization`
-- Local upload tools read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
+- Local upload tools and `deployment_predict` read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
 - `model_download` writes to the requested local path; review `output_path` and `overwrite` before approving
 - Adding a named YOLO ZIP (with `data.yaml` class names) to an existing dataset imports its labels and merges classes
 - Re-ingest does not re-label images already in the dataset (use the annotation editor); re-uploading the same image under a different split can create a duplicate
