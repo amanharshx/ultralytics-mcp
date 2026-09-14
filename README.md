@@ -238,10 +238,11 @@ You should see `ultralytics` in configured MCP servers.
 - Cancel a running training job; the latest checkpoint is preserved and the model is kept
 - Run model prediction from image URL or base64 input
 - Download model weights to local path
-- Create exports and training jobs with explicit cost confirmation
+- Create exports and training jobs with explicit cost confirmation; starting is billable immediately, so the estimated cost and remaining balance are reported after the job starts, not before
 - Cancel an active export before it finishes; refuses on a finished export instead of deleting its artifact
 - Pass advanced YOLO training settings through `training_start.train_args`
 - Start training from existing project models or official YOLO base checkpoints
+- Fine-tune sequentially across a list of datasets in one training job
 
 ## Tools
 

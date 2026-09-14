@@ -127,19 +127,23 @@ function formatDatasetUri(dataset: { owner: string; dataset: string }): string {
 function validateCheckpointCompatibility(
   datasetTask: string | null,
   checkpointTask: string,
+  datasetLabel: string,
 ): void {
   if (datasetTask === null) {
     throw new Error(
-      "Resolved dataset is missing a task; cannot select a base checkpoint.",
+      `Dataset '${datasetLabel}' is missing a task; cannot select a base checkpoint.`,
     );
   }
   const allowedTasks = DATASET_TASK_COMPATIBILITY[datasetTask];
   if (!allowedTasks) {
-    throw new Error(`Unsupported dataset task '${datasetTask}'.`);
+    throw new Error(
+      `Unsupported dataset task '${datasetTask}' for dataset '${datasetLabel}'.`,
+    );
   }
   if (!allowedTasks.includes(checkpointTask)) {
     throw new Error(
-      `Checkpoint task '${checkpointTask}' is not compatible with dataset task '${datasetTask}'.`,
+      `Checkpoint task '${checkpointTask}' is not compatible with dataset task ` +
+        `'${datasetTask}' for dataset '${datasetLabel}'.`,
     );
   }
 }
@@ -354,19 +358,25 @@ export async function trainingCancel(
  *
  * Resolves the model, project, and dataset references by pure string parsing
  * (ids are not addressable on any of them) and fills a missing owner from the
- * account summary. `trainArgs.data` is built as the three-segment
+ * account summary. `trainArgs.data` is built from the three-segment
  * `ul://owner/datasets/slug` URI the platform requires; a bare dataset id is
- * not accepted. Training from an existing model fetches it through the live
- * owner-scoped endpoint to read its database id — the start endpoint takes an
- * id by design while every other endpoint takes owner and slug — and reuses
- * its own stored base checkpoint for `trainArgs.model` verbatim. Checkpoint
- * mode creates a project model first from owner and project slug (the
- * platform assigns the new model's slug; it no longer accepts a requested
- * name) and validates the checkpoint's inferred task against the dataset's
- * task before creating anything. The endpoint validates at creation, so an
- * unusable dataset is rejected before any compute starts; use
- * `training_cancel` to stop a job that is already running. The response's
- * projected cost and remaining balance are surfaced verbatim rather than
+ * not accepted. `dataset` accepts either one ref or a list of refs for
+ * sequential fine-tuning, matching the platform's own `trainArgs.data`
+ * contract: a single ref becomes a single URI string, a list becomes a list
+ * of URIs in the given order. Training from an existing model fetches it
+ * through the live owner-scoped endpoint to read its database id — the start
+ * endpoint takes an id by design while every other endpoint takes owner and
+ * slug — and reuses its own stored base checkpoint for `trainArgs.model`
+ * verbatim. Checkpoint mode creates a project model first from owner and
+ * project slug (the platform assigns the new model's slug; it no longer
+ * accepts a requested name) and validates the checkpoint's inferred task
+ * against every dataset's task before creating anything, so a list with one
+ * incompatible entry is refused up front rather than partway through. The
+ * endpoint validates at creation, so an unusable dataset is rejected before
+ * any compute starts; use `training_cancel` to stop a job that is already
+ * running. Starting is billable immediately: the platform has no cost
+ * preview before that, so the projected cost and remaining balance are only
+ * known from the start response, and are surfaced verbatim rather than
  * discarded.
  */
 export async function trainingStart(
@@ -374,7 +384,7 @@ export async function trainingStart(
   options: {
     model: string;
     project: string;
-    dataset: string;
+    dataset: string | string[];
     gpuType: string;
     trainArgs?: Record<string, unknown>;
     epochs?: number;
@@ -397,7 +407,11 @@ export async function trainingStart(
     confirmCost = false,
   } = options;
   if (!confirmCost) {
-    throw new Error("Set confirm_cost=true to start a cloud training job.");
+    throw new Error(
+      "Set confirm_cost=true to start a cloud training job. Starting is " +
+        "billable immediately; the platform has no cost preview before that. " +
+        "The estimated cost and remaining balance are reported after the job starts.",
+    );
   }
   if (!gpuType?.trim()) {
     throw new Error("`gpu_type` is required.");
@@ -412,19 +426,25 @@ export async function trainingStart(
   if (batch !== undefined && batch !== -1 && batch <= 0) {
     throw new Error("`batch` must be -1 for auto or greater than 0.");
   }
+  const datasetRefs = Array.isArray(dataset) ? dataset : [dataset];
+  if (datasetRefs.length === 0) {
+    throw new Error("`dataset` must include at least one dataset reference.");
+  }
 
   const resolvedProject = resolveProject(project);
-  const resolvedDataset = resolveDataset(dataset);
+  const resolvedDatasets = datasetRefs.map((ref) => resolveDataset(ref));
   const checkpoint = checkpointFromRef(model);
 
-  const datasetOwner =
-    resolvedDataset.owner ?? (await client.getAccountOwner());
+  const datasetOwners: string[] = [];
+  for (const resolved of resolvedDatasets) {
+    datasetOwners.push(resolved.owner ?? (await client.getAccountOwner()));
+  }
+  const datasetUris = resolvedDatasets.map((resolved, i) =>
+    formatDatasetUri({ owner: datasetOwners[i], dataset: resolved.dataset }),
+  );
   const trainArgs: Record<string, unknown> = {
     ...passthroughTrainArgs,
-    data: formatDatasetUri({
-      owner: datasetOwner,
-      dataset: resolvedDataset.dataset,
-    }),
+    data: Array.isArray(dataset) ? datasetUris : datasetUris[0],
   };
 
   let modelId: string;
@@ -450,13 +470,21 @@ export async function trainingStart(
     modelSlugDisplay = resolvedModel.model;
   } else {
     const checkpointTask = inferCheckpointTask(checkpoint);
-    const datasetDetail = await client.get(
-      `/datasets/${encodeURIComponent(datasetOwner)}/${encodeURIComponent(resolvedDataset.dataset)}`,
-    );
-    const datasetFields = asRecord(asRecord(datasetDetail).dataset);
-    const datasetTask =
-      typeof datasetFields.task === "string" ? datasetFields.task : null;
-    validateCheckpointCompatibility(datasetTask, checkpointTask);
+    for (let i = 0; i < resolvedDatasets.length; i++) {
+      const owner = datasetOwners[i];
+      const resolved = resolvedDatasets[i];
+      const datasetDetail = await client.get(
+        `/datasets/${encodeURIComponent(owner)}/${encodeURIComponent(resolved.dataset)}`,
+      );
+      const datasetFields = asRecord(asRecord(datasetDetail).dataset);
+      const datasetTask =
+        typeof datasetFields.task === "string" ? datasetFields.task : null;
+      validateCheckpointCompatibility(
+        datasetTask,
+        checkpointTask,
+        `${owner}/${resolved.dataset}`,
+      );
+    }
     const projectOwner =
       resolvedProject.owner ?? (await client.getAccountOwner());
     const created = await client.postJson("/models", {

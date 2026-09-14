@@ -345,7 +345,7 @@ const TOOL_RUNNERS: Record<
     trainingStart(client, {
       model: args.model as string,
       project: args.project as string,
-      dataset: args.dataset as string,
+      dataset: args.dataset as string | string[],
       gpuType: args.gpu_type as string,
       trainArgs: args.train_args as Record<string, unknown> | undefined,
       epochs: args.epochs as number | undefined,

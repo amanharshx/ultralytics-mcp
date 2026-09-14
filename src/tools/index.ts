@@ -1086,7 +1086,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; checkpoint mode also checks the checkpoint's task against the dataset's task up front. Reports the projected cost and remaining balance the platform returns. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
+      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; checkpoint mode also checks the checkpoint's task against every dataset's task up front. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
     inputSchema: {
       model: z
         .string()
@@ -1097,9 +1097,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .describe("Project ref that owns the training job and resolved model."),
       dataset: z
-        .string()
+        .union([z.string(), z.array(z.string())])
         .describe(
-          "Dataset ref by slug, owner/slug, or ul:// URI used as training data for the job.",
+          "Dataset ref by slug, owner/slug, or ul:// URI, or a list of refs to fine-tune on sequentially.",
         ),
       gpu_type: z.string().describe("Cloud GPU type to allocate for training."),
       train_args: z.record(z.string(), z.unknown()).optional(),
@@ -1110,7 +1110,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       confirm_cost: z
         .boolean()
         .optional()
-        .describe("Must be true to allow a credit-costing training run."),
+        .describe(
+          "Must be true to allow a credit-costing training run. Starting is billable immediately; the platform has no cost preview before that, so the estimated cost and remaining balance are only reported after the job starts.",
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -1141,6 +1143,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           confirm_cost: true,
         },
       },
+      {
+        title: "Fine-tune sequentially across multiple datasets",
+        input: {
+          model: "team/project/my-model",
+          project: "team/project",
+          dataset: ["team/road-segments", "team/warehouse-items"],
+          gpu_type: "rtx-4090",
+          confirm_cost: true,
+        },
+      },
     ],
     createHandler:
       (getClient) =>
@@ -1160,7 +1172,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           await trainingStart(getClient(), {
             model: model as string,
             project: project as string,
-            dataset: dataset as string,
+            dataset: dataset as string | string[],
             gpuType: gpu_type as string,
             trainArgs: train_args as Record<string, unknown> | undefined,
             epochs: epochs as number | undefined,
