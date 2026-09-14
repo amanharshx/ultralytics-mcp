@@ -41,6 +41,27 @@ interface RequestSpec {
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
+/** Pull a non-empty message out of an error-response field.
+ *
+ * Accepts the field as a plain non-empty string, or one level of
+ * `{message: string}` nesting (some error sources wrap it, e.g. a body-size
+ * gate in front of the app). An empty string is treated as absent so the
+ * caller falls through to the next field instead of surfacing a blank
+ * message.
+ */
+function extractErrorMessage(value: unknown): string | undefined {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const nested = (value as Record<string, unknown>).message;
+    if (typeof nested === "string" && nested.length > 0) {
+      return nested;
+    }
+  }
+  return undefined;
+}
+
 export class UltralyticsClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -321,20 +342,16 @@ export class UltralyticsClient {
         const parsed = JSON.parse(text);
         if (parsed && typeof parsed === "object") {
           const obj = parsed as Record<string, unknown>;
-          const raw = obj.error ?? obj.message;
-          // The app's own ErrorResponse.error is always a string, but a gate
-          // in front of the app (a body-size limit, for example) can return
-          // its own shape instead, e.g. {error: {code, message}}. Unwrap one
-          // level so the server's actual message still surfaces rather than
-          // an unreadable stringified object.
-          if (typeof raw === "string") {
-            message = raw;
-          } else if (raw && typeof raw === "object") {
-            const nested = (raw as Record<string, unknown>).message;
-            if (typeof nested === "string") {
-              message = nested;
-            }
-          }
+          // The app's own ErrorResponse.error is always a non-empty string,
+          // but a gate in front of the app (a body-size limit, for example)
+          // can return its own shape instead, e.g. {error: {code, message}}.
+          // Try error, then message, unwrapping one level of {message}
+          // object each time, so the server's actual message still surfaces
+          // rather than an unreadable stringified object or a blank string.
+          message =
+            extractErrorMessage(obj.error) ??
+            extractErrorMessage(obj.message) ??
+            message;
         }
       } catch {
         message = text.slice(0, 300);

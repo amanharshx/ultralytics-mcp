@@ -170,6 +170,26 @@ describe("UltralyticsClient.get", () => {
     expect(String(err)).toMatch(/Request Entity Too Large/);
   });
 
+  test("falls through to message and then the default on an empty-string error, rather than surfacing blank", async () => {
+    const emptyError = makeFetch([
+      new Response(JSON.stringify({ error: "" }), { status: 400 }),
+    ]);
+    const err = await client(emptyError.impl)
+      .get("/projects")
+      .catch((e) => e as UltralyticsApiError);
+    expect(err.apiMessage).toBe("request failed");
+
+    const emptyErrorWithMessage = makeFetch([
+      new Response(JSON.stringify({ error: "", message: "Fallback message" }), {
+        status: 400,
+      }),
+    ]);
+    const errWithFallback = await client(emptyErrorWithMessage.impl)
+      .get("/projects")
+      .catch((e) => e as UltralyticsApiError);
+    expect(errWithFallback.apiMessage).toBe("Fallback message");
+  });
+
   test("retries a 429 once then succeeds", async () => {
     const { impl, calls } = makeFetch([
       new Response(JSON.stringify({ error: "rate" }), {
