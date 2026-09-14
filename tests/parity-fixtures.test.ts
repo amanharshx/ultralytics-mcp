@@ -27,6 +27,7 @@ import {
   deploymentGet,
   deploymentHealth,
   deploymentLogs,
+  deploymentMetrics,
   deploymentsList,
   exploreDatasets,
   exploreProjects,
@@ -240,6 +241,11 @@ const TOOL_RUNNERS: Record<
       severity: args.severity as string | undefined,
       limit: args.limit as number | undefined,
       pageToken: args.pageToken as string | undefined,
+    }),
+  deployment_metrics: (client, args) =>
+    deploymentMetrics(client, args.deployment as string, {
+      range: args.range as string | undefined,
+      sparkline: args.sparkline as boolean | undefined,
     }),
   dataset_class_stats: (client, args) =>
     datasetClassStats(client, {
@@ -471,6 +477,8 @@ describe("parity fixtures", () => {
         "deployment_health.json",
         "deployment_logs.json",
         "deployment_logs_empty.json",
+        "deployment_metrics.json",
+        "deployment_metrics_sparkline.json",
         "training_monitor_history.json",
         "training_monitor_active.json",
         "training_monitor_private.json",

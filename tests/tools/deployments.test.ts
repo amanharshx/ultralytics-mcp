@@ -4,6 +4,7 @@ import {
   deploymentGet,
   deploymentHealth,
   deploymentLogs,
+  deploymentMetrics,
   deploymentsList,
 } from "../../src/tools/deployments.js";
 import { jsonResponse, routeClient } from "../helpers.js";
@@ -516,6 +517,168 @@ describe("deploymentLogs", () => {
     expect(calls.map((call) => call.path)).toEqual([
       "/api/account/summary",
       "/api/deployments/alice/road-detector/logs",
+    ]);
+  });
+});
+
+describe("deploymentMetrics", () => {
+  const timeRange1h = {
+    start: "2026-01-01T00:00:00Z",
+    end: "2026-01-01T01:00:00Z",
+  };
+
+  test("surfaces the detailed branch verbatim, including the timeRange object", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/metrics") {
+        return jsonResponse({
+          deploymentId: "a".repeat(24),
+          region: "europe-west1",
+          timeRange: timeRange1h,
+          summary: {
+            totalRequests: 42,
+            errorCount: 1,
+            errorRate: 0.024,
+            avgLatencyMs: 120,
+            p50LatencyMs: 100,
+            p95LatencyMs: 250,
+            p99LatencyMs: 400,
+          },
+          timeSeries: {
+            requests: [1, 2, 3],
+            errors: [0, 0, 1],
+            latencyP50: [90, 100, 110],
+            latencyP95: [200, 250, 300],
+            cpuUtilization: [0.1, 0.2, 0.1],
+            memoryUtilization: [0.3, 0.3, 0.4],
+            instanceCount: [1, 1, 1],
+          },
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentMetrics(client, "alice/road-detector");
+    expect(result.data).toEqual({
+      deploymentId: "a".repeat(24),
+      region: "europe-west1",
+      timeRange: timeRange1h,
+      summary: {
+        totalRequests: 42,
+        errorCount: 1,
+        errorRate: 0.024,
+        avgLatencyMs: 120,
+        p50LatencyMs: 100,
+        p95LatencyMs: 250,
+        p99LatencyMs: 400,
+      },
+      timeSeries: {
+        requests: [1, 2, 3],
+        errors: [0, 0, 1],
+        latencyP50: [90, 100, 110],
+        latencyP95: [200, 250, 300],
+        cpuUtilization: [0.1, 0.2, 0.1],
+        memoryUtilization: [0.3, 0.3, 0.4],
+        instanceCount: [1, 1, 1],
+      },
+    });
+    expect(result.summary).toContain("42");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/deployments/alice/road-detector/metrics",
+    ]);
+  });
+
+  test("surfaces the sparkline branch verbatim, never merged with the detailed shape", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/metrics") {
+        return jsonResponse({
+          requests24h: [10, 20, 15],
+          totalRequests: 500,
+          errorRate: 0,
+          avgLatencyMs: 88,
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentMetrics(client, "alice/road-detector", {
+      sparkline: true,
+    });
+    expect(result.data).toEqual({
+      requests24h: [10, 20, 15],
+      totalRequests: 500,
+      errorRate: 0,
+      avgLatencyMs: 88,
+    });
+    expect(result.data).not.toHaveProperty("timeSeries");
+    expect(result.data).not.toHaveProperty("summary");
+    expect(calls[0].params.get("sparkline")).toBe("true");
+  });
+
+  test("near-zero values on a fresh deployment are a valid result", async () => {
+    const { client } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/metrics") {
+        return jsonResponse({
+          requests24h: [],
+          totalRequests: 0,
+          errorRate: 0,
+          avgLatencyMs: 0,
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const result = await deploymentMetrics(client, "alice/road-detector", {
+      sparkline: true,
+    });
+    expect(result.data).toEqual({
+      requests24h: [],
+      totalRequests: 0,
+      errorRate: 0,
+      avgLatencyMs: 0,
+    });
+  });
+
+  test("passes range through unvalidated as a plain query param", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/deployments/alice/road-detector/metrics") {
+        return jsonResponse({
+          deploymentId: "a".repeat(24),
+          region: "eu",
+          timeRange: timeRange1h,
+          summary: {},
+          timeSeries: {},
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await deploymentMetrics(client, "alice/road-detector", {
+      range: "not-a-real-range",
+    });
+    expect(calls[0].params.get("range")).toBe("not-a-real-range");
+  });
+
+  test("defaults the owner from the account summary for a bare slug", async () => {
+    const { client, calls } = routeClient((path) => {
+      if (path === "/api/account/summary") {
+        return jsonResponse({ username: "alice" });
+      }
+      if (path === "/api/deployments/alice/road-detector/metrics") {
+        return jsonResponse({
+          deploymentId: "a".repeat(24),
+          region: "eu",
+          timeRange: timeRange1h,
+          summary: {},
+          timeSeries: {},
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await deploymentMetrics(client, "road-detector");
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/deployments/alice/road-detector/metrics",
     ]);
   });
 });

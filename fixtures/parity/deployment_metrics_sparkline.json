@@ -1,0 +1,33 @@
+{
+  "tool": "deployment_metrics",
+  "args": {
+    "deployment": "example-owner/example-deployment",
+    "range": "1h",
+    "sparkline": true
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner/example-deployment/metrics",
+      "query": { "range": "1h", "sparkline": "true" },
+      "response": {
+        "status": 200,
+        "json": {
+          "requests24h": [],
+          "totalRequests": 0,
+          "errorRate": 0,
+          "avgLatencyMs": 0
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Deployment 'example-deployment' for owner 'example-owner': sparkline metrics, 0 total requests, 0 error rate.",
+    "data": {
+      "requests24h": [],
+      "totalRequests": 0,
+      "errorRate": 0,
+      "avgLatencyMs": 0
+    }
+  }
+}

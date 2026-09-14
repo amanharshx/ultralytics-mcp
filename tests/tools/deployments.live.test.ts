@@ -28,6 +28,7 @@ import {
   deploymentGet,
   deploymentHealth,
   deploymentLogs,
+  deploymentMetrics,
   deploymentsList,
 } from "../../src/tools/deployments.js";
 import {
@@ -371,6 +372,88 @@ describe.skipIf(!apiKey)("deployment_logs live smoke", () => {
           expect(
             (badSeverity as UltralyticsApiError).apiMessage.length,
           ).toBeGreaterThan(0);
+
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+      );
+
+      const creditsAfter = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+      expect(creditsAfter).toBe(creditsBefore);
+
+      const listAfter = await deploymentsList(client, owner);
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
+      expect(remaining.some((item) => item.deployment === slug)).toBe(false);
+    },
+    8 * 60_000,
+  );
+});
+
+describe.skipIf(!apiKey)("deployment_metrics live smoke", () => {
+  test(
+    "reads both anyOf branches at more than one range, with near-zero values on a fresh deployment",
+    async () => {
+      const records: RecordedCall[] = [];
+      const client = recordingClient(apiKey as string, records);
+      const owner = await client.getAccountOwner();
+
+      const creditsBefore = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+
+      const slug = disposableSlug("zz-mcp-ticket7");
+      const ref = `${owner}/${slug}`;
+
+      await withDisposableCleanup(
+        "deployment",
+        ref,
+        async () => {
+          await client.delete(`/deployments/${owner}/${slug}`);
+        },
+        async () => {
+          await client.postJson(`/deployments/${owner}`, {
+            project: "pothole",
+            model: "yolo26s",
+            deployment: slug,
+            name: "zz mcp ticket7 delete me",
+            region: "europe-west1",
+          });
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+
+          await pollUntilReady(client, ref, 5 * 60_000);
+
+          const detailed = await deploymentMetrics(client, ref, {
+            range: "1h",
+          });
+          const detailedData = detailed.data as Record<string, unknown>;
+          expect(detailedData.timeRange).toBeTruthy();
+          expect(detailedData.summary).toBeTruthy();
+          expect(detailedData.timeSeries).toBeTruthy();
+          expect(detailedData).not.toHaveProperty("requests24h");
+
+          const detailedOtherRange = await deploymentMetrics(client, ref, {
+            range: "7d",
+          });
+          expect(
+            (detailedOtherRange.data as Record<string, unknown>).timeRange,
+          ).toBeTruthy();
+
+          const sparkline = await deploymentMetrics(client, ref, {
+            range: "1h",
+            sparkline: true,
+          });
+          const sparklineData = sparkline.data as Record<string, unknown>;
+          expect(Array.isArray(sparklineData.requests24h)).toBe(true);
+          expect(typeof sparklineData.totalRequests).toBe("number");
+          expect(typeof sparklineData.errorRate).toBe("number");
+          expect(typeof sparklineData.avgLatencyMs).toBe("number");
+          expect(sparklineData).not.toHaveProperty("timeSeries");
+          expect(sparklineData).not.toHaveProperty("summary");
+          // Fresh deployment: near-zero traffic is a valid result, not an error.
+          expect(sparklineData.totalRequests as number).toBeGreaterThanOrEqual(
+            0,
+          );
 
           await client.delete(`/deployments/${owner}/${slug}`);
         },

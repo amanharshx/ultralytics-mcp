@@ -191,3 +191,57 @@ export async function deploymentLogs(
     data: { entries, nextPageToken },
   };
 }
+
+/** Read one deployment's metrics by `owner/deployment` or a bare slug.
+ *
+ * The 200 response is an `anyOf` of two schemas selected by `sparkline`:
+ * the default branch carries `timeRange` (an observed `{start, end}` object,
+ * not the requested range string), `summary`, and `timeSeries`; the
+ * `sparkline=true` branch carries `requests24h` (observed live as an array of
+ * per-hour points, not a scalar), `totalRequests`, `errorRate`, and
+ * `avgLatencyMs`. The two are never flattened, merged, or normalised into
+ * one shape — which branch came back is information the caller asked for.
+ * `timeSeries` only appears on the default branch, so its presence is the
+ * discriminator. `range` and `sparkline` pass straight through as query
+ * params with no client-side validation.
+ */
+export async function deploymentMetrics(
+  client: UltralyticsClient,
+  deployment: string,
+  options: { range?: string; sparkline?: boolean } = {},
+): Promise<NormalizedToolResult> {
+  const { owner: refOwner, deployment: slug } = splitDeploymentRef(deployment);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const rangeLabel = options.range ?? "24h";
+  const data = await client.get(
+    `/deployments/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(slug)}/metrics`,
+    { range: options.range, sparkline: options.sparkline },
+  );
+  const fields = asRecord(data);
+
+  if ("timeSeries" in fields) {
+    const result = {
+      deploymentId: fields.deploymentId ?? null,
+      region: fields.region ?? null,
+      timeRange: fields.timeRange ?? null,
+      summary: fields.summary ?? null,
+      timeSeries: fields.timeSeries ?? null,
+    };
+    const totalRequests = asRecord(fields.summary).totalRequests;
+    return {
+      summary: `Deployment '${slug}' for owner '${resolvedOwner}': ${rangeLabel} metrics, ${totalRequests ?? "unknown"} total requests.`,
+      data: result,
+    };
+  }
+
+  const result = {
+    requests24h: fields.requests24h ?? null,
+    totalRequests: fields.totalRequests ?? null,
+    errorRate: fields.errorRate ?? null,
+    avgLatencyMs: fields.avgLatencyMs ?? null,
+  };
+  return {
+    summary: `Deployment '${slug}' for owner '${resolvedOwner}': sparkline metrics, ${result.totalRequests ?? "unknown"} total requests, ${result.errorRate ?? "unknown"} error rate.`,
+    data: result,
+  };
+}
