@@ -10,7 +10,7 @@ import {
 } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { projectModelTraining } from "./model-training-projection.js";
-import { asRecord, pyField } from "./shared.js";
+import { asRecord, pyField, validatePositiveInt } from "./shared.js";
 
 const KEY_METRICS = [
   "metrics/mAP50(B)",
@@ -40,12 +40,6 @@ const DATASET_TASK_COMPATIBILITY: Record<string, string[]> = {
 /** Format a percentage like Python's `str(round(x, 1))` (whole numbers keep `.0`). */
 function formatPercent(value: number): string {
   return Number.isInteger(value) ? value.toFixed(1) : String(value);
-}
-
-function validateHistoryLastN(historyLastN: number): void {
-  if (!Number.isInteger(historyLastN) || historyLastN <= 0) {
-    throw new Error("`history_last_n` must be a positive integer.");
-  }
 }
 
 function validateTrainArgs(trainArgs: Record<string, unknown>): void {
@@ -209,7 +203,7 @@ export async function trainingMonitor(
   options: TrainingMonitorOptions = {},
 ): Promise<NormalizedToolResult> {
   const { includeHistory = false, historyLastN = 20 } = options;
-  validateHistoryLastN(historyLastN);
+  validatePositiveInt(historyLastN, "history_last_n");
 
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());

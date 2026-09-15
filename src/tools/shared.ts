@@ -54,6 +54,17 @@ export function projectPredictResult(result: unknown): ProjectedPrediction {
   return { images, metadata, detectionCount };
 }
 
+/** Validate a positive-integer tool parameter, naming it in the error.
+ *
+ * Shared by `training_monitor` and `model_metrics`, both of which accept a
+ * `history_last_n`-shaped parameter over the same `trainResults` history.
+ */
+export function validatePositiveInt(value: number, paramName: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`\`${paramName}\` must be a positive integer.`);
+  }
+}
+
 /** Render a summary field like Python's `dict.get(key)`: missing -> "None". */
 export function pyField(value: unknown): string {
   return value === undefined || value === null ? "None" : String(value);

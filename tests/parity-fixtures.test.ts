@@ -38,6 +38,7 @@ import {
   exportStatus,
   exportsList,
   modelDownload,
+  modelMetrics,
   modelPredict,
   modelsDelete,
   modelsGet,
@@ -354,6 +355,17 @@ const TOOL_RUNNERS: Record<
       args.model as string,
       args.project as string | undefined,
     ),
+  model_metrics: (client, args) =>
+    modelMetrics(
+      client,
+      args.model as string,
+      args.project as string | undefined,
+      {
+        includeHistory: args.include_history as boolean | undefined,
+        historyLastN: args.history_last_n as number | undefined,
+        includeTrainArgs: args.include_train_args as boolean | undefined,
+      },
+    ),
   model_predict: (client, args) =>
     modelPredict(client, args.model as string, {
       source: args.source as string,
@@ -476,6 +488,8 @@ describe("parity fixtures", () => {
         "models_get.json",
         "model_predict_base64.json",
         "models_delete.json",
+        "model_metrics.json",
+        "model_metrics_cancelled.json",
         "models_list.json",
         "projects_create.json",
         "projects_delete.json",

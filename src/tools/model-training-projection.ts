@@ -2,9 +2,9 @@
  *
  * `training_monitor` reads `trainResults`, `bestEpoch`, `bestFitness`, and
  * `computeCost` off a model detail response's `model` fields through this
- * projection. `metrics` and `trainArgs` are projected too so a future
- * evaluation tool reading the same response can import this module
- * unmodified, rather than re-deriving these six fields its own way.
+ * projection. `metrics` and `trainArgs` are projected too so `model_metrics`
+ * can import this module unmodified, rather than re-deriving these six
+ * fields its own way.
  */
 
 import { asRecord } from "./shared.js";
