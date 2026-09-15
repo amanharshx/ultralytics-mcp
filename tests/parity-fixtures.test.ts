@@ -372,9 +372,9 @@ const TOOL_RUNNERS: Record<
   // arrays run to ~13,600 lines for no regression-detection benefit, since
   // model_plots reads array lengths generically regardless of class count.
   // Minifying only changes whitespace -- it parses to the same object as
-  // the pretty-printed capture would -- so the fixture stays a real,
-  // unedited API response. Re-minify it on any future recapture rather than
-  // letting it re-balloon.
+  // the pretty-printed capture would -- so the fixture stays the same
+  // redacted live capture, with only serialization whitespace removed.
+  // Re-minify it on any future recapture rather than letting it re-balloon.
   model_plots: (client, args) =>
     modelPlots(
       client,
