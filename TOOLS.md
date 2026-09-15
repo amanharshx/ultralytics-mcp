@@ -300,7 +300,7 @@ Notes: Uses a local video path, extracts JPEG frames with ffmpeg, and starts ing
 
 ## Models
 
-6 tools.
+7 tools.
 
 ### models_list
 
@@ -347,6 +347,18 @@ Metadata: read-only, external/live
 | `include_history` | boolean | No |  |
 | `history_last_n` | number | No |  |
 | `include_train_args` | boolean | No |  |
+
+### model_plots
+
+Report a model's evaluation plots (per-class pr_curve, f1_curve, precision_curve, recall_curve, confusion_matrix), which model_metrics and training_monitor do not surface. By default lists each plot's type and the shape of its fields (array lengths only, never the values) since one pr_curve alone can carry thousands of numbers on a multi-class model; pass type to get that one plot's data back exactly as the platform returned it, unmodified. Field shapes vary by type: pr_curve/f1_curve/precision_curve/recall_curve carry x/y (and pr_curve additionally ap); confusion_matrix carries a matrix field instead, not x/y/ap. Plot presence does not track training history: a model can have plots with no trainResults, or (rarely) plots: [] on an otherwise completed model.
+
+Metadata: read-only, external/live
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `project` | string | No | Project ref required when model is given by slug. |
+| `type` | string | No | Return this one plot's full data unmodified (e.g. pr_curve, confusion_matrix). Omit to list what's available. |
 
 ### model_predict
 

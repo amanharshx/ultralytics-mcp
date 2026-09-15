@@ -39,6 +39,7 @@ import {
   exportsList,
   modelDownload,
   modelMetrics,
+  modelPlots,
   modelPredict,
   modelsDelete,
   modelsGet,
@@ -366,6 +367,23 @@ const TOOL_RUNNERS: Record<
         includeTrainArgs: args.include_train_args as boolean | undefined,
       },
     ),
+  // model_plots.json is captured live against a 23-class model and kept
+  // minified (single line) deliberately: pretty-printed, its per-class
+  // arrays run to ~13,600 lines for no regression-detection benefit, since
+  // model_plots reads array lengths generically regardless of class count.
+  // Minifying only changes whitespace -- it parses to the same object as
+  // the pretty-printed capture would -- so the fixture stays the same
+  // redacted live capture, with only serialization whitespace removed.
+  // Re-minify it on any future recapture rather than letting it re-balloon.
+  model_plots: (client, args) =>
+    modelPlots(
+      client,
+      args.model as string,
+      args.project as string | undefined,
+      {
+        type: args.type as string | undefined,
+      },
+    ),
   model_predict: (client, args) =>
     modelPredict(client, args.model as string, {
       source: args.source as string,
@@ -490,6 +508,7 @@ describe("parity fixtures", () => {
         "models_delete.json",
         "model_metrics.json",
         "model_metrics_cancelled.json",
+        "model_plots.json",
         "models_list.json",
         "projects_create.json",
         "projects_delete.json",

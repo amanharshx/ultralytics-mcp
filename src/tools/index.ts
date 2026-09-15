@@ -44,6 +44,7 @@ import {
 } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
 import { modelMetrics } from "./model-metrics.js";
+import { modelPlots } from "./model-plots.js";
 import { modelsDelete, modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
 import {
@@ -88,6 +89,7 @@ export {
 } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
 export { modelMetrics } from "./model-metrics.js";
+export { modelPlots } from "./model-plots.js";
 export { modelsDelete, modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
 export {
@@ -1088,6 +1090,46 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
               historyLastN: history_last_n as number | undefined,
               includeTrainArgs: include_train_args as boolean | undefined,
             },
+          ),
+        ),
+  }),
+  tool({
+    name: "model_plots",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Report a model's evaluation plots (per-class pr_curve, f1_curve, precision_curve, recall_curve, confusion_matrix), which model_metrics and training_monitor do not surface. By default lists each plot's type and the shape of its fields (array lengths only, never the values) since one pr_curve alone can carry thousands of numbers on a multi-class model; pass type to get that one plot's data back exactly as the platform returned it, unmodified. Field shapes vary by type: pr_curve/f1_curve/precision_curve/recall_curve carry x/y (and pr_curve additionally ap); confusion_matrix carries a matrix field instead, not x/y/ap. Plot presence does not track training history: a model can have plots with no trainResults, or (rarely) plots: [] on an otherwise completed model.",
+    inputSchema: {
+      model: z
+        .string()
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+      type: z
+        .string()
+        .optional()
+        .describe(
+          "Return this one plot's full data unmodified (e.g. pr_curve, confusion_matrix). Omit to list what's available.",
+        ),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ model, project, type }) =>
+        toMcpTextResult(
+          await modelPlots(
+            getClient(),
+            model as string,
+            project as string | undefined,
+            { type: type as string | undefined },
           ),
         ),
   }),
