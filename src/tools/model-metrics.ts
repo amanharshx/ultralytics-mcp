@@ -4,7 +4,7 @@ import type { UltralyticsClient } from "../client.js";
 import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { projectModelTraining } from "./model-training-projection.js";
-import { asRecord, pyField } from "./shared.js";
+import { asRecord, pyField, validatePositiveInt } from "./shared.js";
 
 interface ModelMetricsOptions {
   includeHistory?: boolean;
@@ -12,41 +12,60 @@ interface ModelMetricsOptions {
   includeTrainArgs?: boolean;
 }
 
-function validateHistoryLastN(historyLastN: number): void {
-  if (!Number.isInteger(historyLastN) || historyLastN <= 0) {
-    throw new Error("`history_last_n` must be a positive integer.");
-  }
+interface BestEpochResolution {
+  bestEpoch: number | null;
+  bestFitness: number | null;
+  metrics: Record<string, unknown> | null;
+  note: string | null;
 }
 
-/** Find the recorded epoch entry matching `bestEpoch` by its `epoch` field,
- * never by array position: early stopping and gaps mean array index and
- * epoch number are not the same thing, and a model can report a `bestEpoch`
- * with no matching entry at all (see `eggs-and-bowls/exp`, observed live
- * with `bestEpoch: 99` beside zero `trainResults`). Returns `null` plus a
- * reason rather than throwing or reporting the mismatch as fact. */
-function findBestEpochMetrics(
+/** Resolve the model's best epoch against its recorded `trainResults`,
+ * matched by the `epoch` field, never by array position: early stopping and
+ * gaps mean array index and epoch number are not the same thing.
+ *
+ * A model can report a `bestEpoch` with no matching entry at all (see
+ * `eggs-and-bowls/exp`, observed live with `bestEpoch: 99` beside zero
+ * `trainResults`). When that happens this reports `bestEpoch: null` and
+ * `bestFitness: null` — not the platform's raw, incoherent values — since
+ * surfacing them unqualified in fields literally named `bestEpoch` and
+ * `bestFitness` is exactly the "reported as fact" failure mode the ticket
+ * calls out. The reported values are preserved only inside `note`, which is
+ * the diagnostic surface, not the answer.
+ */
+function resolveBestEpoch(
   trainResults: Record<string, unknown>[],
-  bestEpoch: number | null,
+  reportedBestEpoch: number | null,
+  reportedBestFitness: number | null,
   totalEpochs: number | null,
-): { metrics: Record<string, unknown> | null; note: string | null } {
-  if (bestEpoch === null) {
+): BestEpochResolution {
+  if (reportedBestEpoch === null) {
     return {
+      bestEpoch: null,
+      bestFitness: null,
       metrics: null,
       note: "bestEpoch is not recorded for this model.",
     };
   }
-  const match = trainResults.find((entry) => entry.epoch === bestEpoch);
+  const match = trainResults.find((entry) => entry.epoch === reportedBestEpoch);
   if (!match) {
     return {
+      bestEpoch: null,
+      bestFitness: null,
       metrics: null,
       note:
-        `bestEpoch ${bestEpoch} has no matching entry among the ` +
-        `${trainResults.length} recorded epoch(s)` +
+        `the model reports bestEpoch ${reportedBestEpoch} ` +
+        `(bestFitness ${pyField(reportedBestFitness)}), but no entry among ` +
+        `the ${trainResults.length} recorded epoch(s)` +
         (totalEpochs !== null ? ` (epochs: ${totalEpochs})` : "") +
-        "; not treated as fact.",
+        ` matches epoch ${reportedBestEpoch}; not treated as fact.`,
     };
   }
-  return { metrics: asRecord(match.metrics), note: null };
+  return {
+    bestEpoch: reportedBestEpoch,
+    bestFitness: reportedBestFitness,
+    metrics: asRecord(match.metrics),
+    note: null,
+  };
 }
 
 /** Format the `include_history` window label. Load-bearing per the ticket: a
@@ -90,11 +109,15 @@ function formatWindowLabel(
  *
  * Both degenerate shapes observed live survive without throwing:
  * `pothole/yolo26s` (`bestEpoch: null`, `epochs: -1`, 70 results, top-level
- * `metrics` still present) reports `bestEpochMetrics: null` with a note, and
- * `finalEpochMetrics` from the top-level field as usual; `eggs-and-bowls/exp`
- * (`bestEpoch: 99` beside zero `trainResults` and a null top-level `metrics`)
- * reports both `bestEpochMetrics` and `finalEpochMetrics` as `null`, each
- * with an explanatory note, and never asserts "best epoch 99" as fact.
+ * `metrics` still present) reports `bestEpoch`/`bestFitness`/
+ * `bestEpochMetrics` all as `null` with a note, and `finalEpochMetrics` from
+ * the top-level field as usual; `eggs-and-bowls/exp` (`bestEpoch: 99` beside
+ * zero `trainResults` and a null top-level `metrics`) reports `bestEpoch`,
+ * `bestFitness`, `bestEpochMetrics`, and `finalEpochMetrics` all as `null`,
+ * each best-epoch field backed by an explanatory note. The platform's raw
+ * `bestEpoch: 99` and its `bestFitness` are never echoed back in those
+ * fields — only inside the note — so a caller reading `bestEpoch` alone
+ * never mistakes an incoherent value for fact.
  *
  * `include_train_args` surfaces `trainArgs` verbatim (111 keys, observed
  * live); omitted by default since it is too heavy for a default payload,
@@ -116,7 +139,7 @@ export async function modelMetrics(
     historyLastN = 20,
     includeTrainArgs = false,
   } = options;
-  validateHistoryLastN(historyLastN);
+  validatePositiveInt(historyLastN, "history_last_n");
 
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
@@ -133,8 +156,17 @@ export async function modelMetrics(
       ? rawTotalEpochs
       : null;
 
-  const { metrics: bestEpochMetrics, note: bestEpochNote } =
-    findBestEpochMetrics(trainResults, projection.bestEpoch, totalEpochs);
+  const {
+    bestEpoch,
+    bestFitness,
+    metrics: bestEpochMetrics,
+    note: bestEpochNote,
+  } = resolveBestEpoch(
+    trainResults,
+    projection.bestEpoch,
+    projection.bestFitness,
+    totalEpochs,
+  );
   const finalEpoch =
     epochsDone > 0 ? (trainResults[epochsDone - 1].epoch ?? null) : null;
   const finalEpochMetrics = projection.metrics;
@@ -147,8 +179,8 @@ export async function modelMetrics(
     status: fields.status ?? null,
     epochs: totalEpochs,
     epochsDone,
-    bestEpoch: projection.bestEpoch,
-    bestFitness: projection.bestFitness,
+    bestEpoch,
+    bestFitness,
     bestEpochMetrics,
     bestEpochNote,
     finalEpoch,
@@ -171,8 +203,8 @@ export async function modelMetrics(
   }
 
   const bestLabel =
-    projection.bestEpoch !== null && bestEpochMetrics !== null
-      ? `best epoch ${projection.bestEpoch} (fitness ${pyField(projection.bestFitness)})`
+    bestEpoch !== null && bestEpochMetrics !== null
+      ? `best epoch ${bestEpoch} (fitness ${pyField(bestFitness)})`
       : `best epoch unavailable (${pyField(bestEpochNote)})`;
   const finalLabel =
     finalEpoch !== null && finalEpochMetrics !== null

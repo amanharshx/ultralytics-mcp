@@ -138,9 +138,13 @@ describe.skipIf(!apiKey)("model_metrics live smoke", () => {
 
     const result = await modelMetrics(client, `${owner}/eggs-and-bowls/exp`);
     const data = result.data as Record<string, unknown>;
-    expect(data.bestEpoch).toBe(99);
+    // The platform reports bestEpoch: 99 with zero trainResults; that raw
+    // value is never echoed in bestEpoch/bestFitness, only inside the note.
+    expect(data.bestEpoch).toBeNull();
+    expect(data.bestFitness).toBeNull();
     expect(data.epochsDone).toBe(0);
     expect(data.bestEpochMetrics).toBeNull();
+    expect(data.bestEpochNote).toContain("99");
     expect(data.bestEpochNote).toContain("not treated as fact");
     expect(data.finalEpochMetrics).toBeNull();
   }, 30_000);

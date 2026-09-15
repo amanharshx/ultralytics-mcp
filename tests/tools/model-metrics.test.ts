@@ -273,10 +273,15 @@ describe("modelMetrics", () => {
 
     const result = await modelMetrics(client, `${OWNER}/${PROJECT}/${MODEL}`);
     const data = result.data as Record<string, unknown>;
-    expect(data.bestEpoch).toBe(99);
+    // The platform's raw bestEpoch: 99 / bestFitness: 0.98007 are never
+    // echoed back in these fields -- only inside bestEpochNote -- so a
+    // caller reading bestEpoch/bestFitness alone can't mistake 99 for fact.
+    expect(data.bestEpoch).toBeNull();
+    expect(data.bestFitness).toBeNull();
     expect(data.bestEpochMetrics).toBeNull();
     expect(data.bestEpochNote).toBe(
-      "bestEpoch 99 has no matching entry among the 0 recorded epoch(s) (epochs: 1); not treated as fact.",
+      "the model reports bestEpoch 99 (bestFitness 0.98007), but no entry " +
+        "among the 0 recorded epoch(s) (epochs: 1) matches epoch 99; not treated as fact.",
     );
     expect(data.finalEpoch).toBeNull();
     expect(data.finalEpochMetrics).toBeNull();
