@@ -250,7 +250,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 
 - Projects: 5 tools
 - Datasets: 12 tools
-- Models: 6 tools
+- Models: 7 tools
 - Training: 3 tools
 - Exports: 4 tools
 - Deployments: 7 tools
