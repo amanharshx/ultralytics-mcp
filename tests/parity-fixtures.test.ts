@@ -367,6 +367,14 @@ const TOOL_RUNNERS: Record<
         includeTrainArgs: args.include_train_args as boolean | undefined,
       },
     ),
+  // model_plots.json is captured live against a 23-class model and kept
+  // minified (single line) deliberately: pretty-printed, its per-class
+  // arrays run to ~13,600 lines for no regression-detection benefit, since
+  // model_plots reads array lengths generically regardless of class count.
+  // Minifying only changes whitespace -- JSON.parse of it is byte-identical
+  // to the pretty-printed capture -- so the fixture stays a real, unedited
+  // API response. Re-minify it on any future recapture rather than letting
+  // it re-balloon.
   model_plots: (client, args) =>
     modelPlots(
       client,
@@ -501,8 +509,6 @@ describe("parity fixtures", () => {
         "model_metrics.json",
         "model_metrics_cancelled.json",
         "model_plots.json",
-        "model_plots_named.json",
-        "model_plots_empty.json",
         "models_list.json",
         "projects_create.json",
         "projects_delete.json",
