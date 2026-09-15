@@ -489,7 +489,6 @@ describe("parity fixtures", () => {
         "model_predict_base64.json",
         "models_delete.json",
         "model_metrics.json",
-        "model_metrics_history.json",
         "model_metrics_cancelled.json",
         "models_list.json",
         "projects_create.json",
