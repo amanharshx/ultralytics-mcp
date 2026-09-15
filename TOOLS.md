@@ -300,7 +300,7 @@ Notes: Uses a local video path, extracts JPEG frames with ffmpeg, and starts ing
 
 ## Models
 
-5 tools.
+6 tools.
 
 ### models_list
 
@@ -333,6 +333,20 @@ Metadata: state-changing, destructive, non-idempotent
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
+
+### model_metrics
+
+Report a model's best-epoch and final-epoch evaluation metrics, labelled so one cannot be mistaken for the other (works for private and public projects). bestEpochMetrics is pulled explicitly from trainResults by matching its epoch field against bestEpoch, retrievable regardless of any include_history window; finalEpochMetrics is the model's top-level metrics field, observed live to always equal the last recorded epoch, never the best one. Either can be null on a model with incoherent or missing training data (for example bestEpoch pointing past the recorded epochs); bestEpochNote explains why when that happens. include_train_args adds the full trainArgs object (111 keys observed live), omitted by default. include_history adds a metricsHistory-style curve and always states the window it covers, including when the full curve is returned.
+
+Metadata: read-only, external/live
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `project` | string | No | Project ref required when model is given by slug. |
+| `include_history` | boolean | No |  |
+| `history_last_n` | number | No |  |
+| `include_train_args` | boolean | No |  |
 
 ### model_predict
 

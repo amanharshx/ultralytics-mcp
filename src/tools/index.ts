@@ -43,6 +43,7 @@ import {
   exportsList,
 } from "./exports.js";
 import { gpuAvailability } from "./gpu.js";
+import { modelMetrics } from "./model-metrics.js";
 import { modelsDelete, modelsGet, modelsList } from "./models.js";
 import { modelPredict } from "./predict.js";
 import {
@@ -86,6 +87,7 @@ export {
   exportsList,
 } from "./exports.js";
 export { gpuAvailability } from "./gpu.js";
+export { modelMetrics } from "./model-metrics.js";
 export { modelsDelete, modelsGet, modelsList } from "./models.js";
 export { modelPredict } from "./predict.js";
 export {
@@ -1038,6 +1040,53 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             {
               includeHistory: include_history as boolean | undefined,
               historyLastN: history_last_n as number | undefined,
+            },
+          ),
+        ),
+  }),
+  tool({
+    name: "model_metrics",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Report a model's best-epoch and final-epoch evaluation metrics, labelled so one cannot be mistaken for the other (works for private and public projects). bestEpochMetrics is pulled explicitly from trainResults by matching its epoch field against bestEpoch, retrievable regardless of any include_history window; finalEpochMetrics is the model's top-level metrics field, observed live to always equal the last recorded epoch, never the best one. Either can be null on a model with incoherent or missing training data (for example bestEpoch pointing past the recorded epochs); bestEpochNote explains why when that happens. include_train_args adds the full trainArgs object (111 keys observed live), omitted by default. include_history adds a metricsHistory-style curve and always states the window it covers, including when the full curve is returned.",
+    inputSchema: {
+      model: z
+        .string()
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+      include_history: z.boolean().optional(),
+      history_last_n: z.number().int().positive().optional(),
+      include_train_args: z.boolean().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    createHandler:
+      (getClient) =>
+      async ({
+        model,
+        project,
+        include_history,
+        history_last_n,
+        include_train_args,
+      }) =>
+        toMcpTextResult(
+          await modelMetrics(
+            getClient(),
+            model as string,
+            project as string | undefined,
+            {
+              includeHistory: include_history as boolean | undefined,
+              historyLastN: history_last_n as number | undefined,
+              includeTrainArgs: include_train_args as boolean | undefined,
             },
           ),
         ),
