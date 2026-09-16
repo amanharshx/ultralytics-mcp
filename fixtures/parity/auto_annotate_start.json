@@ -1,0 +1,33 @@
+{
+  "tool": "auto_annotate_start",
+  "args": {
+    "dataset": "example-owner/example-dataset-1",
+    "model": "example-owner/pothole/exp-2",
+    "class_mapping": [0],
+    "include_annotated": true,
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "json": {
+        "modelId": "ul://example-owner/pothole/exp-2",
+        "classMapping": [0],
+        "includeAnnotated": true
+      },
+      "response": {
+        "status": 202,
+        "json": {
+          "jobId": "000000000000000000000001"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Started auto-annotation run '000000000000000000000001' on dataset 'example-dataset-1' for owner 'example-owner' with model 'ul://example-owner/pothole/exp-2'.",
+    "data": {
+      "jobId": "000000000000000000000001"
+    }
+  }
+}

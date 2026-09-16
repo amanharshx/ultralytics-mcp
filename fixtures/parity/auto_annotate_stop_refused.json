@@ -1,0 +1,23 @@
+{
+  "tool": "auto_annotate_stop",
+  "args": {
+    "dataset": "example-owner/example-dataset-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "response": {
+        "status": 200,
+        "json": {
+          "activeJob": null,
+          "lastRun": null
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 200,
+    "message": "Dataset 'example-dataset-1' for owner 'example-owner' has no active auto-annotation run to stop."
+  }
+}

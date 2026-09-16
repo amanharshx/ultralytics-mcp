@@ -11,7 +11,11 @@ import { z } from "zod";
 
 import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
-import { autoAnnotateStatus } from "./auto-annotate.js";
+import {
+  autoAnnotateStart,
+  autoAnnotateStatus,
+  autoAnnotateStop,
+} from "./auto-annotate.js";
 import {
   datasetClassStats,
   datasetExport,
@@ -57,7 +61,11 @@ import {
 } from "./projects.js";
 import { trainingCancel, trainingMonitor, trainingStart } from "./training.js";
 
-export { autoAnnotateStatus } from "./auto-annotate.js";
+export {
+  autoAnnotateStart,
+  autoAnnotateStatus,
+  autoAnnotateStop,
+} from "./auto-annotate.js";
 export {
   datasetClassStats,
   datasetExport,
@@ -491,6 +499,124 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         toMcpTextResult(
           await autoAnnotateStatus(getClient(), dataset as string),
         ),
+  }),
+  tool({
+    name: "auto_annotate_start",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Start an auto-annotation run on a dataset by slug, owner/slug, or dataset ul:// URI, labelling it with a model given by owner/project/model, ul://owner/project/model, or slug with a project (state-changing, billable, may cost credits). Requires confirm_cost=true: there is no cost preview, no published rate, and a 402 signals insufficient credits; gauge magnitude with datasets_get (the unlabeled image count by default, the total count when include_annotated is true). Sends only modelId plus any of confidence, iou, class_mapping, and include_annotated the caller sets explicitly, omitting the rest so the server's own defaults (confidence 0.25, iou 0.7, include_annotated false, illustrative only) apply undisturbed. There is no imgsz parameter. class_mapping bridges a model/dataset class-taxonomy mismatch (for example a 1-class model against an 80-class dataset, which otherwise fails outright); it passes through with no length check. Labels are additive, never overwritten, so no overwrite confirmation is needed. Every start snapshots a dataset version before labelling, listed via datasets_get and undoable exactly with dataset_version_restore. Billing settles at run time, not at dismissal, so auto_annotate_stop does not refund a charge already incurred. Use auto_annotate_status to poll and auto_annotate_stop to cancel.",
+    inputSchema: {
+      dataset: z
+        .string()
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+      model: z
+        .string()
+        .describe(
+          "Model ref by owner/project/model, ul:// URI, or slug (requires project).",
+        ),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+      confidence: z
+        .number()
+        .optional()
+        .describe(
+          "Confidence threshold for generated labels. Omit to use the server default (currently 0.25).",
+        ),
+      iou: z
+        .number()
+        .optional()
+        .describe(
+          "IoU threshold for generated labels. Omit to use the server default (currently 0.7).",
+        ),
+      class_mapping: z
+        .array(z.union([z.number().int(), z.null()]))
+        .optional()
+        .describe(
+          "Model class index -> dataset class index mapping, positioned by model class index. Required to bridge a class-taxonomy mismatch between the model and the dataset; passed through with no length check.",
+        ),
+      include_annotated: z
+        .boolean()
+        .optional()
+        .describe(
+          "Re-label images that already carry annotations. Omit to use the server default (currently false).",
+        ),
+      confirm_cost: z
+        .boolean()
+        .optional()
+        .describe(
+          "Must be true to allow a credit-costing auto-annotation run.",
+        ),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    docNote:
+      "State-changing auto-annotation run that is billable immediately. Set `confirm_cost` to `true` explicitly.",
+    examples: [
+      {
+        title: "Start an auto-annotation run",
+        input: {
+          dataset: "team/cars",
+          model: "team/project/my-model",
+          confirm_cost: true,
+        },
+      },
+    ],
+    createHandler:
+      (getClient) =>
+      async ({
+        dataset,
+        model,
+        project,
+        confidence,
+        iou,
+        class_mapping,
+        include_annotated,
+        confirm_cost,
+      }) =>
+        toMcpTextResult(
+          await autoAnnotateStart(
+            getClient(),
+            dataset as string,
+            model as string,
+            {
+              project: project as string | undefined,
+              confidence: confidence as number | undefined,
+              iou: iou as number | undefined,
+              classMapping: class_mapping as (number | null)[] | undefined,
+              includeAnnotated: include_annotated as boolean | undefined,
+              confirmCost: confirm_cost as boolean | undefined,
+            },
+          ),
+        ),
+  }),
+  tool({
+    name: "auto_annotate_stop",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Stop or dismiss a dataset's auto-annotation run by slug, owner/slug, or dataset ul:// URI. Reads status first and refuses without calling the endpoint when no run is active, since there is nothing to stop. When a run is active it sends the request and surfaces the server's own action verbatim rather than inferring it: cancelled for an active run stopped mid-flight, dismissed for a terminal run's summary being cleared, or none if nothing acted on. Ships ungated, consistent with training_cancel and export_cancel: an off-switch is never gated. An undismissed terminal run does not block the next start, so this never strands anything; dismissal moves no money.",
+    inputSchema: {
+      dataset: z
+        .string()
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset }) =>
+        toMcpTextResult(await autoAnnotateStop(getClient(), dataset as string)),
   }),
   tool({
     name: "dataset_version_create",

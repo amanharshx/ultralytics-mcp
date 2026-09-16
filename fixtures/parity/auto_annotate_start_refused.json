@@ -1,0 +1,29 @@
+{
+  "tool": "auto_annotate_start",
+  "args": {
+    "dataset": "example-owner/example-dataset-1",
+    "model": "example-owner/pothole/exp-2",
+    "class_mapping": [0],
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "json": {
+        "modelId": "ul://example-owner/pothole/exp-2",
+        "classMapping": [0]
+      },
+      "response": {
+        "status": 409,
+        "json": {
+          "error": "No images left to annotate"
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 409,
+    "message": "No images left to annotate"
+  }
+}
