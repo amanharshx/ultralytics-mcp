@@ -259,7 +259,7 @@ describe("exploreDatasets", () => {
     });
   });
 
-  test("validates q, sort, and offset before network", async () => {
+  test("validates q and offset before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -272,11 +272,29 @@ describe("exploreDatasets", () => {
       /q is required/,
     );
     await expect(
-      exploreDatasets(client, { q: "bird", sort: "popular" }),
-    ).rejects.toThrow(/Unsupported sort/);
-    await expect(
       exploreDatasets(client, { q: "bird", offset: -1 }),
     ).rejects.toThrow(/offset/);
+  });
+
+  test("passes an unrecognized sort through to the server rather than rejecting it locally", async () => {
+    // No local sort allowlist: the server rejects an unrecognized sort
+    // itself (verified live: `?sort=notarealsort` on `/explore/search`
+    // returns 400 `Invalid option: expected one of "stars"|"newest"|...`).
+    let seenSort: unknown;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: (async (url: string | URL) => {
+        seenSort = new URL(String(url)).searchParams.get("sort");
+        return new Response(JSON.stringify({ datasets: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+
+    await exploreDatasets(client, { q: "bird", sort: "popular" });
+    expect(seenSort).toBe("popular");
   });
 
   test("passes an unrecognized task filter through to the server rather than rejecting it locally", async () => {

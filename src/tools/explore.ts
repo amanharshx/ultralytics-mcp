@@ -1,27 +1,13 @@
 import type { UltralyticsClient } from "../client.js";
 import { asRecord } from "./shared.js";
 
-const EXPLORE_SORTS = new Set([
-  "newest",
-  "stars",
-  "oldest",
-  "name-asc",
-  "name-desc",
-  "count-desc",
-  "count-asc",
-]);
-
-export function validateExploreQuery(
-  q: string,
-  sort = "newest",
-  offset = 0,
-): void {
+/** The server rejects an unrecognized `sort` itself (verified live:
+ * `?sort=notarealsort` on `/explore/search` returns 400 `Invalid option:
+ * expected one of "stars"|"newest"|"oldest"|"name-asc"|"name-desc"|
+ * "count-desc"|"count-asc"`), so this does no local validation of it. */
+export function validateExploreQuery(q: string, offset = 0): void {
   if (!q.trim()) {
     throw new Error("q is required: a search query");
-  }
-  if (!EXPLORE_SORTS.has(sort)) {
-    const allowed = Array.from(EXPLORE_SORTS).sort().join(", ");
-    throw new Error(`Unsupported sort '${sort}'. Expected one of: ${allowed}.`);
   }
   if (offset < 0) {
     throw new Error("`offset` must be greater than or equal to 0.");
@@ -52,7 +38,7 @@ export async function exploreSearch(
 ): Promise<Record<string, unknown>> {
   const sort = options.sort ?? "newest";
   const offset = options.offset ?? 0;
-  validateExploreQuery(q, sort, offset);
+  validateExploreQuery(q, offset);
 
   const params: Record<string, unknown> = {
     type,
