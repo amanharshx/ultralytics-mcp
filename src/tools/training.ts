@@ -28,6 +28,24 @@ const CHECKPOINT_TASK_SUFFIXES = [
 ] as const;
 const BASE_CHECKPOINT_RE =
   /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
+/** Checkpoint/dataset task compatibility for a *multi*-dataset `dataset`
+ * array only. The single-dataset case is enforced by the server at
+ * POST /training/start itself (verified live: a classify checkpoint
+ * against a detect dataset returns 400 "Dataset task mismatch..."). Whether
+ * the server checks every entry in an array the same way — rather than,
+ * say, only the first, or only failing partway through a sequential paid
+ * run — has not been verified live. Per "verify, then delete," a guard
+ * whose server-side enforcement can't be demonstrated stays; this one does,
+ * scoped to arrays, so the single-dataset path can still drop its own
+ * client-side check. */
+const DATASET_TASK_COMPATIBILITY: Record<string, string[]> = {
+  detect: ["detect"],
+  segment: ["segment", "semantic"],
+  semantic: ["semantic"],
+  pose: ["pose"],
+  obb: ["obb"],
+  classify: ["classify"],
+};
 
 /** Format a percentage like Python's `str(round(x, 1))` (whole numbers keep `.0`). */
 function formatPercent(value: number): string {
@@ -135,6 +153,30 @@ function createdModelId(data: unknown): string {
  * the pure, shape-agnostic dataset resolver. */
 function formatDatasetUri(dataset: { owner: string; dataset: string }): string {
   return `ul://${dataset.owner}/datasets/${dataset.dataset}`;
+}
+
+function validateCheckpointCompatibility(
+  datasetTask: string | null,
+  checkpointTask: string,
+  datasetLabel: string,
+): void {
+  if (datasetTask === null) {
+    throw new Error(
+      `Dataset '${datasetLabel}' is missing a task; cannot select a base checkpoint.`,
+    );
+  }
+  const allowedTasks = DATASET_TASK_COMPATIBILITY[datasetTask];
+  if (!allowedTasks) {
+    throw new Error(
+      `Unsupported dataset task '${datasetTask}' for dataset '${datasetLabel}'.`,
+    );
+  }
+  if (!allowedTasks.includes(checkpointTask)) {
+    throw new Error(
+      `Checkpoint task '${checkpointTask}' is not compatible with dataset task ` +
+        `'${datasetTask}' for dataset '${datasetLabel}'.`,
+    );
+  }
 }
 
 interface TrainingMonitorOptions {
@@ -440,10 +482,10 @@ export async function trainingStart(
     data: Array.isArray(dataset) ? datasetUris : datasetUris[0],
   };
 
-  // Set only when this call creates a fresh model from a base checkpoint,
-  // so a rejection at POST /training/start (e.g. the dataset task-mismatch
-  // check now enforced server-side) can delete it instead of leaving an
-  // empty, unrequested model behind.
+  // Set only when this call creates a fresh model from a base checkpoint.
+  // On a POST /training/start failure this tool never deletes that model —
+  // no status code reliably proves it was never trained — it only names
+  // the model in the error so the caller can check and remove it by hand.
   let createdModelRef: {
     owner: string;
     project: string;
@@ -481,16 +523,34 @@ export async function trainingStart(
     modelProjectDisplay = resolvedModel.project;
     modelSlugDisplay = resolvedModel.model;
   } else {
-    // Checkpoint/dataset task compatibility is enforced by the server at
-    // POST /training/start itself, e.g. `{"error":"Dataset task mismatch.
-    // This dataset is \"detect\" but the selected model trains \"classify\".
-    // ..."}` (400, verified live with a single detect dataset and a
-    // classify checkpoint). No client-side pre-check is needed. This has
-    // not been separately verified for a multi-dataset `dataset` array with
-    // a mismatch on a later entry; `trainArgs.data` carries the array the
-    // same way it carries a single string, so the same validation is
-    // expected to apply, but that expectation is inferred, not confirmed.
+    // Single dataset: checkpoint/dataset task compatibility is enforced by
+    // the server at POST /training/start itself, e.g. `{"error":"Dataset
+    // task mismatch. This dataset is \"detect\" but the selected model
+    // trains \"classify\". ..."}` (400, verified live). No client-side
+    // pre-check is needed for this case.
+    //
+    // Multiple datasets: the same server-side enforcement has not been
+    // verified live for an array with a mismatch on a later entry, so the
+    // pre-check below stays for that case only — see
+    // DATASET_TASK_COMPATIBILITY.
     const checkpointTask = inferCheckpointTask(checkpoint);
+    if (resolvedDatasets.length > 1) {
+      for (let i = 0; i < resolvedDatasets.length; i++) {
+        const datasetOwnerForCheck = datasetOwners[i];
+        const resolved = resolvedDatasets[i];
+        const datasetDetail = await client.get(
+          `/datasets/${encodeURIComponent(datasetOwnerForCheck)}/${encodeURIComponent(resolved.dataset)}`,
+        );
+        const datasetFields = asRecord(asRecord(datasetDetail).dataset);
+        const datasetTask =
+          typeof datasetFields.task === "string" ? datasetFields.task : null;
+        validateCheckpointCompatibility(
+          datasetTask,
+          checkpointTask,
+          `${datasetOwnerForCheck}/${resolved.dataset}`,
+        );
+      }
+    }
     const projectOwner =
       resolvedProject.owner ?? (await client.getAccountOwner());
     const created = await client.postJson("/models", {

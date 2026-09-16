@@ -31,9 +31,10 @@
  * platform ever accepts it instead, an unexpected `202`/`200` does not fall
  * through to a later assertion — `expectRejectionOrStopIt` calls
  * `trainingCancel` (or the raw cancel endpoint) on that exact response
- * before failing the test, so a real training job is never left running
- * unmonitored just because a check further down never got the chance to
- * catch it.
+ * before failing the test. If that stop attempt itself fails, the test
+ * failure says so explicitly rather than swallowing it, since that is
+ * exactly the moment a paid job could be left running with nothing left to
+ * flag it.
  *
  * Skipped silently without `ULTRALYTICS_API_KEY` and excluded from
  * `npm test`, exactly like the other live smoke suites.
@@ -103,10 +104,24 @@ async function expectRejectionOrStopIt<T>(
     }
     throw error;
   }
-  await onUnexpectedSuccess(result).catch(() => {});
+  // Unexpected success: the platform silently dropped the mismatch check,
+  // and training may have actually started. Stop it before failing loudly.
+  // A failure to stop it is NOT swallowed — surfacing that is more urgent
+  // than the "expected rejection" failure, since it may mean a paid job is
+  // still running with nothing left to flag it.
+  try {
+    await onUnexpectedSuccess(result);
+  } catch (stopError) {
+    throw new Error(
+      "expected the call to reject the task mismatch, but it started " +
+        "successfully, AND the attempt to stop the job also failed " +
+        `(check it by hand): ${String(stopError)}. ` +
+        `Original success response: ${JSON.stringify(result)}`,
+    );
+  }
   throw new Error(
-    "expected the call to reject the task mismatch, but it started successfully " +
-      `(job stop was attempted): ${JSON.stringify(result)}`,
+    "expected the call to reject the task mismatch, but it started " +
+      `successfully (the job was stopped): ${JSON.stringify(result)}`,
   );
 }
 

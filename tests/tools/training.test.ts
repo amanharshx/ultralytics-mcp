@@ -1561,6 +1561,8 @@ describe("trainingStart", () => {
     const DATASET_2 = "road-data-2";
     const DATASET_2_REF = `${OWNER}/${DATASET_2}`;
     const DATASET_2_URI = `ul://${OWNER}/datasets/${DATASET_2}`;
+    const DATASET_PATH = `/api/datasets/${OWNER}/${DATASET}`;
+    const DATASET_2_PATH = `/api/datasets/${OWNER}/${DATASET_2}`;
 
     test("rejects an empty dataset list before any network call", async () => {
       await expect(
@@ -1607,7 +1609,7 @@ describe("trainingStart", () => {
       });
     });
 
-    test("checkpoint mode creates the model and starts training with no per-dataset fetch", async () => {
+    test("checkpoint mode fetches and task-validates every dataset before creating the model", async () => {
       const calls: { url: string; method: string; body: unknown }[] = [];
       const impl = (async (url: string | URL, init: RequestInit = {}) => {
         let body: unknown;
@@ -1618,6 +1620,9 @@ describe("trainingStart", () => {
           body,
         });
         const path = new URL(String(url)).pathname;
+        if (path === DATASET_PATH || path === DATASET_2_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
             id: "m".repeat(24),
@@ -1637,6 +1642,9 @@ describe("trainingStart", () => {
         fetchImpl: impl,
       });
 
+      // This client-side check stays only for multi-dataset arrays: the
+      // server's task-mismatch enforcement is verified live for a single
+      // dataset, but not for an array with a mismatch on a later entry.
       await trainingStart(client, {
         model: "yolo26n.pt",
         project: PROJECT_REF,
@@ -1645,26 +1653,74 @@ describe("trainingStart", () => {
         confirmCost: true,
       });
 
-      // No per-dataset GET happens first. Only the single-dataset case was
-      // verified live (the server rejects a mismatched checkpoint/dataset
-      // task with 400 "Dataset task mismatch..."); the multi-dataset array
-      // sends the same `trainArgs.data` value the single-string case does,
-      // just as an array, so the same server-side validation is expected to
-      // apply — but that has not itself been independently confirmed live
-      // for an array where an earlier entry matches and a later one
-      // doesn't. Treat multi-dataset task-mismatch enforcement as inferred,
-      // not verified.
-      expect(calls).toMatchObject([
-        { url: `${ORIGIN}${CREATE_MODEL_PATH}` },
-        {
-          url: `${ORIGIN}${START_PATH}`,
-          body: {
-            trainArgs: {
-              data: [DATASET_URI, DATASET_2_URI],
-              model: "yolo26n.pt",
-            },
+      expect(calls[0]?.url).toBe(`${ORIGIN}${DATASET_PATH}`);
+      expect(calls[1]?.url).toBe(`${ORIGIN}${DATASET_2_PATH}`);
+      expect(calls[3]).toMatchObject({
+        url: `${ORIGIN}${START_PATH}`,
+        body: {
+          trainArgs: {
+            data: [DATASET_URI, DATASET_2_URI],
+            model: "yolo26n.pt",
           },
         },
+      });
+    });
+
+    test("refuses when one dataset in the list is task-incompatible, naming it", async () => {
+      const { client, calls } = routeClient((path) => {
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        if (path === DATASET_2_PATH) {
+          return jsonResponse({ dataset: { task: "classify" } });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n.pt",
+          project: PROJECT_REF,
+          dataset: [DATASET_REF, DATASET_2_REF],
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(
+        new RegExp(
+          `not compatible.*${OWNER}/${DATASET_2}`.replace(/\//g, "\\/"),
+        ),
+      );
+
+      expect(calls).toHaveLength(2);
+      expect(calls[1]?.path).toBe(DATASET_2_PATH);
+    });
+
+    test("allows a single-dataset request to skip the array-only check entirely", async () => {
+      // Guards against silently re-widening the reinstated check back to
+      // the single-dataset path, which the server already validates live.
+      const { client, calls } = routeClient((path) => {
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: "m".repeat(24),
+            owner: OWNER,
+            project: PROJECT,
+            model: "exp-2",
+          });
+        }
+        return jsonResponse(startResponse({ modelId: "m".repeat(24) }));
+      });
+
+      await trainingStart(client, {
+        model: "yolo26n.pt",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+
+      expect(calls.map((call) => call.path)).toEqual([
+        CREATE_MODEL_PATH,
+        START_PATH,
       ]);
     });
   });
