@@ -41,6 +41,30 @@ npm test        # unit and integration tests
 npm run build   # type-check and compile
 ```
 
+## Live Smoke Test
+
+```bash
+export ULTRALYTICS_API_KEY=ul_...
+npm run test:live
+```
+
+Runs against the real platform. It reads the same key as the server, is
+excluded from `npm test`, and skips silently when the key is unset.
+
+It creates disposable `mcp-smoke-*` projects and models and `mcp-smoke-ds-*`
+datasets, and deletes them again even on failure. Starting training and
+creating exports bill the account, so neither runs here; that verification is
+done separately.
+
+Two fixtures are opt-in and skip without their variable:
+
+- `ULTRALYTICS_SMOKE_DATASET_REF=owner/slug` — a ready dataset with ingested
+  images, for version snapshot coverage
+- `ULTRALYTICS_SMOKE_EXPORT_REF=owner/project/model:exportId` — a trained model
+  with downloadable weights and a terminal training status, plus an export that
+  has also reached a terminal status. Covers weight download, inference, the
+  training- and export-cancel refusals, and export field shapes
+
 ## Registry Metadata
 
 The npm package and the MCP registry manifest must stay aligned. These five
