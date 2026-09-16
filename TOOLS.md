@@ -43,8 +43,8 @@ Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `owner` | string | No |  |
-| `username` | string | No |  |
+| `owner` | string | No | Workspace owner; defaults to the account owner. Takes precedence over username when both are given. |
+| `username` | string | No | Compatibility alias for owner. |
 
 ### projects_get
 
@@ -64,9 +64,9 @@ Metadata: read-only, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `q` | string | Yes |  |
-| `sort` | string | No |  |
-| `offset` | number | No |  |
+| `q` | string | Yes | Search term. |
+| `sort` | string | No | Sort order for results. Server-validated; for example stars or newest. |
+| `offset` | number | No | Results to skip. |
 
 ### projects_create
 
@@ -76,11 +76,11 @@ Metadata: state-changing, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | Yes |  |
+| `name` | string | Yes | Display name. |
 | `project` | string | Yes | URL slug for the new project (distinct from the display name given by name). |
 | `owner` | string | No | Workspace owner; defaults to the account owner. |
 | `visibility` | string | No | Visibility "private" (default) or "public". |
-| `description` | string | No |  |
+| `description` | string | No | Project description. |
 
 ### projects_delete
 
@@ -104,8 +104,8 @@ Metadata: read-only
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `owner` | string | No |  |
-| `username` | string | No |  |
+| `owner` | string | No | Workspace owner; defaults to the account owner. Takes precedence over username when both are given. |
+| `username` | string | No | Compatibility alias for owner. |
 
 ### datasets_get
 
@@ -125,10 +125,10 @@ Metadata: read-only, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `q` | string | Yes |  |
-| `sort` | string | No |  |
-| `offset` | number | No |  |
-| `task` | array<string> | No |  |
+| `q` | string | Yes | Search term. |
+| `sort` | string | No | Sort order for results. Server-validated; for example stars or newest. |
+| `offset` | number | No | Results to skip. |
+| `task` | array<string> | No | Dataset task filters. Server-validated; for example detect or segment. |
 
 ### datasets_create
 
@@ -138,13 +138,13 @@ Metadata: state-changing, non-idempotent
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | Yes |  |
+| `name` | string | Yes | Display name. |
 | `dataset` | string | Yes | URL slug for the new dataset (distinct from the display name given by name). |
 | `task` | string | Yes | Dataset task such as detect, segment, semantic, pose, obb, or classify. |
 | `owner` | string | No | Workspace owner; defaults to the account owner. |
 | `visibility` | string | No | Visibility "private" (default) or "public". |
-| `description` | string | No |  |
-| `classNames` | array<string> | No |  |
+| `description` | string | No | Dataset description. |
+| `classNames` | array<string> | No | Initial class names for the dataset. |
 
 ### dataset_images_list
 
@@ -155,13 +155,13 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
-| `split` | string | No |  |
-| `search` | string | No |  |
-| `hasLabel` | boolean | No |  |
-| `classIds` | array<string> | No |  |
-| `limit` | number | No |  |
-| `offset` | number | No |  |
-| `includeImageUrls` | boolean | No |  |
+| `split` | string | No | Dataset split to filter by, for example train, val, or test. |
+| `search` | string | No | Image name or metadata search. |
+| `hasLabel` | boolean | No | Filter by annotation state. |
+| `classIds` | array<string> | No | Comma-separated class IDs; empty matches no images. |
+| `limit` | number | No | Maximum images to return. |
+| `offset` | number | No | Images to skip. |
+| `includeImageUrls` | boolean | No | Include signed full-size image URLs. |
 
 ### dataset_export
 
@@ -172,7 +172,7 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
-| `version` | number | No |  |
+| `version` | number | No | Saved version number. |
 
 ### dataset_class_stats
 
@@ -183,7 +183,7 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
-| `include_histograms` | boolean | No |  |
+| `include_histograms` | boolean | No | Include the histogram and heatmap groups omitted by default (image size, file size, format, points-per-annotation, bbox distributions, and location/dimension heatmaps). Off by default because the payload is large; the summary names the groups it omits. |
 
 ### dataset_version_create
 
@@ -194,7 +194,7 @@ Metadata: state-changing, non-idempotent
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
-| `description` | string | No |  |
+| `description` | string | No | Optional note describing this snapshot. |
 
 ### dataset_version_restore
 
@@ -226,8 +226,8 @@ Metadata: state-changing, non-idempotent, external/live
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
-| `sourceUrl` | string | Yes |  |
-| `targetSplit` | string | No |  |
+| `sourceUrl` | string | Yes | Remote dataset archive or NDJSON URL. |
+| `targetSplit` | string | No | Target split for new images (overrides archive structure). |
 | `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 ### dataset_upload_file
@@ -240,7 +240,7 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `file_path` | string | Yes | Local path to dataset archive file. |
-| `targetSplit` | string | No |  |
+| `targetSplit` | string | No | Target split for new images (overrides archive structure). |
 | `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 Notes: Uses a local archive file path and starts ingest into an existing dataset. Named YOLO ZIP archives preserve labels and classes on later ingests; archives without class names may map labels by positional index.
@@ -265,7 +265,7 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `folder_path` | string | Yes | Local path to image folder. |
-| `targetSplit` | string | No |  |
+| `targetSplit` | string | No | Target split for new images (overrides archive structure). |
 | `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 Notes: Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.
@@ -290,9 +290,9 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `video_path` | string | Yes | Local path to source video file. |
-| `fps` | number | No |  |
-| `max_frames` | number | No |  |
-| `targetSplit` | string | No |  |
+| `fps` | number | No | Frame extraction rate in frames per second. |
+| `max_frames` | number | No | Maximum number of frames to extract. |
+| `targetSplit` | string | No | Target split for new images (overrides archive structure). |
 | `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 Notes: Uses a local video path, extracts JPEG frames with ffmpeg, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.
@@ -355,9 +355,9 @@ Metadata: read-only, external/live
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
-| `include_history` | boolean | No |  |
-| `history_last_n` | number | No |  |
-| `include_train_args` | boolean | No |  |
+| `include_history` | boolean | No | Include the epoch metrics history curve; omitted by default. |
+| `history_last_n` | number | No | Limit the history curve to the most recent N epochs. Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run. |
+| `include_train_args` | boolean | No | Include the full trainArgs object; off by default because the platform returns roughly a hundred keys. |
 
 ### model_plots
 
@@ -382,9 +382,9 @@ Metadata: read-only, external/live
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `source` | string | Yes | Image URL, raw base64-encoded image, or base64 data: URI (data:<mime>;base64,<payload>). Local file paths are not supported. |
 | `project` | string | No | Project ref required when model is given by slug. |
-| `conf` | number | No |  |
-| `iou` | number | No |  |
-| `imgsz` | number | No |  |
+| `conf` | number | No | Confidence threshold (0.01-1, server default applies if omitted). |
+| `iou` | number | No | IoU threshold (0-0.95, server default applies if omitted). |
+| `imgsz` | number | No | Inference image size (32-1280, server default applies if omitted). |
 
 #### Predict from image URL
 
@@ -415,9 +415,9 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `output_path` | string | Yes | Local destination path for downloaded model weights. |
-| `project` | string | No |  |
-| `filename` | string | No |  |
-| `overwrite` | boolean | No |  |
+| `project` | string | No | Project ref required when model is given by slug. |
+| `filename` | string | No | Override filename for the downloaded weights; defaults to the server's filename. |
+| `overwrite` | boolean | No | Overwrite an existing file at output_path. |
 
 Notes: Writes model weights to a local filesystem path.
 
@@ -445,8 +445,8 @@ Metadata: read-only, external/live
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
-| `include_history` | boolean | No |  |
-| `history_last_n` | number | No |  |
+| `include_history` | boolean | No | Include the epoch metrics history curve; omitted by default. |
+| `history_last_n` | number | No | Limit the history curve to the most recent N epochs. Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run. |
 
 ### training_start
 
@@ -460,11 +460,11 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 | `project` | string | Yes | Project ref that owns the training job and resolved model. |
 | `dataset` | union | Yes | Dataset ref by slug, owner/slug, or ul:// URI, or a list of refs to fine-tune on sequentially. |
 | `gpu_type` | string | Yes | Cloud GPU type to allocate for training. |
-| `train_args` | record<string, unknown> | No |  |
-| `epochs` | number | No |  |
-| `imgsz` | number | No |  |
-| `batch` | number | No |  |
-| `name` | string | No |  |
+| `train_args` | record<string, unknown> | No | Additional YOLO training arguments passed through to the platform. Keys covered by epochs, imgsz, batch, and name are reserved here. |
+| `epochs` | number | No | Maximum full passes over the training set. |
+| `imgsz` | number | No | Target input size: square batches normally, or the long-side size with rect=true. |
+| `batch` | number | No | Images per batch: -1 targets a fraction of GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count. |
+| `name` | string | No | Run name for callbacks. |
 | `confirm_cost` | boolean | No | Must be true to allow a credit-costing training run. Starting is billable immediately; the platform has no cost preview before that, so the estimated cost and remaining balance are only reported after the job starts. |
 | `confirm_history_loss` | boolean | No | Must be true to restart training on an existing model that already has a recorded run. Doing so replaces that model's status, epoch count, and per-epoch metric history irrecoverably; the previously uploaded weights survive. Not required for an untrained model or for checkpoint mode, which creates a new model instead. Separate from confirm_cost. |
 
@@ -572,9 +572,9 @@ Metadata: state-changing, non-idempotent, external/live
 | `format` | string | Yes | Requested export format (validated by the server). |
 | `project` | string | No | Project ref required when model is given by slug. |
 | `gpu_type` | string | No | GPU type required for TensorRT engine exports. |
-| `imgsz` | number | No |  |
-| `half` | boolean | No |  |
-| `dynamic` | boolean | No |  |
+| `imgsz` | number | No | Image size for export. |
+| `half` | boolean | No | Legacy alias for FP16 export precision; forwards to quantize=16. |
+| `dynamic` | boolean | No | Dynamic input shapes. |
 | `confirm_cost` | boolean | No | Must be true to allow a credit-costing export job. |
 
 Notes: State-changing export job that may cost credits. Set `confirm_cost` to `true` explicitly.
