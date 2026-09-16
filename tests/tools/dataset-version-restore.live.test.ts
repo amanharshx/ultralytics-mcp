@@ -23,13 +23,17 @@
  *   confirm the count returned to the original. `annotationCount` is the
  *   ID-independent metric this asserts on -- held image IDs are never
  *   compared, since restore reassigns them.
- * - An invalid version number surfacing the server's message verbatim.
+ *
+ * Invalid-version error passthrough is covered by the live-captured parity
+ * fixture (`dataset_version_restore_invalid_version.json`) instead of a
+ * second live test here: error propagation is shared client behavior, not
+ * restore-specific logic, so it doesn't need its own asynchronous clone
+ * lifecycle to verify.
  */
 
 import { describe, expect, test } from "vitest";
 
 import { getApiBase } from "../../src/config.js";
-import { UltralyticsApiError } from "../../src/errors.js";
 import {
   autoAnnotateStart,
   autoAnnotateStatus,
@@ -211,39 +215,4 @@ describe.skipIf(!apiKey)("dataset_version_restore live smoke", () => {
       JSON.stringify(captures, null, 2),
     );
   }, 180_000);
-
-  test("restoring an invalid version surfaces the server's message verbatim", async () => {
-    const key = apiKey as string;
-    const client = recordingClient(key, []);
-    const owner = await client.getAccountOwner();
-
-    const slug = disposableSlug("zz-mcp-throwaway-restore-bad");
-    const ref = `${owner}/${slug}`;
-
-    let datasetId: string | null = null;
-    try {
-      const cloned = (await client.postJson(
-        `/datasets/${encodeURIComponent(SOURCE_OWNER)}/${encodeURIComponent(SOURCE_DATASET)}/clone`,
-        { dataset: slug, visibility: "private" },
-      )) as Record<string, unknown>;
-      datasetId = String(cloned.id);
-
-      let error: unknown;
-      try {
-        await datasetVersionRestore(client, { dataset: ref, version: 999 });
-      } catch (e) {
-        error = e;
-      }
-      expect(error).toBeInstanceOf(UltralyticsApiError);
-      const apiError = error as UltralyticsApiError;
-      expect([400, 404]).toContain(apiError.statusCode);
-      expect(apiError.apiMessage.length).toBeGreaterThan(0);
-    } finally {
-      if (datasetId) {
-        const deleted = await datasetsDelete(client, ref);
-        expect((deleted.data as Record<string, unknown>).success).toBe(true);
-        await purgeDatasetFromTrash(key, datasetId);
-      }
-    }
-  }, 60_000);
 });
