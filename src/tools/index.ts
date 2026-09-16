@@ -1760,7 +1760,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .number()
         .optional()
         .describe(
-          "Images per batch: -1 targets a fraction of GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count.",
+          "Images per batch: -1 targets about 60% GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count.",
         ),
       name: z.string().optional().describe("Run name for callbacks."),
       confirm_cost: z

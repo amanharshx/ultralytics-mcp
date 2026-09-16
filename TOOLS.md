@@ -463,7 +463,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 | `train_args` | record<string, unknown> | No | Additional YOLO training arguments passed through to the platform. Keys covered by epochs, imgsz, batch, and name are reserved here. |
 | `epochs` | number | No | Maximum full passes over the training set. |
 | `imgsz` | number | No | Target input size: square batches normally, or the long-side size with rect=true. |
-| `batch` | number | No | Images per batch: -1 targets a fraction of GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count. |
+| `batch` | number | No | Images per batch: -1 targets about 60% GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count. |
 | `name` | string | No | Run name for callbacks. |
 | `confirm_cost` | boolean | No | Must be true to allow a credit-costing training run. Starting is billable immediately; the platform has no cost preview before that, so the estimated cost and remaining balance are only reported after the job starts. |
 | `confirm_history_loss` | boolean | No | Must be true to restart training on an existing model that already has a recorded run. Doing so replaces that model's status, epoch count, and per-epoch metric history irrecoverably; the previously uploaded weights survive. Not required for an untrained model or for checkpoint mode, which creates a new model instead. Separate from confirm_cost. |
