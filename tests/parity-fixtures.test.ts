@@ -12,6 +12,7 @@ import { UltralyticsClient } from "../src/client.js";
 import { UltralyticsApiError } from "../src/errors.js";
 import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
+  autoAnnotateStatus,
   datasetClassStats,
   datasetExport,
   datasetImagesList,
@@ -240,6 +241,8 @@ const TOOL_RUNNERS: Record<
       args.username as string | undefined,
     ),
   datasets_get: (client, args) => datasetsGet(client, args.dataset as string),
+  auto_annotate_status: (client, args) =>
+    autoAnnotateStatus(client, args.dataset as string),
   deployments_list: (client, args) =>
     deploymentsList(client, args.owner as string | undefined),
   deployment_get: (client, args) =>
@@ -492,6 +495,10 @@ describe("parity fixtures", () => {
         "datasets_delete.json",
         "datasets_get.json",
         "datasets_list.json",
+        "auto_annotate_status_never_run.json",
+        "auto_annotate_status_active.json",
+        "auto_annotate_status_terminal_success.json",
+        "auto_annotate_status_terminal_failure.json",
         "dataset_class_stats.json",
         "dataset_class_stats_empty.json",
         "dataset_export.json",

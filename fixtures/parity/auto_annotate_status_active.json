@@ -1,0 +1,42 @@
+{
+  "tool": "auto_annotate_status",
+  "args": {
+    "dataset": "example-owner/example-dataset-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "response": {
+        "status": 200,
+        "json": {
+          "activeJob": {
+            "id": "000000000000000000000001",
+            "stopping": false,
+            "progress": {
+              "processed": 0,
+              "total": 8
+            },
+            "startedAt": "2026-09-16T03:54:19.889Z"
+          },
+          "lastRun": null
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Dataset 'example-dataset-1' for owner 'example-owner': run '000000000000000000000001' active, processed 0/8, started at 2026-09-16T03:54:19.889Z.",
+    "data": {
+      "activeJob": {
+        "id": "000000000000000000000001",
+        "stopping": false,
+        "progress": {
+          "processed": 0,
+          "total": 8
+        },
+        "startedAt": "2026-09-16T03:54:19.889Z"
+      },
+      "lastRun": null
+    }
+  }
+}

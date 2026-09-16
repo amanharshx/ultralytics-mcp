@@ -1,0 +1,36 @@
+{
+  "tool": "auto_annotate_status",
+  "args": {
+    "dataset": "example-owner/example-dataset-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "response": {
+        "status": 200,
+        "json": {
+          "activeJob": null,
+          "lastRun": {
+            "failed": true,
+            "stopped": false,
+            "error": "This model's task or classes do not match the dataset.",
+            "results": null
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Dataset 'example-dataset-1' for owner 'example-owner': last run finished, failed=true stopped=false. Error: This model's task or classes do not match the dataset.",
+    "data": {
+      "activeJob": null,
+      "lastRun": {
+        "failed": true,
+        "stopped": false,
+        "error": "This model's task or classes do not match the dataset.",
+        "results": null
+      }
+    }
+  }
+}

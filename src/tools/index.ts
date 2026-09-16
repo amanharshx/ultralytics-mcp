@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import type { UltralyticsClient } from "../client.js";
 import { toMcpTextResult } from "../tool-result.js";
+import { autoAnnotateStatus } from "./auto-annotate.js";
 import {
   datasetClassStats,
   datasetExport,
@@ -56,6 +57,7 @@ import {
 } from "./projects.js";
 import { trainingCancel, trainingMonitor, trainingStart } from "./training.js";
 
+export { autoAnnotateStatus } from "./auto-annotate.js";
 export {
   datasetClassStats,
   datasetExport,
@@ -469,6 +471,25 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             dataset: dataset as string,
             includeHistograms: include_histograms as boolean | undefined,
           }),
+        ),
+  }),
+  tool({
+    name: "auto_annotate_status",
+    registrationGroup: "read",
+    stateChanging: false,
+    description:
+      "Get an auto-annotation run's status for a dataset by slug, owner/slug, or dataset ul:// URI. Surfaces activeJob and lastRun unmodified: both null means the dataset has never run one; activeJob carries progress for a run in flight; lastRun carries failed/stopped booleans plus results, or an error when the run failed.",
+    inputSchema: {
+      dataset: z
+        .string()
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    createHandler:
+      (getClient) =>
+      async ({ dataset }) =>
+        toMcpTextResult(
+          await autoAnnotateStatus(getClient(), dataset as string),
         ),
   }),
   tool({

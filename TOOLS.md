@@ -675,7 +675,17 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Infrastructure
 
-1 tools.
+2 tools.
+
+### auto_annotate_status
+
+Get an auto-annotation run's status for a dataset by slug, owner/slug, or dataset ul:// URI. Surfaces activeJob and lastRun unmodified: both null means the dataset has never run one; activeJob carries progress for a run in flight; lastRun carries failed/stopped booleans plus results, or an error when the run failed.
+
+Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 
 ### gpu_availability
 
