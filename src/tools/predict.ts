@@ -57,9 +57,9 @@ export async function modelPredict(
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
   const data: Record<string, unknown> = { source: normalizedSource };
-  if (conf !== undefined) data.conf = String(conf);
-  if (iou !== undefined) data.iou = String(iou);
-  if (imgsz !== undefined) data.imgsz = String(imgsz);
+  if (conf !== undefined) data.conf = conf;
+  if (iou !== undefined) data.iou = iou;
+  if (imgsz !== undefined) data.imgsz = imgsz;
   const result = await client.postMultipart(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/predict`,
     { data },

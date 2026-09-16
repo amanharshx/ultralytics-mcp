@@ -11,13 +11,23 @@
  * housekeeping tickets keep finding and removing elsewhere (`sort`, the
  * dataset-task/split/conflict-policy enums).
  *
- * This suite proves the fields are safe to omit: a prediction sent with the
- * three fields explicitly set to 0.25/0.7/640 is compared against the same
- * prediction with all three omitted, on the same image and model. The
- * comparison ignores `speed` (timing varies run to run) and compares
- * `results` and `shape` for exact equality — not just "no error was
- * thrown." A second call with a deliberately high `conf` confirms the field
- * is still genuinely respected when given, not silently dropped.
+ * "Surfaces the server's real default" is proved the same way the sort and
+ * enum-cache live suites prove their equivalents: an independent, direct
+ * `client.postMultipart` call — bypassing `modelPredict` entirely — pins the
+ * server's own response with no fields sent, and that raw response is
+ * compared against a raw call sending the old fixed values (0.25/0.7/640)
+ * for exact equality. Only after that baseline is pinned does the suite
+ * check that `modelPredict` itself, called with the fields omitted, matches
+ * it — so a bug specific to how `modelPredict` builds the omitted-field
+ * request can't hide behind two calls that both go through the same code
+ * path. `results` and `shape` are compared; `speed` is excluded because
+ * timing varies run to run.
+ *
+ * Each of `conf`, `iou`, and `imgsz` is then shown to still change the
+ * result, individually, when given a non-default value — proving each
+ * field still reaches the server now that it's only sent conditionally,
+ * not silently dropped. The specific values and directions were found by
+ * probing this model live beforehand, not guessed.
  *
  * Needs a trained model with real weights, opted into with
  * `ULTRALYTICS_SMOKE_MODEL_REF=owner/project/model`, and skips without it —
@@ -43,8 +53,59 @@ const modelRef = process.env.ULTRALYTICS_SMOKE_MODEL_REF?.trim();
 
 const SAMPLE_IMAGE_URL = "https://ultralytics.com/images/bus.jpg";
 
+interface PredictResponse {
+  images: Array<{ shape: unknown; results: unknown[] }>;
+}
+
+function totalResults(response: PredictResponse): number {
+  return response.images.reduce((sum, image) => sum + image.results.length, 0);
+}
+
 describe.skipIf(!apiKey)("model_predict defaults live smoke", () => {
-  test("omitting conf/iou/imgsz matches sending the client's old fixed values, and conf is still respected when given", async (ctx) => {
+  test("omitting conf/iou/imgsz matches the server's own default, verified against an independent raw call", async (ctx) => {
+    if (!modelRef) {
+      ctx.skip(
+        "needs ULTRALYTICS_SMOKE_MODEL_REF=owner/project/model pointing " +
+          "at a trained model with real weights.",
+      );
+    }
+
+    const client = recordingClient(apiKey as string, []);
+    const [owner, project, model] = (modelRef as string).split("/");
+    const path = `/models/${owner}/${project}/${model}/predict`;
+
+    // Independent raw calls, bypassing modelPredict entirely: pins the
+    // server's own default, uncoupled from modelPredict's own handling.
+    const rawOmitted = (await client.postMultipart(path, {
+      data: { source: SAMPLE_IMAGE_URL },
+    })) as PredictResponse;
+    const rawWithOldFixedValues = (await client.postMultipart(path, {
+      data: { source: SAMPLE_IMAGE_URL, conf: 0.25, iou: 0.7, imgsz: 640 },
+    })) as PredictResponse;
+
+    expect(rawOmitted.images.map((image) => image.shape)).toEqual(
+      rawWithOldFixedValues.images.map((image) => image.shape),
+    );
+    expect(rawOmitted.images.map((image) => image.results)).toEqual(
+      rawWithOldFixedValues.images.map((image) => image.results),
+    );
+
+    // modelPredict itself, called with the fields omitted, must match that
+    // independently-pinned raw baseline exactly.
+    const toolOmitted = (
+      await modelPredict(client, modelRef as string, {
+        source: SAMPLE_IMAGE_URL,
+      })
+    ).data as PredictResponse;
+    expect(toolOmitted.images.map((image) => image.shape)).toEqual(
+      rawOmitted.images.map((image) => image.shape),
+    );
+    expect(toolOmitted.images.map((image) => image.results)).toEqual(
+      rawOmitted.images.map((image) => image.results),
+    );
+  }, 30_000);
+
+  test("conf, iou, and imgsz each still reach the server and change the result when given", async (ctx) => {
     if (!modelRef) {
       ctx.skip(
         "needs ULTRALYTICS_SMOKE_MODEL_REF=owner/project/model pointing " +
@@ -54,43 +115,39 @@ describe.skipIf(!apiKey)("model_predict defaults live smoke", () => {
 
     const client = recordingClient(apiKey as string, []);
 
-    const withDefaults = await modelPredict(client, modelRef as string, {
-      source: SAMPLE_IMAGE_URL,
-      conf: 0.25,
-      iou: 0.7,
-      imgsz: 640,
-    });
-    const withoutFields = await modelPredict(client, modelRef as string, {
-      source: SAMPLE_IMAGE_URL,
-    });
+    const baseline = (
+      await modelPredict(client, modelRef as string, {
+        source: SAMPLE_IMAGE_URL,
+      })
+    ).data as PredictResponse;
+    const baselineCount = totalResults(baseline);
 
-    type PredictData = { images: Array<{ shape: unknown; results: unknown }> };
-    const defaultsImages = (withDefaults.data as PredictData).images;
-    const omittedImages = (withoutFields.data as PredictData).images;
+    // A high conf threshold narrows results: fewer detections clear the bar.
+    const highConf = (
+      await modelPredict(client, modelRef as string, {
+        source: SAMPLE_IMAGE_URL,
+        conf: 0.95,
+      })
+    ).data as PredictResponse;
+    expect(totalResults(highConf)).toBeLessThan(baselineCount);
 
-    expect(omittedImages.map((image) => image.shape)).toEqual(
-      defaultsImages.map((image) => image.shape),
-    );
-    expect(omittedImages.map((image) => image.results)).toEqual(
-      defaultsImages.map((image) => image.results),
-    );
+    // A near-zero IoU threshold suppresses more overlapping boxes, so it
+    // narrows results too, in the opposite direction from a high IoU.
+    const lowIou = (
+      await modelPredict(client, modelRef as string, {
+        source: SAMPLE_IMAGE_URL,
+        iou: 0.01,
+      })
+    ).data as PredictResponse;
+    expect(totalResults(lowIou)).toBeLessThan(baselineCount);
 
-    // A high conf threshold must still narrow the results: proves the field
-    // reaches the server rather than being silently dropped now that it is
-    // only sent conditionally.
-    const highConf = await modelPredict(client, modelRef as string, {
-      source: SAMPLE_IMAGE_URL,
-      conf: 0.95,
-    });
-    const highConfImages = (highConf.data as PredictData).images;
-    const totalHighConfResults = highConfImages.reduce(
-      (sum, image) => sum + (image.results as unknown[]).length,
-      0,
-    );
-    const totalDefaultResults = defaultsImages.reduce(
-      (sum, image) => sum + (image.results as unknown[]).length,
-      0,
-    );
-    expect(totalHighConfResults).toBeLessThan(totalDefaultResults);
+    // A much smaller inference size loses detail and narrows results too.
+    const smallImgsz = (
+      await modelPredict(client, modelRef as string, {
+        source: SAMPLE_IMAGE_URL,
+        imgsz: 96,
+      })
+    ).data as PredictResponse;
+    expect(totalResults(smallImgsz)).toBeLessThan(baselineCount);
   }, 30_000);
 });
