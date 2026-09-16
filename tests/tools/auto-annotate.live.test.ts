@@ -41,8 +41,8 @@ const SOURCE_OWNER = "momox";
 const SOURCE_DATASET = "coco8";
 const MODEL_ID = "ul://support-doe/pothole/exp-2";
 
-/** Permanently purge a trashed dataset. Not a shipped tool: this ticket
- * only ships a read, so the raw endpoint is called directly for cleanup. */
+/** Permanently purge a trashed dataset. Not a shipped tool, so the raw
+ * endpoint is called directly for test cleanup. */
 async function purgeDatasetFromTrash(key: string, id: string): Promise<void> {
   const response = await fetch(`${getApiBase()}/trash`, {
     method: "DELETE",

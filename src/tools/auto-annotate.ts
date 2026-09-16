@@ -1,4 +1,4 @@
-/** Auto-annotate tools. Pure reads only in this ticket; start/stop are separate. */
+/** Auto-annotate tools. */
 
 import type { UltralyticsClient } from "../client.js";
 import { resolveDataset } from "../resolve.js";
