@@ -230,4 +230,27 @@ test("server registers all available tools over the protocol", async () => {
     /most recently uploaded checkpoint is preserved/,
   );
   expect(trainingCancel?.description).toMatch(/does not delete the model/);
+
+  const autoAnnotateStart = tools.find(
+    (tool) => tool.name === "auto_annotate_start",
+  );
+  expect(autoAnnotateStart?.inputSchema?.required).toEqual([
+    "dataset",
+    "model",
+  ]);
+  expect(autoAnnotateStart?.inputSchema?.properties?.class_mapping).toEqual(
+    expect.objectContaining({
+      type: "array",
+      items: expect.objectContaining({
+        anyOf: expect.arrayContaining([
+          expect.objectContaining({ type: "integer" }),
+        ]),
+      }),
+    }),
+  );
+
+  const autoAnnotateStop = tools.find(
+    (tool) => tool.name === "auto_annotate_stop",
+  );
+  expect(autoAnnotateStop?.inputSchema?.required).toEqual(["dataset"]);
 });

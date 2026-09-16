@@ -38,12 +38,17 @@
  * number of times until it actually observes an active run to cancel,
  * spending at most a few extra cents shown in the reported delta.
  *
- * The spec's `422 Dataset has no classes` start failure is not exercised
- * here: the epic's own probes never observed it live despite dedicated
- * attempts, and reproducing it would need a dataset shape not otherwise
- * needed by this ticket. `start`'s error handling is untyped and generic
- * (surface verbatim, never branch on the code), so the 409 case above
- * already exercises the only behavior that matters.
+ * The spec documents a `422 Dataset has no classes` start failure that the
+ * epic's own probes never observed live. This suite makes its own attempt:
+ * a freshly created, empty (zero-image, zero-class) dataset. Live result:
+ * `409 {"error":"Dataset must be ready to auto-annotate"}` — a third,
+ * previously undocumented refusal, not the spec's `422`. It is asserted
+ * verbatim below since it reproduced identically across separate runs.
+ * Getting an empty dataset "ready" while still having no classes (to
+ * possibly reach the documented `422`) would need an image upload this
+ * ticket has no other reason to exercise, so that narrower shape is left
+ * unpinned; `start`'s handling is untyped and generic (surface verbatim,
+ * never branch on the code) regardless of which refusal fires.
  */
 
 import { describe, expect, test } from "vitest";
@@ -55,7 +60,7 @@ import {
   autoAnnotateStatus,
   autoAnnotateStop,
 } from "../../src/tools/auto-annotate.js";
-import { datasetsDelete } from "../../src/tools/datasets.js";
+import { datasetsCreate, datasetsDelete } from "../../src/tools/datasets.js";
 import {
   disposableSlug,
   lastStatus,
@@ -217,4 +222,45 @@ describe.skipIf(!apiKey)("auto_annotate start/stop live smoke", () => {
       JSON.stringify(captures, null, 2),
     );
   }, 180_000);
+
+  test("start on a freshly created, empty dataset surfaces the platform's actual refusal verbatim", async () => {
+    const key = apiKey as string;
+    const client = recordingClient(key, []);
+    const owner = await client.getAccountOwner();
+
+    const slug = disposableSlug("zz-mcp-throwaway-aa-empty");
+    const ref = `${owner}/${slug}`;
+
+    let datasetId: string | null = null;
+    try {
+      const created = await datasetsCreate(client, {
+        name: "zz mcp throwaway empty dataset",
+        dataset: slug,
+        task: "detect",
+        visibility: "private",
+      });
+      datasetId = String((created.data as Record<string, unknown>).id);
+
+      let error: unknown;
+      try {
+        await autoAnnotateStart(client, ref, MODEL_REF, {
+          classMapping: [0],
+          confirmCost: true,
+        });
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(UltralyticsApiError);
+      expect((error as UltralyticsApiError).statusCode).toBe(409);
+      expect((error as UltralyticsApiError).apiMessage).toBe(
+        "Dataset must be ready to auto-annotate",
+      );
+    } finally {
+      if (datasetId) {
+        const deleted = await datasetsDelete(client, ref);
+        expect((deleted.data as Record<string, unknown>).success).toBe(true);
+        await purgeDatasetFromTrash(key, datasetId);
+      }
+    }
+  }, 60_000);
 });

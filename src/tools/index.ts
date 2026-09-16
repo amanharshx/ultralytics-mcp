@@ -532,7 +532,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           "IoU threshold for generated labels. Omit to use the server default (currently 0.7).",
         ),
       class_mapping: z
-        .array(z.union([z.number(), z.null()]))
+        .array(z.union([z.number().int(), z.null()]))
         .optional()
         .describe(
           "Model class index -> dataset class index mapping, positioned by model class index. Required to bridge a class-taxonomy mismatch between the model and the dataset; passed through with no length check.",

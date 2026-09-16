@@ -254,6 +254,10 @@ const TOOL_RUNNERS: Record<
       includeAnnotated: args.include_annotated as boolean | undefined,
       confirmCost: args.confirm_cost as boolean | undefined,
     }),
+  // auto_annotate_stop_none.json: live capture, DELETE .../predict/batch
+  // where the preceding GET saw a non-null activeJob but the run finished
+  // in the gap before DELETE landed -> 200 {action:"none"}. Caught on the
+  // fourth of eight start+stop races at a 900ms gap between GET and DELETE.
   auto_annotate_stop: (client, args) =>
     autoAnnotateStop(client, args.dataset as string),
   deployments_list: (client, args) =>
@@ -515,6 +519,7 @@ describe("parity fixtures", () => {
         "auto_annotate_start.json",
         "auto_annotate_start_refused.json",
         "auto_annotate_stop.json",
+        "auto_annotate_stop_none.json",
         "auto_annotate_stop_refused.json",
         "dataset_class_stats.json",
         "dataset_class_stats_empty.json",
