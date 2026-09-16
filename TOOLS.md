@@ -356,7 +356,7 @@ Metadata: read-only, external/live
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
 | `include_history` | boolean | No | Include the epoch metrics history curve; omitted by default. |
-| `history_last_n` | number | No | Limit the history curve to the most recent N epochs. Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run. |
+| `history_last_n` | number | No | Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run. |
 | `include_train_args` | boolean | No | Include the full trainArgs object; off by default because the platform returns roughly a hundred keys. |
 
 ### model_plots
@@ -416,7 +416,7 @@ Metadata: state-changing, non-idempotent
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `output_path` | string | Yes | Local destination path for downloaded model weights. |
 | `project` | string | No | Project ref required when model is given by slug. |
-| `filename` | string | No | Override filename for the downloaded weights; defaults to the server's filename. |
+| `filename` | string | No | Select which of the model's remote weight files to download by name; does not set the local output filename (use output_path for that). Omit to prefer best.pt, then the first available file. |
 | `overwrite` | boolean | No | Overwrite an existing file at output_path. |
 
 Notes: Writes model weights to a local filesystem path.
@@ -446,7 +446,7 @@ Metadata: read-only, external/live
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
 | `include_history` | boolean | No | Include the epoch metrics history curve; omitted by default. |
-| `history_last_n` | number | No | Limit the history curve to the most recent N epochs. Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run. |
+| `history_last_n` | number | No | Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run. |
 
 ### training_start
 
@@ -573,7 +573,7 @@ Metadata: state-changing, non-idempotent, external/live
 | `project` | string | No | Project ref required when model is given by slug. |
 | `gpu_type` | string | No | GPU type required for TensorRT engine exports. |
 | `imgsz` | number | No | Image size for export. |
-| `half` | boolean | No | Legacy alias for FP16 export precision; forwards to quantize=16. |
+| `half` | boolean | No | Legacy FP16 export precision flag. |
 | `dynamic` | boolean | No | Dynamic input shapes. |
 | `confirm_cost` | boolean | No | Must be true to allow a credit-costing export job. |
 

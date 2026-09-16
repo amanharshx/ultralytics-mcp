@@ -1288,7 +1288,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .positive()
         .optional()
         .describe(
-          "Limit the history curve to the most recent N epochs. Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
+          "Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
         ),
     },
     annotations: {
@@ -1339,7 +1339,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .positive()
         .optional()
         .describe(
-          "Limit the history curve to the most recent N epochs. Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
+          "Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
         ),
       include_train_args: z
         .boolean()
@@ -1511,7 +1511,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          "Override filename for the downloaded weights; defaults to the server's filename.",
+          "Select which of the model's remote weight files to download by name; does not set the local output filename (use output_path for that). Omit to prefer best.pt, then the first available file.",
         ),
       overwrite: z
         .boolean()
@@ -1633,9 +1633,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       half: z
         .boolean()
         .optional()
-        .describe(
-          "Legacy alias for FP16 export precision; forwards to quantize=16.",
-        ),
+        .describe("Legacy FP16 export precision flag."),
       dynamic: z.boolean().optional().describe("Dynamic input shapes."),
       confirm_cost: z
         .boolean()
