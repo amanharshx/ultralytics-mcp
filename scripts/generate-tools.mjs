@@ -13,6 +13,7 @@ const GROUP_ORDER = [
   "Training",
   "Exports",
   "Deployments",
+  "Auto-annotate",
   "Infrastructure",
 ];
 
@@ -31,6 +32,7 @@ function inferGroup(name) {
   if (name.startsWith("deployments_") || name.startsWith("deployment_")) {
     return "Deployments";
   }
+  if (name.startsWith("auto_annotate_")) return "Auto-annotate";
   return "Infrastructure";
 }
 

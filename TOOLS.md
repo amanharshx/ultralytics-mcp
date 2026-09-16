@@ -673,9 +673,9 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 | --- | --- | --- | --- |
 | `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
 
-## Infrastructure
+## Auto-annotate
 
-2 tools.
+1 tools.
 
 ### auto_annotate_status
 
@@ -686,6 +686,10 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
+
+## Infrastructure
+
+1 tools.
 
 ### gpu_availability
 
