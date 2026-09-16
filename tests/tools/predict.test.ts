@@ -141,8 +141,8 @@ describe("modelPredict", () => {
     expect(body).toBeInstanceOf(FormData);
     expect(body?.get("source")).toBe("https://x/y.jpg");
     expect(body?.get("conf")).toBe("0.5");
-    expect(body?.get("iou")).toBe("0.7");
-    expect(body?.get("imgsz")).toBe("640");
+    expect(body?.get("iou")).toBeNull();
+    expect(body?.get("imgsz")).toBeNull();
     expect(result.summary).toBe(
       "Model 'exp' for owner 'alice' project 'road': 1 image(s), 2 detection(s).",
     );
@@ -153,6 +153,30 @@ describe("modelPredict", () => {
       images: LIVE_IMAGES,
       metadata: LIVE_METADATA,
     });
+  });
+
+  // Live capture: identical detections with and without conf/iou/imgsz set
+  // to 0.25/0.7/640, so the fields are only sent when given and the server
+  // applies its own default otherwise.
+  test("sends conf, iou, and imgsz only when given", async () => {
+    const { client, calls } = predictClient();
+
+    await modelPredict(client, "alice/road/exp", { source: "https://x/y.jpg" });
+    const firstBody = calls[0].body;
+    expect(firstBody?.get("conf")).toBeNull();
+    expect(firstBody?.get("iou")).toBeNull();
+    expect(firstBody?.get("imgsz")).toBeNull();
+
+    await modelPredict(client, "alice/road/exp", {
+      source: "https://x/y.jpg",
+      conf: 0.4,
+      iou: 0.5,
+      imgsz: 1280,
+    });
+    const secondBody = calls[1].body;
+    expect(secondBody?.get("conf")).toBe("0.4");
+    expect(secondBody?.get("iou")).toBe("0.5");
+    expect(secondBody?.get("imgsz")).toBe("1280");
   });
 
   test("accepts a ul:// model URI without an account lookup", async () => {

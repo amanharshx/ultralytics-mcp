@@ -20,6 +20,9 @@ import { type PredictParams, projectPredictResult } from "./shared.js";
  * endpoint rejects (oversized source, unreadable image) fails with its own
  * `400`, so the surfaced message tells a model problem from an input
  * problem. Zero detections are a normal `200` with empty `results`.
+ * `conf`/`iou`/`imgsz` are optional and only sent when given, letting the
+ * server apply its own default otherwise (verified live: identical
+ * detections with and without the fields set to 0.25/0.7/640).
  */
 export async function modelPredict(
   client: UltralyticsClient,
@@ -29,7 +32,7 @@ export async function modelPredict(
     project?: string;
   },
 ): Promise<NormalizedToolResult> {
-  const { source, project, conf = 0.25, iou = 0.7, imgsz = 640 } = options;
+  const { source, project, conf, iou, imgsz } = options;
   if (!source?.trim()) {
     throw new Error(
       "`source` is required: an image URL or base64-encoded image.",
@@ -53,16 +56,13 @@ export async function modelPredict(
 
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
+  const data: Record<string, unknown> = { source: normalizedSource };
+  if (conf !== undefined) data.conf = conf;
+  if (iou !== undefined) data.iou = iou;
+  if (imgsz !== undefined) data.imgsz = imgsz;
   const result = await client.postMultipart(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/predict`,
-    {
-      data: {
-        source: normalizedSource,
-        conf: String(conf),
-        iou: String(iou),
-        imgsz: String(imgsz),
-      },
-    },
+    { data },
   );
 
   const { images, metadata, detectionCount } = projectPredictResult(result);

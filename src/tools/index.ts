@@ -1446,19 +1446,19 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .number()
         .optional()
         .describe(
-          "Confidence threshold (0.01-1); defaults to 0.25 when omitted.",
+          "Confidence threshold (0.01-1, server default applies if omitted).",
         ),
       iou: z
         .number()
         .optional()
         .describe(
-          "IoU threshold used for NMS (0-0.95); defaults to 0.7 when omitted.",
+          "IoU threshold used for NMS (0-0.95, server default applies if omitted).",
         ),
       imgsz: z
         .number()
         .optional()
         .describe(
-          "Inference image size (32-1280); defaults to 640 when omitted.",
+          "Inference image size (32-1280, server default applies if omitted).",
         ),
     },
     annotations: {
