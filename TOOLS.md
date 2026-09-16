@@ -657,7 +657,7 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
-| `range` | string | No | Time range, passed through unvalidated (one of 1h, 6h, 24h, 7d, 30d; default 24h). |
+| `range` | string | No | Time range, passed through unvalidated (e.g. 1h, 24h, 7d; default 24h). |
 | `sparkline` | boolean | No | When true, selects the compact sparkline shape (requests24h, totalRequests, errorRate, avgLatencyMs) instead of the detailed shape. |
 
 ### deployment_predict

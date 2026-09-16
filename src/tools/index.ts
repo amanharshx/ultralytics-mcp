@@ -1173,7 +1173,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          "Time range, passed through unvalidated (one of 1h, 6h, 24h, 7d, 30d; default 24h).",
+          "Time range, passed through unvalidated (e.g. 1h, 24h, 7d; default 24h).",
         ),
       sparkline: z
         .boolean()
