@@ -254,7 +254,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 - Training: 3 tools
 - Exports: 4 tools
 - Deployments: 7 tools
-- Infrastructure: 1 tool
+- Infrastructure: 2 tools
 
 ## Safety
 
