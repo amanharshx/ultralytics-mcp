@@ -1164,7 +1164,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Read metrics for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). The response is one of two shapes selected by sparkline: the default shape carries timeRange (a {start, end} object)/summary/timeSeries, sparkline=true carries requests24h (an array of per-hour points, not a total)/totalRequests/errorRate/avgLatencyMs. The two are never merged; which shape came back is returned as-is. range is one of 1h, 6h, 24h, 7d, 30d (default 24h), passed through to the server unvalidated.",
+      "Read metrics for one deployment by owner/deployment or a bare slug (owner defaults to the account owner). The response is one of two shapes selected by sparkline: the default shape carries timeRange (a {start, end} object)/summary/timeSeries, sparkline=true carries requests24h (an array of per-hour points, not a total)/totalRequests/errorRate/avgLatencyMs. The two are never merged; which shape came back is returned as-is. range (e.g. 1h, 24h, 7d; default 24h) is passed through to the server unvalidated.",
     inputSchema: {
       deployment: z
         .string()
