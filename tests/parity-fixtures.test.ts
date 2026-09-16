@@ -12,7 +12,9 @@ import { UltralyticsClient } from "../src/client.js";
 import { UltralyticsApiError } from "../src/errors.js";
 import type { NormalizedToolResult } from "../src/tool-result.js";
 import {
+  autoAnnotateStart,
   autoAnnotateStatus,
+  autoAnnotateStop,
   datasetClassStats,
   datasetExport,
   datasetImagesList,
@@ -243,6 +245,17 @@ const TOOL_RUNNERS: Record<
   datasets_get: (client, args) => datasetsGet(client, args.dataset as string),
   auto_annotate_status: (client, args) =>
     autoAnnotateStatus(client, args.dataset as string),
+  auto_annotate_start: (client, args) =>
+    autoAnnotateStart(client, args.dataset as string, args.model as string, {
+      project: args.project as string | undefined,
+      confidence: args.confidence as number | undefined,
+      iou: args.iou as number | undefined,
+      classMapping: args.class_mapping as (number | null)[] | undefined,
+      includeAnnotated: args.include_annotated as boolean | undefined,
+      confirmCost: args.confirm_cost as boolean | undefined,
+    }),
+  auto_annotate_stop: (client, args) =>
+    autoAnnotateStop(client, args.dataset as string),
   deployments_list: (client, args) =>
     deploymentsList(client, args.owner as string | undefined),
   deployment_get: (client, args) =>
@@ -499,6 +512,10 @@ describe("parity fixtures", () => {
         "auto_annotate_status_active.json",
         "auto_annotate_status_terminal_success.json",
         "auto_annotate_status_terminal_failure.json",
+        "auto_annotate_start.json",
+        "auto_annotate_start_refused.json",
+        "auto_annotate_stop.json",
+        "auto_annotate_stop_refused.json",
         "dataset_class_stats.json",
         "dataset_class_stats_empty.json",
         "dataset_export.json",
@@ -585,7 +602,9 @@ describe("parity fixtures", () => {
       fixtureFile === "export_cancel_refused.json" ||
       fixtureFile === "training_start_no_checkpoint.json" ||
       fixtureFile === "training_start_history_warning.json" ||
-      fixtureFile === "deployment_stop_already_stopped.json"
+      fixtureFile === "deployment_stop_already_stopped.json" ||
+      fixtureFile === "auto_annotate_start_refused.json" ||
+      fixtureFile === "auto_annotate_stop_refused.json"
     ) {
       continue;
     }
@@ -667,6 +686,57 @@ describe("parity fixtures", () => {
       client,
       fixture.args.model as string,
       fixture.args.export_id as string,
+    ).catch((e) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: auto_annotate_start_refused.json", async () => {
+    // Live capture: POST .../predict/batch on a fully-labelled dataset with
+    // includeAnnotated left unset -> 409 {"error":"No images left to
+    // annotate"}, surfaced verbatim rather than parsed.
+    const raw = readFileSync(
+      join(fixtureDir, "auto_annotate_start_refused.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await autoAnnotateStart(
+      client,
+      fixture.args.dataset as string,
+      fixture.args.model as string,
+      {
+        classMapping: fixture.args.class_mapping as (number | null)[],
+        confirmCost: fixture.args.confirm_cost as boolean,
+      },
+    ).catch((e) => e as UltralyticsApiError);
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(fixture.expectedError?.status);
+    expect(error.apiMessage).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: auto_annotate_stop_refused.json", async () => {
+    // Live capture: GET .../predict/batch on a never-run dataset ->
+    // 200 {activeJob: null, lastRun: null}. The refusal below is our own
+    // fail-closed guard, sent instead of the DELETE that has nothing to act
+    // on.
+    const raw = readFileSync(
+      join(fixtureDir, "auto_annotate_stop_refused.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await autoAnnotateStop(
+      client,
+      fixture.args.dataset as string,
     ).catch((e) => e as Error);
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe(fixture.expectedError?.message);

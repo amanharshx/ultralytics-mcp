@@ -675,13 +675,52 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 
 ## Auto-annotate
 
-1 tools.
+3 tools.
 
 ### auto_annotate_status
 
 Get an auto-annotation run's status for a dataset by slug, owner/slug, or dataset ul:// URI. Surfaces activeJob and lastRun unmodified: both null means the dataset has never run one; activeJob carries progress for a run in flight; lastRun carries failed/stopped booleans plus results, or an error when the run failed.
 
 Metadata: read-only
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
+
+### auto_annotate_start
+
+Start an auto-annotation run on a dataset by slug, owner/slug, or dataset ul:// URI, labelling it with a model given by owner/project/model, ul://owner/project/model, or slug with a project (state-changing, billable, may cost credits). Requires confirm_cost=true: there is no cost preview, no published rate, and a 402 signals insufficient credits; gauge magnitude with datasets_get (the unlabeled image count by default, the total count when include_annotated is true). Sends only modelId plus any of confidence, iou, class_mapping, and include_annotated the caller sets explicitly, omitting the rest so the server's own defaults (confidence 0.25, iou 0.7, include_annotated false, illustrative only) apply undisturbed. There is no imgsz parameter. class_mapping bridges a model/dataset class-taxonomy mismatch (for example a 1-class model against an 80-class dataset, which otherwise fails outright); it passes through with no length check. Labels are additive, never overwritten, so no overwrite confirmation is needed. Every start snapshots a dataset version before labelling, listed via datasets_get and undoable exactly with dataset_version_restore. Billing settles at run time, not at dismissal, so auto_annotate_stop does not refund a charge already incurred. Use auto_annotate_status to poll and auto_annotate_stop to cancel.
+
+Metadata: state-changing, non-idempotent, external/live
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
+| `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
+| `project` | string | No | Project ref required when model is given by slug. |
+| `confidence` | number | No | Confidence threshold for generated labels. Omit to use the server default (currently 0.25). |
+| `iou` | number | No | IoU threshold for generated labels. Omit to use the server default (currently 0.7). |
+| `class_mapping` | array<union> | No | Model class index -> dataset class index mapping, positioned by model class index. Required to bridge a class-taxonomy mismatch between the model and the dataset; passed through with no length check. |
+| `include_annotated` | boolean | No | Re-label images that already carry annotations. Omit to use the server default (currently false). |
+| `confirm_cost` | boolean | No | Must be true to allow a credit-costing auto-annotation run. |
+
+Notes: State-changing auto-annotation run that is billable immediately. Set `confirm_cost` to `true` explicitly.
+
+#### Start an auto-annotation run
+
+```json
+{
+  "dataset": "team/cars",
+  "model": "team/project/my-model",
+  "confirm_cost": true
+}
+```
+
+### auto_annotate_stop
+
+Stop or dismiss a dataset's auto-annotation run by slug, owner/slug, or dataset ul:// URI. Reads status first and refuses without calling the endpoint when no run is active, since there is nothing to stop. When a run is active it sends the request and surfaces the server's own action verbatim rather than inferring it: cancelled for an active run stopped mid-flight, dismissed for a terminal run's summary being cleared, or none if nothing acted on. Ships ungated, consistent with training_cancel and export_cancel: an off-switch is never gated. An undismissed terminal run does not block the next start, so this never strands anything; dismissal moves no money.
+
+Metadata: state-changing, destructive, non-idempotent, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

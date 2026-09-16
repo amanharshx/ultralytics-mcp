@@ -1,0 +1,47 @@
+{
+  "tool": "auto_annotate_stop",
+  "args": {
+    "dataset": "example-owner/example-dataset-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "response": {
+        "status": 200,
+        "json": {
+          "activeJob": {
+            "id": "000000000000000000000001",
+            "stopping": false,
+            "progress": {
+              "processed": 0,
+              "total": 8
+            },
+            "startedAt": "2026-09-16T05:02:33.000Z"
+          },
+          "lastRun": null
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "response": {
+        "status": 200,
+        "json": {
+          "action": "cancelled",
+          "jobId": "000000000000000000000001"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Dataset 'example-dataset-1' for owner 'example-owner': cancelled.",
+    "data": {
+      "owner": "example-owner",
+      "dataset": "example-dataset-1",
+      "action": "cancelled",
+      "jobId": "000000000000000000000001"
+    }
+  }
+}
