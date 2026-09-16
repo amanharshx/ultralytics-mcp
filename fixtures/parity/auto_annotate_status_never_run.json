@@ -1,0 +1,26 @@
+{
+  "tool": "auto_annotate_status",
+  "args": {
+    "dataset": "example-owner/example-dataset-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "response": {
+        "status": 200,
+        "json": {
+          "activeJob": null,
+          "lastRun": null
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Dataset 'example-dataset-1' for owner 'example-owner': no auto-annotation run recorded.",
+    "data": {
+      "activeJob": null,
+      "lastRun": null
+    }
+  }
+}

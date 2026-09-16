@@ -1,0 +1,44 @@
+{
+  "tool": "auto_annotate_status",
+  "args": {
+    "dataset": "example-owner/example-dataset-1"
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/datasets/example-owner/example-dataset-1/predict/batch",
+      "response": {
+        "status": 200,
+        "json": {
+          "activeJob": null,
+          "lastRun": {
+            "failed": false,
+            "stopped": false,
+            "error": null,
+            "results": {
+              "processed": 8,
+              "annotations": 4,
+              "classes": 1
+            }
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Dataset 'example-dataset-1' for owner 'example-owner': last run finished, failed=false stopped=false, processed 8, annotations 4, classes 1.",
+    "data": {
+      "activeJob": null,
+      "lastRun": {
+        "failed": false,
+        "stopped": false,
+        "error": null,
+        "results": {
+          "processed": 8,
+          "annotations": 4,
+          "classes": 1
+        }
+      }
+    }
+  }
+}
