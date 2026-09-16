@@ -11,6 +11,8 @@ dataset uploads.
 > [!IMPORTANT]
 > Independent community project. Not affiliated with or endorsed by Ultralytics.
 
+[Install](#installation) · [Tools](./TOOLS.md) · [Safety](#safety) · [Troubleshooting](#troubleshooting)
+
 ## Try Asking
 
 - "Show me my Ultralytics projects and which datasets are ready to train on."
