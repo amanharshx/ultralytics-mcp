@@ -440,6 +440,15 @@ export async function trainingStart(
     data: Array.isArray(dataset) ? datasetUris : datasetUris[0],
   };
 
+  // Set only when this call creates a fresh model from a base checkpoint,
+  // so a rejection at POST /training/start (e.g. the dataset task-mismatch
+  // check now enforced server-side) can delete it instead of leaving an
+  // empty, unrequested model behind.
+  let createdModelRef: {
+    owner: string;
+    project: string;
+    model: string;
+  } | null = null;
   let modelId: string;
   let modelOwnerDisplay: string;
   let modelProjectDisplay: string;
@@ -498,6 +507,13 @@ export async function trainingStart(
         : resolvedProject.project;
     modelSlugDisplay =
       typeof createdFields.model === "string" ? createdFields.model : "?";
+    if (modelSlugDisplay !== "?") {
+      createdModelRef = {
+        owner: modelOwnerDisplay,
+        project: modelProjectDisplay,
+        model: modelSlugDisplay,
+      };
+    }
   }
 
   if (epochs !== undefined) {
@@ -513,11 +529,27 @@ export async function trainingStart(
     trainArgs.name = name;
   }
 
-  const data = await client.postJson("/training/start", {
-    modelId,
-    gpuType,
-    trainArgs,
-  });
+  let data: unknown;
+  try {
+    data = await client.postJson("/training/start", {
+      modelId,
+      gpuType,
+      trainArgs,
+    });
+  } catch (error) {
+    if (createdModelRef !== null) {
+      // Best-effort: a rejection here (e.g. a dataset task mismatch, which
+      // this tool no longer pre-checks) must not leave behind a model this
+      // call created but never got to train. Failure to delete surfaces
+      // through the original error, not this cleanup attempt.
+      await client
+        .delete(
+          `/models/${encodeURIComponent(createdModelRef.owner)}/${encodeURIComponent(createdModelRef.project)}/${encodeURIComponent(createdModelRef.model)}`,
+        )
+        .catch(() => {});
+    }
+    throw error;
+  }
   const record = asRecord(data);
   const status = record.status ?? null;
   const responseGpuType = record.gpuType ?? gpuType;

@@ -1243,6 +1243,97 @@ describe("trainingStart", () => {
         }),
       ).rejects.toThrow(/did not include an id/);
     });
+
+    test("deletes the freshly created model when POST /training/start rejects it, e.g. a task mismatch", async () => {
+      const calls: { url: string; method: string }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const method = (init.method ?? "GET").toUpperCase();
+        calls.push({ url: String(url), method });
+        const path = new URL(String(url)).pathname;
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse({ error: "Dataset task mismatch." }, 400);
+        }
+        if (
+          path === `/api/models/${OWNER}/${PROJECT}/${CREATED_SLUG}` &&
+          method === "DELETE"
+        ) {
+          return jsonResponse({ success: true });
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/Dataset task mismatch/);
+
+      expect(calls).toMatchObject([
+        { url: `${ORIGIN}${CREATE_MODEL_PATH}`, method: "POST" },
+        { url: `${ORIGIN}${START_PATH}`, method: "POST" },
+        {
+          url: `${ORIGIN}/api/models/${OWNER}/${PROJECT}/${CREATED_SLUG}`,
+          method: "DELETE",
+        },
+      ]);
+    });
+
+    test("surfaces the original error even when the cleanup delete itself fails", async () => {
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const method = (init.method ?? "GET").toUpperCase();
+        const path = new URL(String(url)).pathname;
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse({ error: "Dataset task mismatch." }, 400);
+        }
+        if (
+          path === `/api/models/${OWNER}/${PROJECT}/${CREATED_SLUG}` &&
+          method === "DELETE"
+        ) {
+          return jsonResponse({ error: "Server error" }, 500);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/Dataset task mismatch/);
+    });
   });
 
   describe("history-loss consent", () => {

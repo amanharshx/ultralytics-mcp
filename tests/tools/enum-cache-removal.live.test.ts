@@ -160,6 +160,11 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
         );
         expect(lastStatus(records)).toBe(400);
         expect(targetSplitError.statusCode).toBe(400);
+        // The ingest endpoint's request body is validated as one of several
+        // anyOf branches, so an unrecognized enum value surfaces as a
+        // generic rejection rather than naming the field — still the
+        // server's own message, surfaced verbatim rather than substituted.
+        expect(targetSplitError.apiMessage).toBe("Invalid input");
 
         const conflictPolicyError = await catchApiError(
           datasetsIngest(client, {
@@ -170,6 +175,7 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
         );
         expect(lastStatus(records)).toBe(400);
         expect(conflictPolicyError.statusCode).toBe(400);
+        expect(conflictPolicyError.apiMessage).toBe("Invalid input");
 
         await datasetsDelete(client, ref);
       },
