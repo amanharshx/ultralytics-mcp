@@ -11,6 +11,31 @@ function predictBatchPath(owner: string, dataset: string): string {
   return `/datasets/${encodeURIComponent(owner)}/${encodeURIComponent(dataset)}/predict/batch`;
 }
 
+/** Read and validate the predict/batch status for one dataset.
+ *
+ * Shared by `autoAnnotateStatus` and `autoAnnotateStop`'s fail-closed
+ * pre-flight, so both read the same endpoint with the same guarantee: a
+ * malformed `200` missing either key throws instead of being silently
+ * coerced into a meaningful state (an absent `activeJob` reading the same
+ * as an explicit `null` would make a broken response look like a genuine
+ * never-run or no-active-run answer).
+ */
+async function readPredictBatchStatus(
+  client: UltralyticsClient,
+  owner: string,
+  dataset: string,
+): Promise<{ activeJob: unknown; lastRun: unknown }> {
+  const data = await client.get(predictBatchPath(owner, dataset));
+  const record = asRecord(data);
+  if (!("activeJob" in record) || !("lastRun" in record)) {
+    throw new Error(
+      `Malformed auto-annotate status for dataset '${dataset}' for owner ` +
+        `'${owner}': expected 'activeJob' and 'lastRun', got ${JSON.stringify(record)}.`,
+    );
+  }
+  return { activeJob: record.activeJob, lastRun: record.lastRun };
+}
+
 /** Get an auto-annotation run's status for one dataset.
  *
  * Resolves the dataset reference by pure string parsing (ids are not
@@ -29,18 +54,11 @@ export async function autoAnnotateStatus(
 ): Promise<NormalizedToolResult> {
   const resolved = resolveDataset(dataset);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
-  const data = await client.get(
-    predictBatchPath(resolvedOwner, resolved.dataset),
+  const { activeJob, lastRun } = await readPredictBatchStatus(
+    client,
+    resolvedOwner,
+    resolved.dataset,
   );
-  const record = asRecord(data);
-  if (!("activeJob" in record) || !("lastRun" in record)) {
-    throw new Error(
-      `Malformed auto-annotate status for dataset '${resolved.dataset}' for owner ` +
-        `'${resolvedOwner}': expected 'activeJob' and 'lastRun', got ${JSON.stringify(record)}.`,
-    );
-  }
-  const activeJob = record.activeJob;
-  const lastRun = record.lastRun;
 
   let summary = `Dataset '${resolved.dataset}' for owner '${resolvedOwner}': `;
   if (activeJob && typeof activeJob === "object") {
@@ -194,8 +212,12 @@ export async function autoAnnotateStop(
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
   const path = predictBatchPath(resolvedOwner, resolved.dataset);
 
-  const statusRecord = asRecord(await client.get(path));
-  if (statusRecord.activeJob === null || statusRecord.activeJob === undefined) {
+  const { activeJob } = await readPredictBatchStatus(
+    client,
+    resolvedOwner,
+    resolved.dataset,
+  );
+  if (activeJob === null || activeJob === undefined) {
     throw new Error(
       `Dataset '${resolved.dataset}' for owner '${resolvedOwner}' has no active ` +
         "auto-annotation run to stop.",

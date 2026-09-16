@@ -374,6 +374,17 @@ describe("autoAnnotateStop", () => {
     expect(calls).toEqual([{ method: "GET", path: PATH }]);
   });
 
+  test("rejects a malformed status response instead of reading it as no active run", async () => {
+    const { client, calls } = sequenceClient([
+      () => jsonResponse({ activeJob: null }),
+    ]);
+
+    await expect(
+      autoAnnotateStop(client, `${OWNER}/${DATASET}`),
+    ).rejects.toThrow(/malformed/i);
+    expect(calls).toEqual([{ method: "GET", path: PATH }]);
+  });
+
   test("cancels an active run and surfaces the action verbatim", async () => {
     const { client, calls } = sequenceClient([
       () =>
