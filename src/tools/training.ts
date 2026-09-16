@@ -28,16 +28,19 @@ const CHECKPOINT_TASK_SUFFIXES = [
 ] as const;
 const BASE_CHECKPOINT_RE =
   /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
-/** Checkpoint/dataset task compatibility for a *multi*-dataset `dataset`
- * array only. The single-dataset case is enforced by the server at
- * POST /training/start itself (verified live: a classify checkpoint
- * against a detect dataset returns 400 "Dataset task mismatch..."). Whether
- * the server checks every entry in an array the same way — rather than,
- * say, only the first, or only failing partway through a sequential paid
- * run — has not been verified live. Per "verify, then delete," a guard
- * whose server-side enforcement can't be demonstrated stays; this one does,
- * scoped to arrays, so the single-dataset path can still drop its own
- * client-side check. */
+/** Checkpoint/dataset task compatibility for an array-shaped `dataset`
+ * input, at any length — including a single-element array, which still
+ * sends `trainArgs.data` as `[uri]` rather than the bare string a
+ * non-array `dataset` sends. Only the bare-string shape is enforced by the
+ * server at POST /training/start itself (verified live: a classify
+ * checkpoint against a detect dataset returns 400 "Dataset task
+ * mismatch..."). Whether the server checks an array-shaped `data` the same
+ * way — every entry, rather than, say, only the first, or only failing
+ * partway through a sequential paid run — has not been verified live for
+ * any array length. Per "verify, then delete," a guard whose server-side
+ * enforcement can't be demonstrated stays; this one does, scoped to every
+ * array input, so only the bare-string path can drop its own client-side
+ * check. */
 const DATASET_TASK_COMPATIBILITY: Record<string, string[]> = {
   detect: ["detect"],
   segment: ["segment", "semantic"],
@@ -523,18 +526,25 @@ export async function trainingStart(
     modelProjectDisplay = resolvedModel.project;
     modelSlugDisplay = resolvedModel.model;
   } else {
-    // Single dataset: checkpoint/dataset task compatibility is enforced by
-    // the server at POST /training/start itself, e.g. `{"error":"Dataset
-    // task mismatch. This dataset is \"detect\" but the selected model
-    // trains \"classify\". ..."}` (400, verified live). No client-side
-    // pre-check is needed for this case.
+    // A bare-string `data` (the caller passed a single, non-array dataset
+    // ref): checkpoint/dataset task compatibility is enforced by the server
+    // at POST /training/start itself, e.g. `{"error":"Dataset task
+    // mismatch. This dataset is \"detect\" but the selected model trains
+    // \"classify\". ..."}` (400, verified live). No client-side pre-check
+    // is needed for this case.
     //
-    // Multiple datasets: the same server-side enforcement has not been
-    // verified live for an array with a mismatch on a later entry, so the
-    // pre-check below stays for that case only — see
-    // DATASET_TASK_COMPATIBILITY.
+    // An array-shaped `data` — which is what the request sends whenever the
+    // caller passed `dataset` as an array, INCLUDING a single-element one
+    // like `[ref]`: `trainArgs.data` becomes `[uri]`, not the bare string
+    // `uri` the case above verified. That shape has not itself been tested
+    // live (with a mismatch on any entry, first or later), so the
+    // pre-check below stays for every array input, regardless of length —
+    // see DATASET_TASK_COMPATIBILITY. The discriminator here is
+    // `Array.isArray(dataset)`, the caller's original input shape, not
+    // `resolvedDatasets.length`: both normalize to the same length-1 array
+    // internally, but only one of them changes what gets sent on the wire.
     const checkpointTask = inferCheckpointTask(checkpoint);
-    if (resolvedDatasets.length > 1) {
+    if (Array.isArray(dataset)) {
       for (let i = 0; i < resolvedDatasets.length; i++) {
         const datasetOwnerForCheck = datasetOwners[i];
         const resolved = resolvedDatasets[i];

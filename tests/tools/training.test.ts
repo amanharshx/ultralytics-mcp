@@ -1695,9 +1695,9 @@ describe("trainingStart", () => {
       expect(calls[1]?.path).toBe(DATASET_2_PATH);
     });
 
-    test("allows a single-dataset request to skip the array-only check entirely", async () => {
+    test("skips the array-only check for a bare-string dataset (the shape actually verified live)", async () => {
       // Guards against silently re-widening the reinstated check back to
-      // the single-dataset path, which the server already validates live.
+      // the bare-string path, which the server already validates live.
       const { client, calls } = routeClient((path) => {
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
@@ -1722,6 +1722,33 @@ describe("trainingStart", () => {
         CREATE_MODEL_PATH,
         START_PATH,
       ]);
+    });
+
+    test("still runs the check for a single-element array, which sends an array-shaped trainArgs.data", async () => {
+      // A single-element array is not the bare-string shape verified live:
+      // `Array.isArray(dataset)` is true, so `trainArgs.data` becomes
+      // `[uri]`, the same array shape a longer list sends. The guard must
+      // key off that original shape, not `resolvedDatasets.length` (which
+      // is 1 for both a bare string and a single-element array).
+      const { client, calls } = routeClient((path) => {
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: [DATASET_REF],
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/not compatible/);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.path).toBe(DATASET_PATH);
     });
   });
 });
