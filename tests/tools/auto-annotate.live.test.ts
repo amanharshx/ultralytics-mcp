@@ -21,6 +21,13 @@
  * 80-class taxonomy for the success run, and is deliberately omitted for
  * the failure run. The clone is deleted and purged from trash in a
  * `finally`, and the run cost is reported as a `creditsCents` delta.
+ *
+ * Covers never-run and both terminal states unconditionally. The active
+ * (in-flight) shape is deliberately NOT asserted here: an 8-image run can
+ * finish inside a poll window, so asserting on it would make the test
+ * either flaky or, if made conditional, able to pass without ever checking
+ * it. That shape is pinned instead by the committed live-captured parity
+ * fixture `auto_annotate_status_active.json`.
  */
 
 import { describe, expect, test } from "vitest";
@@ -73,7 +80,7 @@ async function creditsCents(key: string): Promise<number> {
 }
 
 describe.skipIf(!apiKey)("auto_annotate_status live smoke", () => {
-  test("never-run, active, terminal-success, and terminal-failure states", async () => {
+  test("never-run and both terminal states", async () => {
     const key = apiKey as string;
     const records: RecordedCall[] = [];
     const client = recordingClient(key, records);
@@ -109,32 +116,9 @@ describe.skipIf(!apiKey)("auto_annotate_status live smoke", () => {
       expect(lastStatus(records)).toBe(202);
       expect(typeof started.jobId).toBe("string");
 
-      // Tight-loop poll from the instant the 202 lands: an 8-image run can
-      // finish in seconds, so this is a best-effort capture of the active
-      // shape, not a required one.
-      let active: Record<string, unknown> | null = null;
-      for (let i = 0; i < 20; i++) {
-        const status = await autoAnnotateStatus(client, ref);
-        expect(lastStatus(records)).toBe(200);
-        const data = status.data as Record<string, unknown>;
-        if (data.activeJob !== null) {
-          active = data;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      }
-      if (active) {
-        captures.active = active;
-        const activeJob = active.activeJob as Record<string, unknown>;
-        expect(typeof activeJob.id).toBe("string");
-        expect(typeof activeJob.stopping).toBe("boolean");
-        const progress = activeJob.progress as Record<string, unknown>;
-        expect(typeof progress.processed).toBe("number");
-        expect(typeof progress.total).toBe("number");
-        expect(typeof activeJob.startedAt).toBe("string");
-      }
-
-      // Poll to the terminal state.
+      // Poll to the terminal state. The run passes through the active shape
+      // on the way, but that shape is not asserted here — see the file
+      // header for why — so this loop makes no attempt to catch it.
       const deadline = Date.now() + 60_000;
       let terminalSuccess: Record<string, unknown> | null = null;
       while (Date.now() < deadline) {

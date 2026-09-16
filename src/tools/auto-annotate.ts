@@ -27,8 +27,14 @@ export async function autoAnnotateStatus(
     `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.dataset)}/predict/batch`,
   );
   const record = asRecord(data);
-  const activeJob = record.activeJob ?? null;
-  const lastRun = record.lastRun ?? null;
+  if (!("activeJob" in record) || !("lastRun" in record)) {
+    throw new Error(
+      `Malformed auto-annotate status for dataset '${resolved.dataset}' for owner ` +
+        `'${resolvedOwner}': expected 'activeJob' and 'lastRun', got ${JSON.stringify(record)}.`,
+    );
+  }
+  const activeJob = record.activeJob;
+  const lastRun = record.lastRun;
 
   let summary = `Dataset '${resolved.dataset}' for owner '${resolvedOwner}': `;
   if (activeJob && typeof activeJob === "object") {

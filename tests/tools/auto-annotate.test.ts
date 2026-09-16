@@ -133,6 +133,14 @@ describe("autoAnnotateStatus", () => {
     expect(result.summary).toContain("owner 'alice'");
   });
 
+  test("rejects a malformed response missing activeJob or lastRun", async () => {
+    const { client } = clientForStatus({ activeJob: null });
+
+    await expect(autoAnnotateStatus(client, "alice/cars")).rejects.toThrow(
+      /malformed/i,
+    );
+  });
+
   test("propagates a not-found error for an unknown dataset", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
