@@ -2,18 +2,25 @@
  * removed client-side allowlists used to cache locally.
  *
  * Housekeeping ticket 2 removed `DATASET_TASKS` (explore.ts and datasets.ts,
- * duplicated), `TARGET_SPLITS`' use as an input validator, `IngestConflictPolicy`'s
- * enum check, and `DATASET_TASK_COMPATIBILITY` (training.ts). Each was
- * verified live before removal per "verify, then delete": this suite is that
- * verification recorded as a live regression check, exactly like
- * `export-format.live.test.ts` did for the export-format allowlist. One
- * finding surfaced during verification: the removed dataset-task allowlist
- * excluded `depth`, a task value the server accepts — this suite asserts
- * that acceptance too, so the finding stays pinned.
+ * duplicated), `TARGET_SPLITS`' use as an input validator, the ingest
+ * conflict-policy enum check, and `DATASET_TASK_COMPATIBILITY`
+ * (training.ts). Each was verified live before removal per "verify, then
+ * delete": this suite is that verification recorded as a live regression
+ * check, exactly like `export-format.live.test.ts` did for the
+ * export-format allowlist. One finding surfaced during verification: the
+ * removed dataset-task allowlist excluded `depth`, a task value the server
+ * accepts — this suite asserts that acceptance too, so the finding stays
+ * pinned.
  *
- * Every case here is either a GET or a rejected write (400 before any
- * resource is created, or against a disposable resource cleaned up in a
- * `finally`). The checkpoint/dataset task-mismatch case needs a ready,
+ * "Surfaces verbatim" is proved the same way `export-format.live.test.ts`
+ * proves it: an independent, direct call to the same endpoint captures the
+ * server's raw message, and the tool's surfaced message is compared for
+ * exact equality against that raw capture — not a substring or a regex,
+ * which would pass even if the tool substituted or reformatted the message.
+ *
+ * Every case here is either a GET, a rejected write (400 before any
+ * resource is created), or a disposable resource cleaned up in a
+ * `finally`. The checkpoint/dataset task-mismatch case needs a ready,
  * labeled dataset (task compatibility is only checked once the dataset has
  * content), which a disposable dataset cannot gain synchronously; like the
  * version-snapshot coverage in `datasets.live.test.ts`, it opts in via
@@ -47,6 +54,7 @@ import {
 } from "../../src/tools/datasets.js";
 import { modelsDelete } from "../../src/tools/models.js";
 import { projectsCreate, projectsDelete } from "../../src/tools/projects.js";
+import { trainingStart } from "../../src/tools/training.js";
 import {
   disposableSlug,
   lastStatus,
@@ -72,9 +80,22 @@ async function catchApiError(
 }
 
 describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
-  test("explore task filter: rejects a bogus task and accepts `depth`, which the removed allowlist excluded", async () => {
+  test("explore task filter: rejects a bogus task with the server's own message and accepts `depth`, which the removed allowlist excluded", async () => {
     const records: RecordedCall[] = [];
     const client = recordingClient(apiKey as string, records);
+
+    // Independent raw call to the same endpoint: pins the server's own
+    // message, uncoupled from exploreDatasets's own handling.
+    const rawBadTaskError = await catchApiError(
+      client.get("/explore/search", {
+        type: "datasets",
+        q: "mcp-smoke-not-a-real-query",
+        sort: "newest",
+        offset: 0,
+        task: "mcp-smoke-not-a-real-task",
+      }),
+    );
+    expect(rawBadTaskError.statusCode).toBe(400);
 
     const badTaskError = await catchApiError(
       exploreDatasets(client, {
@@ -84,6 +105,9 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     );
     expect(lastStatus(records)).toBe(400);
     expect(badTaskError.statusCode).toBe(400);
+    // The tool surfaces the server's own message rather than substituting
+    // its own: exact match against the independent raw call above.
+    expect(badTaskError.apiMessage).toBe(rawBadTaskError.apiMessage);
 
     // `depth` is a valid dataset task the removed client-side allowlist
     // (detect/segment/semantic/classify/pose/obb) did not include: sending
@@ -102,6 +126,18 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     const owner = await client.getAccountOwner();
     const slug = disposableSlug("mcp-smoke-enum-ds");
 
+    // Independent raw call: pins the server's own message, uncoupled from
+    // datasetsCreate's own handling.
+    const rawError = await catchApiError(
+      client.postJson("/datasets", {
+        dataset: disposableSlug("mcp-smoke-enum-ds-raw"),
+        name: "MCP smoke enum probe raw (disposable)",
+        task: "mcp-smoke-not-a-real-task",
+      }),
+    );
+    expect(rawError.statusCode).toBe(400);
+    expect(rawError.apiMessage.toLowerCase()).toContain("depth");
+
     const error = await catchApiError(
       datasetsCreate(client, {
         name: "MCP smoke enum probe (disposable)",
@@ -111,7 +147,7 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     );
     expect(lastStatus(records)).toBe(400);
     expect(error.statusCode).toBe(400);
-    expect(error.apiMessage.toLowerCase()).toContain("depth");
+    expect(error.apiMessage).toBe(rawError.apiMessage);
 
     // No dataset was created: the create-then-verify-then-delete round trip
     // never gets a resource to delete.
@@ -127,6 +163,7 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     const owner = await client.getAccountOwner();
     const slug = disposableSlug("mcp-smoke-enum-ds");
     const ref = `${owner}/${slug}`;
+    const encodedRef = `${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`;
 
     await withDisposableCleanup(
       "dataset",
@@ -141,6 +178,14 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
           task: "detect",
         });
 
+        const rawSplitError = await catchApiError(
+          client.get(`/datasets/${encodedRef}/images`, {
+            split: "mcp-smoke-not-a-real-split",
+          }),
+        );
+        expect(rawSplitError.statusCode).toBe(400);
+        expect(rawSplitError.apiMessage).toMatch(/train.*val.*test/i);
+
         const splitError = await catchApiError(
           datasetImagesList(client, {
             dataset: ref,
@@ -149,7 +194,16 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
         );
         expect(lastStatus(records)).toBe(400);
         expect(splitError.statusCode).toBe(400);
-        expect(splitError.apiMessage).toMatch(/train.*val.*test/i);
+        expect(splitError.apiMessage).toBe(rawSplitError.apiMessage);
+
+        const rawTargetSplitError = await catchApiError(
+          client.postJson(`/datasets/${encodedRef}/ingest`, {
+            sourceUrl: "https://example.invalid/never-fetched.zip",
+            targetSplit: "mcp-smoke-not-a-real-split",
+            conflictPolicy: "skip",
+          }),
+        );
+        expect(rawTargetSplitError.statusCode).toBe(400);
 
         const targetSplitError = await catchApiError(
           datasetsIngest(client, {
@@ -160,11 +214,17 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
         );
         expect(lastStatus(records)).toBe(400);
         expect(targetSplitError.statusCode).toBe(400);
-        // The ingest endpoint's request body is validated as one of several
-        // anyOf branches, so an unrecognized enum value surfaces as a
-        // generic rejection rather than naming the field — still the
-        // server's own message, surfaced verbatim rather than substituted.
-        expect(targetSplitError.apiMessage).toBe("Invalid input");
+        expect(targetSplitError.apiMessage).toBe(
+          rawTargetSplitError.apiMessage,
+        );
+
+        const rawConflictPolicyError = await catchApiError(
+          client.postJson(`/datasets/${encodedRef}/ingest`, {
+            sourceUrl: "https://example.invalid/never-fetched.zip",
+            conflictPolicy: "mcp-smoke-not-a-real-policy",
+          }),
+        );
+        expect(rawConflictPolicyError.statusCode).toBe(400);
 
         const conflictPolicyError = await catchApiError(
           datasetsIngest(client, {
@@ -175,14 +235,16 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
         );
         expect(lastStatus(records)).toBe(400);
         expect(conflictPolicyError.statusCode).toBe(400);
-        expect(conflictPolicyError.apiMessage).toBe("Invalid input");
+        expect(conflictPolicyError.apiMessage).toBe(
+          rawConflictPolicyError.apiMessage,
+        );
 
         await datasetsDelete(client, ref);
       },
     );
   }, 60_000);
 
-  test("training start: rejects a checkpoint/dataset task mismatch before any compute runs", async (ctx) => {
+  test("training start: rejects a checkpoint/dataset task mismatch before any compute runs, and deletes the model it created", async (ctx) => {
     const datasetRef = process.env.ULTRALYTICS_SMOKE_DATASET_REF?.trim();
     if (!datasetRef) {
       ctx.skip(
@@ -206,7 +268,73 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     // classify checkpoint is used unless the dataset itself is classify.
     const mismatchedCheckpoint =
       datasetTask === "classify" ? "yolo26n.pt" : "yolo26n-cls.pt";
+    const mismatchedModelTask =
+      mismatchedCheckpoint === "yolo26n.pt" ? "detect" : "classify";
 
+    // --- Raw probe: pins the server's own pre-flight message, independent
+    // of trainingStart's own handling, in its own disposable project/model.
+    const rawProjectSlug = disposableSlug("mcp-smoke-enum-mismatch-raw");
+    const rawProjectRef = `${owner}/${rawProjectSlug}`;
+    let rawMismatchMessage = "";
+
+    await withDisposableCleanup(
+      "project",
+      rawProjectRef,
+      async () => {
+        await projectsDelete(client, rawProjectRef);
+      },
+      async () => {
+        await projectsCreate(client, {
+          name: "MCP smoke enum mismatch raw (disposable)",
+          project: rawProjectSlug,
+        });
+
+        const created = (await client.postJson("/models", {
+          owner,
+          project: rawProjectSlug,
+          task: mismatchedModelTask,
+        })) as { model: string };
+        const modelRef = `${owner}/${rawProjectSlug}/${created.model}`;
+
+        await withDisposableCleanup(
+          "model",
+          modelRef,
+          async () => {
+            await modelsDelete(client, modelRef);
+          },
+          async () => {
+            const modelDetail = (await client.get(
+              `/models/${owner}/${rawProjectSlug}/${created.model}`,
+            )) as { model: { id: string } };
+
+            const rawMismatchError = await catchApiError(
+              client.postJson("/training/start", {
+                modelId: modelDetail.model.id,
+                gpuType: "rtx-2000-ada",
+                trainArgs: {
+                  model: mismatchedCheckpoint,
+                  data: `ul://${datasetOwner}/datasets/${datasetSlug}`,
+                  epochs: 1,
+                },
+              }),
+            );
+            expect(rawMismatchError.statusCode).toBe(400);
+            expect(rawMismatchError.apiMessage.toLowerCase()).toContain(
+              "task mismatch",
+            );
+            rawMismatchMessage = rawMismatchError.apiMessage;
+
+            await modelsDelete(client, modelRef);
+          },
+        );
+
+        await projectsDelete(client, rawProjectRef);
+      },
+    );
+
+    // --- Through the real tool: proves trainingStart itself surfaces the
+    // same message verbatim, and that it deletes the model it created
+    // rather than leaving it behind on this provable (4xx) rejection.
     const projectSlug = disposableSlug("mcp-smoke-enum-mismatch");
     const projectRef = `${owner}/${projectSlug}`;
 
@@ -222,52 +350,30 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
           project: projectSlug,
         });
 
-        const created = (await client.postJson("/models", {
-          owner,
-          project: projectSlug,
-          task: mismatchedCheckpoint === "yolo26n.pt" ? "detect" : "classify",
-        })) as { model: string };
-        const modelSlug = created.model;
-        const modelRef = `${owner}/${projectSlug}/${modelSlug}`;
-
-        await withDisposableCleanup(
-          "model",
-          modelRef,
-          async () => {
-            await modelsDelete(client, modelRef);
-          },
-          async () => {
-            // Direct call, not through trainingStart: this pins the
-            // server's own pre-flight message, independent of the tool.
-            const modelDetail = (await client.get(
-              `/models/${owner}/${projectSlug}/${modelSlug}`,
-            )) as { model: { id: string } };
-            const modelId = modelDetail.model.id;
-
-            const mismatchError = await catchApiError(
-              client.postJson("/training/start", {
-                modelId,
-                gpuType: "rtx-2000-ada",
-                trainArgs: {
-                  model: mismatchedCheckpoint,
-                  data: `ul://${datasetOwner}/datasets/${datasetSlug}`,
-                  epochs: 1,
-                },
-              }),
-            );
-            expect(mismatchError.statusCode).toBe(400);
-            expect(mismatchError.apiMessage.toLowerCase()).toContain(
-              "task mismatch",
-            );
-
-            const after = (await client.get("/account/summary")) as {
-              creditsCents: number;
-            };
-            expect(after.creditsCents).toBe(before.creditsCents);
-
-            await modelsDelete(client, modelRef);
-          },
+        const mismatchError = await catchApiError(
+          trainingStart(client, {
+            model: mismatchedCheckpoint,
+            project: projectRef,
+            dataset: datasetRef as string,
+            gpuType: "rtx-2000-ada",
+            epochs: 1,
+            confirmCost: true,
+          }),
         );
+        expect(mismatchError.statusCode).toBe(400);
+        expect(mismatchError.apiMessage).toBe(rawMismatchMessage);
+
+        // trainingStart deletes the model it created for this run once the
+        // server rejects it: nothing is left behind to clean up here.
+        const modelsAfter = (await client.get(
+          `/models/${owner}/${projectSlug}`,
+        )) as { models?: unknown[] };
+        expect(modelsAfter.models).toEqual([]);
+
+        const after = (await client.get("/account/summary")) as {
+          creditsCents: number;
+        };
+        expect(after.creditsCents).toBe(before.creditsCents);
 
         await projectsDelete(client, projectRef);
       },

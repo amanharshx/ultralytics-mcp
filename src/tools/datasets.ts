@@ -613,17 +613,14 @@ export interface DatasetsIngestOptions {
   conflictPolicy?: string;
 }
 
-/** Conflict policies the live ingest endpoint accepts. The platform default
- * is undocumented, so tools always send one explicitly. Option inputs stay
- * `string` because MCP arguments arrive unvalidated; this type names the
- * defaulted value. No local enum validation: the server rejects an
- * unrecognized conflictPolicy itself (verified live: `"notarealpolicy"` on
+/** Default the ingest conflict policy to the non-destructive `skip` when
+ * unset (the platform default is undocumented, so tools always send one
+ * explicitly). No local enum: the server rejects an unrecognized
+ * conflictPolicy itself (verified live: `"notarealpolicy"` on
  * `/datasets/{owner}/{dataset}/ingest` returns 400 `"Invalid input"`), and
  * that message surfaces verbatim. */
-export type IngestConflictPolicy = "skip" | "keep_both" | "replace";
-
-function defaultConflictPolicy(conflictPolicy?: string): IngestConflictPolicy {
-  return (conflictPolicy ?? "skip") as IngestConflictPolicy;
+function defaultConflictPolicy(conflictPolicy?: string): string {
+  return conflictPolicy ?? "skip";
 }
 
 /** Start a remote URL ingest job for an existing dataset.

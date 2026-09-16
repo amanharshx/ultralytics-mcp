@@ -1334,6 +1334,102 @@ describe("trainingStart", () => {
         }),
       ).rejects.toThrow(/Dataset task mismatch/);
     });
+
+    test("does not delete the created model on a 5xx from /training/start, and names it in the error", async () => {
+      const calls: { url: string; method: string }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const method = (init.method ?? "GET").toUpperCase();
+        calls.push({ url: String(url), method });
+        const path = new URL(String(url)).pathname;
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        if (path === START_PATH) {
+          // A 5xx does not prove the job never started: the request may
+          // have reached the server and started a billable run whose
+          // response was lost.
+          return jsonResponse({ error: "Training launch failed" }, 500);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(
+        new RegExp(
+          `Training launch failed.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*NOT deleted`.replace(
+            /\//g,
+            "\\/",
+          ),
+          "s",
+        ),
+      );
+
+      // No DELETE call: an ambiguous failure leaves the model in place.
+      expect(calls.map((call) => call.method)).toEqual(["POST", "POST"]);
+    });
+
+    test("does not delete the created model when /training/start fails with no HTTP response at all", async () => {
+      const calls: { url: string; method: string }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const method = (init.method ?? "GET").toUpperCase();
+        calls.push({ url: String(url), method });
+        const path = new URL(String(url)).pathname;
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        if (path === START_PATH) {
+          throw new Error("network timeout");
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(
+        new RegExp(
+          `network timeout.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*NOT deleted`.replace(
+            /\//g,
+            "\\/",
+          ),
+          "s",
+        ),
+      );
+
+      expect(calls.map((call) => call.method)).toEqual(["POST", "POST"]);
+    });
   });
 
   describe("history-loss consent", () => {

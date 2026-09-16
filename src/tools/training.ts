@@ -538,15 +538,33 @@ export async function trainingStart(
     });
   } catch (error) {
     if (createdModelRef !== null) {
-      // Best-effort: a rejection here (e.g. a dataset task mismatch, which
-      // this tool no longer pre-checks) must not leave behind a model this
-      // call created but never got to train. Failure to delete surfaces
-      // through the original error, not this cleanup attempt.
-      await client
-        .delete(
-          `/models/${encodeURIComponent(createdModelRef.owner)}/${encodeURIComponent(createdModelRef.project)}/${encodeURIComponent(createdModelRef.model)}`,
-        )
-        .catch(() => {});
+      const ref = `${createdModelRef.owner}/${createdModelRef.project}/${createdModelRef.model}`;
+      // Only a 4xx from the server proves the request was rejected before
+      // training started (e.g. a dataset task mismatch, which this tool no
+      // longer pre-checks): the model this call created never trained, so
+      // delete it rather than leave an empty, unrequested one behind.
+      // A 5xx or a network failure (no HTTP response at all) does NOT prove
+      // that — the request may have reached the server and started a
+      // billable job whose response was simply lost, and deleting the model
+      // in that case would orphan a live run instead of an empty one. Leave
+      // it in place and name it in the error so the caller can check by
+      // hand. Cleanup failure surfaces through the original error, not this
+      // attempt.
+      if (
+        error instanceof UltralyticsApiError &&
+        error.statusCode >= 400 &&
+        error.statusCode < 500
+      ) {
+        await client
+          .delete(
+            `/models/${encodeURIComponent(createdModelRef.owner)}/${encodeURIComponent(createdModelRef.project)}/${encodeURIComponent(createdModelRef.model)}`,
+          )
+          .catch(() => {});
+      } else if (error instanceof Error) {
+        error.message +=
+          ` Model '${ref}' was created for this run and was NOT deleted, ` +
+          "because it could not be confirmed that training never started; check it by hand.";
+      }
     }
     throw error;
   }
