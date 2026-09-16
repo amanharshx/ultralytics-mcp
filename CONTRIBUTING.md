@@ -52,14 +52,20 @@ Runs against the real platform. It reads the same key as the server, is
 excluded from `npm test`, and skips silently when the key is unset.
 
 It creates disposable `mcp-smoke-*` projects and models and `mcp-smoke-ds-*`
-datasets, and deletes them again even on failure. Starting training and
-creating exports bill the account, so neither runs here; that verification is
-done separately.
+datasets, and deletes them again even on failure.
 
-Two fixtures are opt-in and skip without their variable:
+The suite starts billable auto-annotation runs and may consume several cents of
+platform credit. It prints the credit balance delta after those tests. Starting
+training and creating exports would cost far more, so neither runs here; that
+verification is done separately.
+
+Three fixtures are opt-in and skip without their variable:
 
 - `ULTRALYTICS_SMOKE_DATASET_REF=owner/slug` — a ready dataset with ingested
   images, for version snapshot coverage
+- `ULTRALYTICS_SMOKE_MODEL_REF=owner/project/model` — a trained model with real
+  weights, for the `model_predict` default checks. Prediction is read-only and
+  unbilled, so this fixture spends nothing and creates nothing
 - `ULTRALYTICS_SMOKE_EXPORT_REF=owner/project/model:exportId` — a trained model
   with downloadable weights and a terminal training status, plus an export that
   has also reached a terminal status. Covers weight download, inference, the
