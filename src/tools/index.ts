@@ -150,8 +150,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "List computer-vision projects in your Ultralytics workspace.",
     inputSchema: {
-      owner: z.string().optional(),
-      username: z.string().optional(),
+      owner: z
+        .string()
+        .optional()
+        .describe(
+          "Workspace owner; defaults to the account owner. Takes precedence over username when both are given.",
+        ),
+      username: z
+        .string()
+        .optional()
+        .describe("Compatibility alias for owner."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
@@ -188,9 +196,14 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "Search public projects on Ultralytics Explore.",
     inputSchema: {
-      q: z.string(),
-      sort: z.string().optional(),
-      offset: z.number().int().optional(),
+      q: z.string().describe("Search term."),
+      sort: z
+        .string()
+        .optional()
+        .describe(
+          "Sort order for results. Server-validated; for example stars or newest.",
+        ),
+      offset: z.number().int().optional().describe("Results to skip."),
     },
     annotations: {
       readOnlyHint: true,
@@ -215,7 +228,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Create a project in your Ultralytics workspace. Defaults to private visibility (the platform defaults to public when visibility is omitted).",
     inputSchema: {
-      name: z.string(),
+      name: z.string().describe("Display name."),
       project: z
         .string()
         .describe(
@@ -229,7 +242,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe('Visibility "private" (default) or "public".'),
-      description: z.string().optional(),
+      description: z.string().optional().describe("Project description."),
     },
     annotations: {
       readOnlyHint: false,
@@ -276,8 +289,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "List datasets in your Ultralytics workspace.",
     inputSchema: {
-      owner: z.string().optional(),
-      username: z.string().optional(),
+      owner: z
+        .string()
+        .optional()
+        .describe(
+          "Workspace owner; defaults to the account owner. Takes precedence over username when both are given.",
+        ),
+      username: z
+        .string()
+        .optional()
+        .describe("Compatibility alias for owner."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
@@ -314,10 +335,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     stateChanging: false,
     description: "Search public datasets on Ultralytics Explore.",
     inputSchema: {
-      q: z.string(),
-      sort: z.string().optional(),
-      offset: z.number().int().optional(),
-      task: z.array(z.string()).optional(),
+      q: z.string().describe("Search term."),
+      sort: z
+        .string()
+        .optional()
+        .describe(
+          "Sort order for results. Server-validated; for example stars or newest.",
+        ),
+      offset: z.number().int().optional().describe("Results to skip."),
+      task: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Dataset task filters. Server-validated; for example detect or segment.",
+        ),
     },
     annotations: {
       readOnlyHint: true,
@@ -343,7 +374,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description:
       "Create a dataset in your Ultralytics workspace. Defaults to private visibility (the platform defaults to public when visibility is omitted).",
     inputSchema: {
-      name: z.string(),
+      name: z.string().describe("Display name."),
       dataset: z
         .string()
         .describe(
@@ -362,8 +393,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe('Visibility "private" (default) or "public".'),
-      description: z.string().optional(),
-      classNames: z.array(z.string()).optional(),
+      description: z.string().optional().describe("Dataset description."),
+      classNames: z
+        .array(z.string())
+        .optional()
+        .describe("Initial class names for the dataset."),
     },
     annotations: {
       readOnlyHint: false,
@@ -403,13 +437,26 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       dataset: z
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
-      split: z.string().optional(),
-      search: z.string().optional(),
-      hasLabel: z.boolean().optional(),
-      classIds: z.array(z.string()).optional(),
-      limit: z.number().optional(),
-      offset: z.number().optional(),
-      includeImageUrls: z.boolean().optional(),
+      split: z
+        .string()
+        .optional()
+        .describe(
+          "Dataset split to filter by, for example train, val, or test.",
+        ),
+      search: z.string().optional().describe("Image name or metadata search."),
+      hasLabel: z.boolean().optional().describe("Filter by annotation state."),
+      classIds: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Class IDs to filter by. An empty array is treated as no filter (all images match), not as a filter that excludes everything.",
+        ),
+      limit: z.number().optional().describe("Maximum images to return."),
+      offset: z.number().optional().describe("Images to skip."),
+      includeImageUrls: z
+        .boolean()
+        .optional()
+        .describe("Include signed full-size image URLs."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
@@ -447,7 +494,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       dataset: z
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
-      version: z.number().optional(),
+      version: z.number().optional().describe("Saved version number."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
@@ -470,7 +517,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       dataset: z
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
-      include_histograms: z.boolean().optional(),
+      include_histograms: z
+        .boolean()
+        .optional()
+        .describe(
+          "Include the histogram and heatmap groups omitted by default (image size, file size, format, points-per-annotation, bbox distributions, and location/dimension heatmaps). Off by default because the payload is large; the summary names the groups it omits.",
+        ),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
@@ -630,7 +682,10 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       dataset: z
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
-      description: z.string().optional(),
+      description: z
+        .string()
+        .optional()
+        .describe("Optional note describing this snapshot."),
     },
     annotations: {
       readOnlyHint: false,
@@ -710,8 +765,11 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       dataset: z
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
-      sourceUrl: z.string(),
-      targetSplit: z.string().optional(),
+      sourceUrl: z.string().describe("Remote dataset archive or NDJSON URL."),
+      targetSplit: z
+        .string()
+        .optional()
+        .describe("Target split for new images (overrides archive structure)."),
       conflictPolicy: z
         .string()
         .optional()
@@ -748,7 +806,10 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       file_path: z.string().describe("Local path to dataset archive file."),
-      targetSplit: z.string().optional(),
+      targetSplit: z
+        .string()
+        .optional()
+        .describe("Target split for new images (overrides archive structure)."),
       conflictPolicy: z
         .string()
         .optional()
@@ -796,7 +857,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       folder_path: z.string().describe("Local path to image folder."),
-      targetSplit: z.string().optional(),
+      targetSplit: z
+        .string()
+        .optional()
+        .describe(
+          "Target split for new images. Rejected if the folder itself has train/val/test subdirectories; use one or the other, not both.",
+        ),
       conflictPolicy: z
         .string()
         .optional()
@@ -844,9 +910,21 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
       video_path: z.string().describe("Local path to source video file."),
-      fps: z.number().optional(),
-      max_frames: z.number().int().optional(),
-      targetSplit: z.string().optional(),
+      fps: z
+        .number()
+        .optional()
+        .describe(
+          "Maximum frame extraction rate in frames per second; may be reduced to keep the total within max_frames.",
+        ),
+      max_frames: z
+        .number()
+        .int()
+        .optional()
+        .describe("Maximum number of frames to extract."),
+      targetSplit: z
+        .string()
+        .optional()
+        .describe("Target split for new images (overrides archive structure)."),
       conflictPolicy: z
         .string()
         .optional()
@@ -1204,8 +1282,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("Project ref required when model is given by slug."),
-      include_history: z.boolean().optional(),
-      history_last_n: z.number().int().positive().optional(),
+      include_history: z
+        .boolean()
+        .optional()
+        .describe(
+          "Include the epoch metrics history curve; omitted by default.",
+        ),
+      history_last_n: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
+        ),
     },
     annotations: {
       readOnlyHint: true,
@@ -1243,9 +1333,26 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("Project ref required when model is given by slug."),
-      include_history: z.boolean().optional(),
-      history_last_n: z.number().int().positive().optional(),
-      include_train_args: z.boolean().optional(),
+      include_history: z
+        .boolean()
+        .optional()
+        .describe(
+          "Include the epoch metrics history curve; omitted by default.",
+        ),
+      history_last_n: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
+        ),
+      include_train_args: z
+        .boolean()
+        .optional()
+        .describe(
+          "Include the full trainArgs object; off by default because the platform returns roughly a hundred keys.",
+        ),
     },
     annotations: {
       readOnlyHint: true,
@@ -1335,9 +1442,24 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("Project ref required when model is given by slug."),
-      conf: z.number().optional(),
-      iou: z.number().optional(),
-      imgsz: z.number().optional(),
+      conf: z
+        .number()
+        .optional()
+        .describe(
+          "Confidence threshold (0.01-1); defaults to 0.25 when omitted.",
+        ),
+      iou: z
+        .number()
+        .optional()
+        .describe(
+          "IoU threshold used for NMS (0-0.95); defaults to 0.7 when omitted.",
+        ),
+      imgsz: z
+        .number()
+        .optional()
+        .describe(
+          "Inference image size (32-1280); defaults to 640 when omitted.",
+        ),
     },
     annotations: {
       readOnlyHint: true,
@@ -1389,9 +1511,20 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       output_path: z
         .string()
         .describe("Local destination path for downloaded model weights."),
-      project: z.string().optional(),
-      filename: z.string().optional(),
-      overwrite: z.boolean().optional(),
+      project: z
+        .string()
+        .optional()
+        .describe("Project ref required when model is given by slug."),
+      filename: z
+        .string()
+        .optional()
+        .describe(
+          "Select which of the model's remote weight files to download by name; does not set the local output filename (use output_path for that). Omit to prefer best.pt, then the first available file.",
+        ),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe("Overwrite an existing file at output_path."),
     },
     annotations: {
       readOnlyHint: false,
@@ -1504,9 +1637,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("GPU type required for TensorRT engine exports."),
-      imgsz: z.number().optional(),
-      half: z.boolean().optional(),
-      dynamic: z.boolean().optional(),
+      imgsz: z.number().optional().describe("Image size for export."),
+      half: z
+        .boolean()
+        .optional()
+        .describe("Legacy FP16 export precision flag."),
+      dynamic: z.boolean().optional().describe("Dynamic input shapes."),
       confirm_cost: z
         .boolean()
         .optional()
@@ -1610,11 +1746,29 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           "Dataset ref by slug, owner/slug, or ul:// URI, or a list of refs to fine-tune on sequentially.",
         ),
       gpu_type: z.string().describe("Cloud GPU type to allocate for training."),
-      train_args: z.record(z.string(), z.unknown()).optional(),
-      epochs: z.number().optional(),
-      imgsz: z.number().optional(),
-      batch: z.number().optional(),
-      name: z.string().optional(),
+      train_args: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe(
+          "Additional YOLO training arguments passed through to the platform. epochs, imgsz, batch, and name here are silently overridden by the matching top-level input when both are set; data and model are rejected outright if present here.",
+        ),
+      epochs: z
+        .number()
+        .optional()
+        .describe("Maximum full passes over the training set."),
+      imgsz: z
+        .number()
+        .optional()
+        .describe(
+          "Target input size: square batches normally, or the long-side size with rect=true.",
+        ),
+      batch: z
+        .number()
+        .optional()
+        .describe(
+          "Images per batch: -1 targets about 60% GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count.",
+        ),
+      name: z.string().optional().describe("Run name for callbacks."),
       confirm_cost: z
         .boolean()
         .optional()
