@@ -52,7 +52,8 @@ Runs against the real platform. It reads the same key as the server, is
 excluded from `npm test`, and skips silently when the key is unset.
 
 It creates and cleans up disposable projects, models, datasets, and deployments.
-Their slugs use `mcp-smoke-*` or `zz-mcp-*`. Cleanup also runs when a test
+Project, dataset, and deployment slugs use `mcp-smoke-*` or `zz-mcp-*`;
+disposable models live inside those projects. Cleanup also runs when a test
 fails, but an interrupted process may leave resources behind.
 
 Deployment provisioning has taken 40-60 seconds in live checks and temporarily
