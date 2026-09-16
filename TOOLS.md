@@ -265,7 +265,7 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `folder_path` | string | Yes | Local path to image folder. |
-| `targetSplit` | string | No | Target split for new images (overrides archive structure). |
+| `targetSplit` | string | No | Target split for new images. Rejected if the folder itself has train/val/test subdirectories; use one or the other, not both. |
 | `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
 
 Notes: Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.
@@ -290,7 +290,7 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `video_path` | string | Yes | Local path to source video file. |
-| `fps` | number | No | Frame extraction rate in frames per second. |
+| `fps` | number | No | Maximum frame extraction rate in frames per second; may be reduced to keep the total within max_frames. |
 | `max_frames` | number | No | Maximum number of frames to extract. |
 | `targetSplit` | string | No | Target split for new images (overrides archive structure). |
 | `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
@@ -383,7 +383,7 @@ Metadata: read-only, external/live
 | `source` | string | Yes | Image URL, raw base64-encoded image, or base64 data: URI (data:<mime>;base64,<payload>). Local file paths are not supported. |
 | `project` | string | No | Project ref required when model is given by slug. |
 | `conf` | number | No | Confidence threshold (0.01-1); defaults to 0.25 when omitted. |
-| `iou` | number | No | IoU threshold (0-0.95); defaults to 0.7 when omitted. |
+| `iou` | number | No | IoU threshold used for NMS (0-0.95); defaults to 0.7 when omitted. |
 | `imgsz` | number | No | Inference image size (32-1280); defaults to 640 when omitted. |
 
 #### Predict from image URL

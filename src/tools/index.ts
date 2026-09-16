@@ -860,7 +860,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       targetSplit: z
         .string()
         .optional()
-        .describe("Target split for new images (overrides archive structure)."),
+        .describe(
+          "Target split for new images. Rejected if the folder itself has train/val/test subdirectories; use one or the other, not both.",
+        ),
       conflictPolicy: z
         .string()
         .optional()
@@ -911,7 +913,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       fps: z
         .number()
         .optional()
-        .describe("Frame extraction rate in frames per second."),
+        .describe(
+          "Maximum frame extraction rate in frames per second; may be reduced to keep the total within max_frames.",
+        ),
       max_frames: z
         .number()
         .int()
@@ -1447,7 +1451,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       iou: z
         .number()
         .optional()
-        .describe("IoU threshold (0-0.95); defaults to 0.7 when omitted."),
+        .describe(
+          "IoU threshold used for NMS (0-0.95); defaults to 0.7 when omitted.",
+        ),
       imgsz: z
         .number()
         .optional()
