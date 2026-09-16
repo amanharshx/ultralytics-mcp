@@ -1244,7 +1244,7 @@ describe("trainingStart", () => {
       ).rejects.toThrow(/did not include an id/);
     });
 
-    test("deletes the freshly created model when POST /training/start rejects it, e.g. a task mismatch", async () => {
+    test("never deletes the freshly created model, but names it in the error when POST /training/start rejects it", async () => {
       const calls: { url: string; method: string }[] = [];
       const impl = (async (url: string | URL, init: RequestInit = {}) => {
         const method = (init.method ?? "GET").toUpperCase();
@@ -1261,12 +1261,6 @@ describe("trainingStart", () => {
         if (path === START_PATH) {
           return jsonResponse({ error: "Dataset task mismatch." }, 400);
         }
-        if (
-          path === `/api/models/${OWNER}/${PROJECT}/${CREATED_SLUG}` &&
-          method === "DELETE"
-        ) {
-          return jsonResponse({ success: true });
-        }
         return jsonResponse({}, 404);
       }) as unknown as typeof fetch;
       const client = new UltralyticsClient({
@@ -1275,94 +1269,10 @@ describe("trainingStart", () => {
         fetchImpl: impl,
       });
 
-      await expect(
-        trainingStart(client, {
-          model: "yolo26n-cls.pt",
-          project: PROJECT_REF,
-          dataset: DATASET_REF,
-          gpuType: "l4",
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(/Dataset task mismatch/);
-
-      expect(calls).toMatchObject([
-        { url: `${ORIGIN}${CREATE_MODEL_PATH}`, method: "POST" },
-        { url: `${ORIGIN}${START_PATH}`, method: "POST" },
-        {
-          url: `${ORIGIN}/api/models/${OWNER}/${PROJECT}/${CREATED_SLUG}`,
-          method: "DELETE",
-        },
-      ]);
-    });
-
-    test("surfaces the original error even when the cleanup delete itself fails", async () => {
-      const impl = (async (url: string | URL, init: RequestInit = {}) => {
-        const method = (init.method ?? "GET").toUpperCase();
-        const path = new URL(String(url)).pathname;
-        if (path === CREATE_MODEL_PATH) {
-          return jsonResponse({
-            id: CREATED_MODEL_ID,
-            owner: OWNER,
-            project: PROJECT,
-            model: CREATED_SLUG,
-          });
-        }
-        if (path === START_PATH) {
-          return jsonResponse({ error: "Dataset task mismatch." }, 400);
-        }
-        if (
-          path === `/api/models/${OWNER}/${PROJECT}/${CREATED_SLUG}` &&
-          method === "DELETE"
-        ) {
-          return jsonResponse({ error: "Server error" }, 500);
-        }
-        return jsonResponse({}, 404);
-      }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
-
-      await expect(
-        trainingStart(client, {
-          model: "yolo26n-cls.pt",
-          project: PROJECT_REF,
-          dataset: DATASET_REF,
-          gpuType: "l4",
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(/Dataset task mismatch/);
-    });
-
-    test("does not delete the created model on a 5xx from /training/start, and names it in the error", async () => {
-      const calls: { url: string; method: string }[] = [];
-      const impl = (async (url: string | URL, init: RequestInit = {}) => {
-        const method = (init.method ?? "GET").toUpperCase();
-        calls.push({ url: String(url), method });
-        const path = new URL(String(url)).pathname;
-        if (path === CREATE_MODEL_PATH) {
-          return jsonResponse({
-            id: CREATED_MODEL_ID,
-            owner: OWNER,
-            project: PROJECT,
-            model: CREATED_SLUG,
-          });
-        }
-        if (path === START_PATH) {
-          // A 5xx does not prove the job never started: the request may
-          // have reached the server and started a billable run whose
-          // response was lost.
-          return jsonResponse({ error: "Training launch failed" }, 500);
-        }
-        return jsonResponse({}, 404);
-      }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
-
+      // A 4xx is not treated as proof the model was never trained (a 4xx
+      // covers several distinct rejections, and only the task-mismatch case
+      // has actually been observed live): this tool never auto-deletes the
+      // model it created, on any failure, and always names it instead.
       await expect(
         trainingStart(client, {
           model: "yolo26n-cls.pt",
@@ -1373,7 +1283,7 @@ describe("trainingStart", () => {
         }),
       ).rejects.toThrow(
         new RegExp(
-          `Training launch failed.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*NOT deleted`.replace(
+          `Dataset task mismatch.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*not deleted`.replace(
             /\//g,
             "\\/",
           ),
@@ -1381,11 +1291,11 @@ describe("trainingStart", () => {
         ),
       );
 
-      // No DELETE call: an ambiguous failure leaves the model in place.
+      // No DELETE call at all: create, then start, then nothing else.
       expect(calls.map((call) => call.method)).toEqual(["POST", "POST"]);
     });
 
-    test("does not delete the created model when /training/start fails with no HTTP response at all", async () => {
+    test("names the created model in the error for a 5xx or a network failure too", async () => {
       const calls: { url: string; method: string }[] = [];
       const impl = (async (url: string | URL, init: RequestInit = {}) => {
         const method = (init.method ?? "GET").toUpperCase();
@@ -1420,7 +1330,7 @@ describe("trainingStart", () => {
         }),
       ).rejects.toThrow(
         new RegExp(
-          `network timeout.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*NOT deleted`.replace(
+          `network timeout.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*not deleted`.replace(
             /\//g,
             "\\/",
           ),
@@ -1429,6 +1339,31 @@ describe("trainingStart", () => {
       );
 
       expect(calls.map((call) => call.method)).toEqual(["POST", "POST"]);
+    });
+
+    test("does not touch the error for a model resolved from an existing ref (no model was created this call)", async () => {
+      const { client, calls } = routeClient((path) => {
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse({ error: "Some other failure." }, 400);
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/^HTTP 400.*Some other failure\.\s*\[/s);
+      expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
     });
   });
 
@@ -1710,9 +1645,15 @@ describe("trainingStart", () => {
         confirmCost: true,
       });
 
-      // Checkpoint/dataset task compatibility across a multi-dataset list is
-      // enforced by the server at POST /training/start itself (verified
-      // live); no per-dataset GET happens first.
+      // No per-dataset GET happens first. Only the single-dataset case was
+      // verified live (the server rejects a mismatched checkpoint/dataset
+      // task with 400 "Dataset task mismatch..."); the multi-dataset array
+      // sends the same `trainArgs.data` value the single-string case does,
+      // just as an array, so the same server-side validation is expected to
+      // apply — but that has not itself been independently confirmed live
+      // for an array where an earlier entry matches and a later one
+      // doesn't. Treat multi-dataset task-mismatch enforcement as inferred,
+      // not verified.
       expect(calls).toMatchObject([
         { url: `${ORIGIN}${CREATE_MODEL_PATH}` },
         {

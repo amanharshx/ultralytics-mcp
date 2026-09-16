@@ -27,9 +27,13 @@
  * `ULTRALYTICS_SMOKE_DATASET_REF=owner/slug` and skips without it, so this
  * suite never selects or mutates an arbitrary dataset. The referenced
  * project/model are created fresh and deleted; the dataset itself is only
- * read. Training is expected to be rejected before billing; if the platform
- * ever accepts it instead, the test fails loudly on the credits assertion
- * rather than silently leaving a job running.
+ * read. Training is expected to be rejected before billing. If the
+ * platform ever accepts it instead, an unexpected `202`/`200` does not fall
+ * through to a later assertion — `expectRejectionOrStopIt` calls
+ * `trainingCancel` (or the raw cancel endpoint) on that exact response
+ * before failing the test, so a real training job is never left running
+ * unmonitored just because a check further down never got the chance to
+ * catch it.
  *
  * Skipped silently without `ULTRALYTICS_API_KEY` and excluded from
  * `npm test`, exactly like the other live smoke suites.
@@ -54,7 +58,7 @@ import {
 } from "../../src/tools/datasets.js";
 import { modelsDelete } from "../../src/tools/models.js";
 import { projectsCreate, projectsDelete } from "../../src/tools/projects.js";
-import { trainingStart } from "../../src/tools/training.js";
+import { trainingCancel, trainingStart } from "../../src/tools/training.js";
 import {
   disposableSlug,
   lastStatus,
@@ -77,6 +81,33 @@ async function catchApiError(
     throw error;
   }
   throw new Error("expected the call to reject with an UltralyticsApiError");
+}
+
+/** Assert `promise` rejects with an `UltralyticsApiError` and return it.
+ *
+ * If it resolves instead — the exact regression the task-mismatch test
+ * exists to catch — `onUnexpectedSuccess` runs first, best-effort, before
+ * this throws. That stops a training job that may have actually started
+ * rather than leaving it running while the test just fails an assertion.
+ */
+async function expectRejectionOrStopIt<T>(
+  promise: Promise<T>,
+  onUnexpectedSuccess: (result: T) => Promise<void>,
+): Promise<UltralyticsApiError> {
+  let result: T;
+  try {
+    result = await promise;
+  } catch (error) {
+    if (error instanceof UltralyticsApiError) {
+      return error;
+    }
+    throw error;
+  }
+  await onUnexpectedSuccess(result).catch(() => {});
+  throw new Error(
+    "expected the call to reject the task mismatch, but it started successfully " +
+      `(job stop was attempted): ${JSON.stringify(result)}`,
+  );
 }
 
 describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
@@ -244,7 +275,7 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     );
   }, 60_000);
 
-  test("training start: rejects a checkpoint/dataset task mismatch before any compute runs, and deletes the model it created", async (ctx) => {
+  test("training start: rejects a checkpoint/dataset task mismatch before any compute runs, and names the model it created", async (ctx) => {
     const datasetRef = process.env.ULTRALYTICS_SMOKE_DATASET_REF?.trim();
     if (!datasetRef) {
       ctx.skip(
@@ -307,7 +338,7 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
               `/models/${owner}/${rawProjectSlug}/${created.model}`,
             )) as { model: { id: string } };
 
-            const rawMismatchError = await catchApiError(
+            const rawMismatchError = await expectRejectionOrStopIt(
               client.postJson("/training/start", {
                 modelId: modelDetail.model.id,
                 gpuType: "rtx-2000-ada",
@@ -317,6 +348,12 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
                   epochs: 1,
                 },
               }),
+              async () => {
+                // Unexpected success: stop the job before this fails loudly.
+                await client.delete(
+                  `/models/${owner}/${rawProjectSlug}/${created.model}/training`,
+                );
+              },
             );
             expect(rawMismatchError.statusCode).toBe(400);
             expect(rawMismatchError.apiMessage.toLowerCase()).toContain(
@@ -333,8 +370,11 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     );
 
     // --- Through the real tool: proves trainingStart itself surfaces the
-    // same message verbatim, and that it deletes the model it created
-    // rather than leaving it behind on this provable (4xx) rejection.
+    // same message verbatim. trainingStart never auto-deletes the model it
+    // creates (a 4xx does not prove the job never started for every one of
+    // the distinct rejections it can mean), so it must instead name that
+    // model in the error — this test extracts the name and deletes it
+    // itself, so the live workspace ends up clean either way.
     const projectSlug = disposableSlug("mcp-smoke-enum-mismatch");
     const projectRef = `${owner}/${projectSlug}`;
 
@@ -350,7 +390,7 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
           project: projectSlug,
         });
 
-        const mismatchError = await catchApiError(
+        const mismatchError = await expectRejectionOrStopIt(
           trainingStart(client, {
             model: mismatchedCheckpoint,
             project: projectRef,
@@ -359,12 +399,28 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
             epochs: 1,
             confirmCost: true,
           }),
+          async (result) => {
+            // Unexpected success: stop the job before this fails loudly.
+            const data = (
+              result as {
+                data: { owner: string; project: string; model: string };
+              }
+            ).data;
+            await trainingCancel(
+              client,
+              `${data.owner}/${data.project}/${data.model}`,
+            );
+          },
         );
         expect(mismatchError.statusCode).toBe(400);
         expect(mismatchError.apiMessage).toBe(rawMismatchMessage);
 
-        // trainingStart deletes the model it created for this run once the
-        // server rejects it: nothing is left behind to clean up here.
+        const namedModel = mismatchError.message.match(
+          /Model '([^']+)' was created for this run and was not deleted/,
+        );
+        expect(namedModel).not.toBeNull();
+        await modelsDelete(client, (namedModel as RegExpMatchArray)[1]);
+
         const modelsAfter = (await client.get(
           `/models/${owner}/${projectSlug}`,
         )) as { models?: unknown[] };

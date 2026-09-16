@@ -484,8 +484,12 @@ export async function trainingStart(
     // Checkpoint/dataset task compatibility is enforced by the server at
     // POST /training/start itself, e.g. `{"error":"Dataset task mismatch.
     // This dataset is \"detect\" but the selected model trains \"classify\".
-    // ..."}` (400, verified live with a detect dataset and a classify
-    // checkpoint). No client-side pre-check is needed.
+    // ..."}` (400, verified live with a single detect dataset and a
+    // classify checkpoint). No client-side pre-check is needed. This has
+    // not been separately verified for a multi-dataset `dataset` array with
+    // a mismatch on a later entry; `trainArgs.data` carries the array the
+    // same way it carries a single string, so the same validation is
+    // expected to apply, but that expectation is inferred, not confirmed.
     const checkpointTask = inferCheckpointTask(checkpoint);
     const projectOwner =
       resolvedProject.owner ?? (await client.getAccountOwner());
@@ -537,34 +541,17 @@ export async function trainingStart(
       trainArgs,
     });
   } catch (error) {
-    if (createdModelRef !== null) {
+    if (createdModelRef !== null && error instanceof Error) {
+      // No status code is treated as proof the model was never trained: a
+      // 4xx covers several distinct rejections (config, auth, credits,
+      // access, not-found, conflict, rate limit) and only one of
+      // them — a dataset task mismatch — has actually been observed live,
+      // so generalizing "4xx means safe to delete" would itself be an
+      // unverified rule cached locally. This tool never deletes the model
+      // it created; it only names it, on every failure, so the caller can
+      // decide (`models_delete` if it's confirmed unwanted).
       const ref = `${createdModelRef.owner}/${createdModelRef.project}/${createdModelRef.model}`;
-      // Only a 4xx from the server proves the request was rejected before
-      // training started (e.g. a dataset task mismatch, which this tool no
-      // longer pre-checks): the model this call created never trained, so
-      // delete it rather than leave an empty, unrequested one behind.
-      // A 5xx or a network failure (no HTTP response at all) does NOT prove
-      // that — the request may have reached the server and started a
-      // billable job whose response was simply lost, and deleting the model
-      // in that case would orphan a live run instead of an empty one. Leave
-      // it in place and name it in the error so the caller can check by
-      // hand. Cleanup failure surfaces through the original error, not this
-      // attempt.
-      if (
-        error instanceof UltralyticsApiError &&
-        error.statusCode >= 400 &&
-        error.statusCode < 500
-      ) {
-        await client
-          .delete(
-            `/models/${encodeURIComponent(createdModelRef.owner)}/${encodeURIComponent(createdModelRef.project)}/${encodeURIComponent(createdModelRef.model)}`,
-          )
-          .catch(() => {});
-      } else if (error instanceof Error) {
-        error.message +=
-          ` Model '${ref}' was created for this run and was NOT deleted, ` +
-          "because it could not be confirmed that training never started; check it by hand.";
-      }
+      error.message += ` Model '${ref}' was created for this run and was not deleted; check whether it should be removed.`;
     }
     throw error;
   }
