@@ -262,6 +262,7 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 - `ULTRALYTICS_API_KEY` is a bearer token; pass it via MCP client `env` and never commit real keys
 - `export_create` requires `confirm_cost: true`
 - `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run — that path replaces its status, epoch count, and per-epoch metric history irrecoverably
+- `training_start` in checkpoint mode (a base checkpoint like `yolo11n.pt`, not an existing model ref) with a single dataset creates a project model before the platform checks the checkpoint's task against the dataset's; if that check fails, the model it created is not deleted automatically and the error names it — review and delete it (`models_delete`) if it's unwanted
 - Ambiguous project or dataset refs fail instead of guessing
 - Signed upload and download URLs do not forward `Authorization`
 - Local upload tools and `deployment_predict` read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics

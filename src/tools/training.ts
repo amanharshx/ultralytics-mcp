@@ -397,23 +397,34 @@ export async function trainingCancel(
  * slug — and reuses its own stored base checkpoint for `trainArgs.model`
  * verbatim. Checkpoint mode creates a project model first from owner and
  * project slug (the platform assigns the new model's slug; it no longer
- * accepts a requested name) and validates the checkpoint's inferred task
- * against every dataset's task before creating anything, so a list with one
- * incompatible entry is refused up front rather than partway through. The
- * endpoint validates at creation, so an unusable dataset is rejected before
- * any compute starts; use `training_cancel` to stop a job that is already
- * running. Starting is billable immediately: the platform has no cost
- * preview before that, so the projected cost and remaining balance are only
- * known from the start response, and are surfaced verbatim rather than
- * discarded. Training an existing model that already has a recorded run
- * (any status past pending/untrained, or existing `trainResults`) replaces
- * that run's status, epoch count, and per-epoch metric history the moment
- * the new job starts; the previously uploaded weights survive but the
- * metric history does not, and the API has no way to recover it. This is a
- * separate consent from spending money, so it needs its own
- * `confirmHistoryLoss` flag rather than piggybacking on `confirmCost`.
- * Checkpoint mode always creates a new model, so nothing is ever destroyed
- * there.
+ * accepts a requested name). For a `dataset` list, the checkpoint's
+ * inferred task is validated against every entry's task before that model
+ * is created, so an incompatible list is refused up front with nothing
+ * created — that check is not itself confirmed live for every array length
+ * and stays client-side for that reason (see `DATASET_TASK_COMPATIBILITY`).
+ * For a single, non-array `dataset`, there is no such pre-check: the
+ * server enforces the same task match at `POST /training/start` itself
+ * (confirmed live), which runs *after* the model above is already created.
+ * A mismatch there still leaves that model behind — nothing deletes it
+ * automatically, since no status code reliably proves the job never
+ * started — so the thrown error names the model and the caller is expected
+ * to review and remove it (`models_delete`) if it turns out to be
+ * unwanted. The dataset itself is validated at creation either way, so an
+ * unusable dataset is rejected before any compute starts; use
+ * `training_cancel` to stop a job that is already running. Starting is
+ * billable immediately: the platform has no cost preview before that, so
+ * the projected cost and remaining balance are only known from the start
+ * response, and are surfaced verbatim rather than discarded. Training an
+ * existing model that already has a recorded run (any status past
+ * pending/untrained, or existing `trainResults`) replaces that run's
+ * status, epoch count, and per-epoch metric history the moment the new job
+ * starts; the previously uploaded weights survive but the metric history
+ * does not, and the API has no way to recover it. This is a separate
+ * consent from spending money, so it needs its own `confirmHistoryLoss`
+ * flag rather than piggybacking on `confirmCost`. Checkpoint mode never
+ * destroys an existing model's history — it always creates a new one — so
+ * it never needs `confirmHistoryLoss`; the risk it carries instead is the
+ * possible leftover model described above.
  */
 export async function trainingStart(
   client: UltralyticsClient,
