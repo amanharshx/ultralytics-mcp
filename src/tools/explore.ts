@@ -11,15 +11,6 @@ const EXPLORE_SORTS = new Set([
   "count-asc",
 ]);
 
-const DATASET_TASKS = new Set([
-  "detect",
-  "segment",
-  "semantic",
-  "classify",
-  "pose",
-  "obb",
-]);
-
 export function validateExploreQuery(
   q: string,
   sort = "newest",
@@ -37,17 +28,14 @@ export function validateExploreQuery(
   }
 }
 
-export function validateExploreTasks(task?: string[]): string | undefined {
+/** Join dataset task filters for the `task` query param. The server rejects
+ * an unrecognized task itself (verified live: `?task=notarealtask` on
+ * `/explore/search` returns 400 `"Invalid task filter"`), so this does no
+ * local validation — a fixed allowlist here previously excluded `depth`,
+ * which the server accepts. */
+export function joinExploreTasks(task?: string[]): string | undefined {
   if (!task || task.length === 0) {
     return undefined;
-  }
-  for (const item of task) {
-    if (!DATASET_TASKS.has(item)) {
-      const allowed = Array.from(DATASET_TASKS).sort().join(", ");
-      throw new Error(
-        `Unsupported dataset task '${item}'. Expected one of: ${allowed}.`,
-      );
-    }
   }
   return task.join(",");
 }

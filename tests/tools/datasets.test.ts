@@ -203,7 +203,7 @@ describe("datasetsList", () => {
 });
 
 describe("exploreDatasets", () => {
-  test("builds query, validates task filter, and trims results", async () => {
+  test("builds query, joins the task filter, and trims results", async () => {
     const { client, calls } = captureClient((url) => {
       const parsed = new URL(url);
       if (parsed.pathname === "/api/explore/search") {
@@ -259,7 +259,7 @@ describe("exploreDatasets", () => {
     });
   });
 
-  test("validates q, sort, offset, and task before network", async () => {
+  test("validates q, sort, and offset before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -277,9 +277,27 @@ describe("exploreDatasets", () => {
     await expect(
       exploreDatasets(client, { q: "bird", offset: -1 }),
     ).rejects.toThrow(/offset/);
-    await expect(
-      exploreDatasets(client, { q: "bird", task: ["detect", "bad"] }),
-    ).rejects.toThrow(/Unsupported dataset task/);
+  });
+
+  test("passes an unrecognized task filter through to the server rather than rejecting it locally", async () => {
+    // No local task allowlist: the server rejects an unrecognized task
+    // itself (verified live: `?task=notarealtask` on `/explore/search`
+    // returns 400 `"Invalid task filter"`), and it accepts values the old
+    // client-side allowlist used to exclude, e.g. `depth` (verified live:
+    // `?task=depth` returns 200 with an empty result set).
+    const { client, calls } = captureClient((url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/explore/search") {
+        return jsonResponse({ datasets: [], hasMore: false });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await exploreDatasets(client, { q: "bird", task: ["depth"] });
+
+    expect(calls[0]?.url).toBe(
+      `${BASE}/explore/search?type=datasets&q=bird&sort=newest&offset=0&task=depth`,
+    );
   });
 });
 
@@ -629,7 +647,7 @@ describe("datasetImagesList", () => {
     );
   });
 
-  test("validates split, limit, and offset before network", async () => {
+  test("validates limit and offset before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -639,14 +657,32 @@ describe("datasetImagesList", () => {
     });
 
     await expect(
-      datasetImagesList(client, { dataset: "data", split: "bogus" }),
-    ).rejects.toThrow(/Unsupported split/);
-    await expect(
       datasetImagesList(client, { dataset: "data", limit: 5001 }),
     ).rejects.toThrow(/at most 5000/);
     await expect(
       datasetImagesList(client, { dataset: "data", offset: -1 }),
     ).rejects.toThrow(/greater than or equal to 0/);
+  });
+
+  test("passes an unrecognized split through to the server rather than rejecting it locally", async () => {
+    // No local split allowlist: the server rejects an unrecognized split
+    // itself (verified live: `?split=notarealsplit` on
+    // `/datasets/{owner}/{dataset}/images` returns 400 `"Invalid option:
+    // expected one of \"train\"|\"val\"|\"test\""`), and that message
+    // surfaces verbatim.
+    const { client } = routeClient((path) => {
+      if (path === "/api/datasets/alice/cars/images") {
+        return jsonResponse(
+          { error: 'Invalid option: expected one of "train"|"val"|"test"' },
+          400,
+        );
+      }
+      return jsonResponse({}, 404);
+    });
+
+    await expect(
+      datasetImagesList(client, { dataset: "alice/cars", split: "bogus" }),
+    ).rejects.toThrow(/Invalid option: expected one of/);
   });
 });
 
@@ -800,17 +836,37 @@ describe("datasetsCreate", () => {
     });
   });
 
-  test("validates task and dataset before network", async () => {
+  test("validates dataset before network", async () => {
     const { client, calls } = clientForCreate(flatCreate, {
       accountOwner: "alice",
     });
     await expect(
-      datasetsCreate(client, { name: "Bad", dataset: "bad", task: "bad-task" }),
-    ).rejects.toThrow(/Unsupported dataset task/);
-    await expect(
       datasetsCreate(client, { name: "Bad", dataset: "", task: "detect" }),
     ).rejects.toThrow(/`dataset` is required/);
     expect(calls).toHaveLength(0);
+  });
+
+  test("surfaces the API message for an unrecognized task rather than rejecting it locally", async () => {
+    // No local task allowlist: the server rejects an unrecognized task
+    // itself (verified live: `task: "notarealtask"` on `POST /datasets`
+    // returns 400 `"Invalid option: expected one of \"detect\"|\"segment\"|
+    // \"semantic\"|\"depth\"|\"classify\"|\"pose\"|\"obb\""` — a superset of
+    // the removed allowlist, which omitted the valid `depth` task), and that
+    // message surfaces verbatim.
+    const { client } = clientForCreate(
+      {
+        error:
+          'Invalid option: expected one of "detect"|"segment"|"semantic"|"depth"|"classify"|"pose"|"obb"',
+      },
+      { accountOwner: "alice", status: 400 },
+    );
+    await expect(
+      datasetsCreate(client, {
+        name: "Bad",
+        dataset: "bad",
+        task: "bad-task",
+      }),
+    ).rejects.toThrow(/Invalid option: expected one of/);
   });
 
   test("surfaces the API message for invalid visibility", async () => {
@@ -2034,7 +2090,7 @@ describe("datasetUploadFolder", () => {
     ).rejects.toThrow(/Folder has split directories/);
   });
 
-  test("validates folder path, conflict policy, and target split before network", async () => {
+  test("validates folder path before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -2055,22 +2111,37 @@ describe("datasetUploadFolder", () => {
         folderPath: join(tmpdir(), "missing-folder-xyz"),
       }),
     ).rejects.toThrow(/does not exist/);
+  });
 
+  test("surfaces the API message for an unrecognized targetSplit or conflictPolicy rather than rejecting locally", async () => {
+    // No local targetSplit/conflictPolicy allowlist: the server rejects
+    // unrecognized values itself (verified live: both return 400
+    // `"Invalid input"` on `/datasets/{owner}/{dataset}/ingest`), and that
+    // message surfaces verbatim.
     const dir = await writeImageFolder({ "bird.jpg": "jpg" });
+    const { client: badSplitClient } = clientForFolderUpload({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
     await expect(
-      datasetUploadFolder(client, {
+      datasetUploadFolder(badSplitClient, {
         dataset: "alice/cars",
         folderPath: dir,
         targetSplit: "bad",
       }),
-    ).rejects.toThrow(/Unsupported targetSplit/);
+    ).rejects.toThrow(/Invalid input/);
+
+    const { client: badPolicyClient } = clientForFolderUpload({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
     await expect(
-      datasetUploadFolder(client, {
+      datasetUploadFolder(badPolicyClient, {
         dataset: "alice/cars",
         folderPath: dir,
         conflictPolicy: "bogus",
       }),
-    ).rejects.toThrow(/Unsupported conflictPolicy/);
+    ).rejects.toThrow(/Invalid input/);
   });
 
   test("surfaces the API message for a missing dataset", async () => {
@@ -2656,23 +2727,46 @@ describe("datasetUploadVideo", () => {
       datasetUploadVideo(client, {
         dataset: "alice/cars",
         videoPath,
-        targetSplit: "bad",
-      }),
-    ).rejects.toThrow(/Unsupported targetSplit/);
-    await expect(
-      datasetUploadVideo(client, {
-        dataset: "alice/cars",
-        videoPath,
-        conflictPolicy: "bogus",
-      }),
-    ).rejects.toThrow(/Unsupported conflictPolicy/);
-    await expect(
-      datasetUploadVideo(client, {
-        dataset: "alice/cars",
-        videoPath,
         _findTool: () => null,
       }),
     ).rejects.toThrow(/ffmpeg\/ffprobe not found on PATH/);
+  });
+
+  test("surfaces the API message for an unrecognized targetSplit or conflictPolicy rather than rejecting locally", async () => {
+    // No local targetSplit/conflictPolicy allowlist: the server rejects
+    // unrecognized values itself (verified live: both return 400
+    // `"Invalid input"` on `/datasets/{owner}/{dataset}/ingest`), and that
+    // message surfaces verbatim.
+    const videoPath = await writeVideoFile();
+    const { client: badSplitClient } = clientForVideoUpload({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
+    await expect(
+      datasetUploadVideo(badSplitClient, {
+        dataset: "alice/cars",
+        videoPath,
+        targetSplit: "bad",
+        _findTool: (name) => `/usr/bin/${name}`,
+        _probeDuration: async () => 200,
+        _extractFrames: writeSingleFrame(),
+      }),
+    ).rejects.toThrow(/Invalid input/);
+
+    const { client: badPolicyClient } = clientForVideoUpload({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
+    await expect(
+      datasetUploadVideo(badPolicyClient, {
+        dataset: "alice/cars",
+        videoPath,
+        conflictPolicy: "bogus",
+        _findTool: (name) => `/usr/bin/${name}`,
+        _probeDuration: async () => 200,
+        _extractFrames: writeSingleFrame(),
+      }),
+    ).rejects.toThrow(/Invalid input/);
   });
 
   test("surfaces the API message for a missing dataset", async () => {
@@ -3100,7 +3194,7 @@ describe("datasetsIngest", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test("validates inputs before network", async () => {
+  test("validates sourceUrl before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -3114,20 +3208,36 @@ describe("datasetsIngest", () => {
         sourceUrl: "",
       }),
     ).rejects.toThrow(/`sourceUrl` is required/);
+  });
+
+  test("surfaces the API message for an unrecognized targetSplit or conflictPolicy rather than rejecting locally", async () => {
+    // No local targetSplit/conflictPolicy allowlist: the server rejects
+    // unrecognized values itself (verified live: both return 400
+    // `"Invalid input"` on `/datasets/{owner}/{dataset}/ingest`), and that
+    // message surfaces verbatim.
+    const { client: badSplitClient } = clientForIngest({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
     await expect(
-      datasetsIngest(client, {
+      datasetsIngest(badSplitClient, {
         dataset: "alice/cars",
         sourceUrl: "https://example.com/dataset.zip",
         targetSplit: "bad",
       }),
-    ).rejects.toThrow(/Unsupported targetSplit/);
+    ).rejects.toThrow(/Invalid input/);
+
+    const { client: badPolicyClient } = clientForIngest({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
     await expect(
-      datasetsIngest(client, {
+      datasetsIngest(badPolicyClient, {
         dataset: "alice/cars",
         sourceUrl: "https://example.com/dataset.zip",
         conflictPolicy: "bogus",
       }),
-    ).rejects.toThrow(/Unsupported conflictPolicy/);
+    ).rejects.toThrow(/Invalid input/);
   });
 
   test.each([
@@ -3767,7 +3877,7 @@ describe("datasetUploadFile", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test("validates file path, conflict policy, and target split before network", async () => {
+  test("validates file path before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -3798,23 +3908,37 @@ describe("datasetUploadFile", () => {
         filePath: badPath,
       }),
     ).rejects.toThrow(/Unsupported dataset upload file type/);
+  });
 
-    const goodPath = join(tmp, "dataset.zip");
-    await writeFile(goodPath, "archive");
+  test("surfaces the API message for an unrecognized targetSplit or conflictPolicy rather than rejecting locally", async () => {
+    // No local targetSplit/conflictPolicy allowlist: the server rejects
+    // unrecognized values itself (verified live: both return 400
+    // `"Invalid input"` on `/datasets/{owner}/{dataset}/ingest`), and that
+    // message surfaces verbatim.
+    const goodPath = await writeArchive();
+    const { client: badSplitClient } = clientForUpload({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
     await expect(
-      datasetUploadFile(client, {
+      datasetUploadFile(badSplitClient, {
         dataset: "alice/cars",
         filePath: goodPath,
         targetSplit: "bad",
       }),
-    ).rejects.toThrow(/Unsupported targetSplit/);
+    ).rejects.toThrow(/Invalid input/);
+
+    const { client: badPolicyClient } = clientForUpload({
+      ingestResponse: { error: "Invalid input" },
+      ingestStatus: 400,
+    });
     await expect(
-      datasetUploadFile(client, {
+      datasetUploadFile(badPolicyClient, {
         dataset: "alice/cars",
         filePath: goodPath,
         conflictPolicy: "bogus",
       }),
-    ).rejects.toThrow(/Unsupported conflictPolicy/);
+    ).rejects.toThrow(/Invalid input/);
   });
 
   test("surfaces the API message for a missing dataset", async () => {

@@ -383,7 +383,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       task: z
         .string()
         .describe(
-          "Dataset task such as detect, segment, semantic, pose, obb, or classify.",
+          "Dataset task. Server-validated; for example detect, segment, or classify.",
         ),
       owner: z
         .string()
@@ -774,7 +774,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          'Conflict policy "skip" (default), "keep_both", or "replace".',
+          'Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated.',
         ),
     },
     annotations: {
@@ -814,7 +814,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          'Conflict policy "skip" (default), "keep_both", or "replace".',
+          'Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated.',
         ),
     },
     annotations: {
@@ -867,7 +867,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          'Conflict policy "skip" (default), "keep_both", or "replace".',
+          'Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated.',
         ),
     },
     annotations: {
@@ -929,7 +929,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          'Conflict policy "skip" (default), "keep_both", or "replace".',
+          'Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated.',
         ),
     },
     annotations: {

@@ -28,14 +28,6 @@ const CHECKPOINT_TASK_SUFFIXES = [
 ] as const;
 const BASE_CHECKPOINT_RE =
   /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
-const DATASET_TASK_COMPATIBILITY: Record<string, string[]> = {
-  detect: ["detect"],
-  segment: ["segment", "semantic"],
-  semantic: ["semantic"],
-  pose: ["pose"],
-  obb: ["obb"],
-  classify: ["classify"],
-};
 
 /** Format a percentage like Python's `str(round(x, 1))` (whole numbers keep `.0`). */
 function formatPercent(value: number): string {
@@ -143,30 +135,6 @@ function createdModelId(data: unknown): string {
  * the pure, shape-agnostic dataset resolver. */
 function formatDatasetUri(dataset: { owner: string; dataset: string }): string {
   return `ul://${dataset.owner}/datasets/${dataset.dataset}`;
-}
-
-function validateCheckpointCompatibility(
-  datasetTask: string | null,
-  checkpointTask: string,
-  datasetLabel: string,
-): void {
-  if (datasetTask === null) {
-    throw new Error(
-      `Dataset '${datasetLabel}' is missing a task; cannot select a base checkpoint.`,
-    );
-  }
-  const allowedTasks = DATASET_TASK_COMPATIBILITY[datasetTask];
-  if (!allowedTasks) {
-    throw new Error(
-      `Unsupported dataset task '${datasetTask}' for dataset '${datasetLabel}'.`,
-    );
-  }
-  if (!allowedTasks.includes(checkpointTask)) {
-    throw new Error(
-      `Checkpoint task '${checkpointTask}' is not compatible with dataset task ` +
-        `'${datasetTask}' for dataset '${datasetLabel}'.`,
-    );
-  }
 }
 
 interface TrainingMonitorOptions {
@@ -504,22 +472,12 @@ export async function trainingStart(
     modelProjectDisplay = resolvedModel.project;
     modelSlugDisplay = resolvedModel.model;
   } else {
+    // Checkpoint/dataset task compatibility is enforced by the server at
+    // POST /training/start itself, e.g. `{"error":"Dataset task mismatch.
+    // This dataset is \"detect\" but the selected model trains \"classify\".
+    // ..."}` (400, verified live with a detect dataset and a classify
+    // checkpoint). No client-side pre-check is needed.
     const checkpointTask = inferCheckpointTask(checkpoint);
-    for (let i = 0; i < resolvedDatasets.length; i++) {
-      const owner = datasetOwners[i];
-      const resolved = resolvedDatasets[i];
-      const datasetDetail = await client.get(
-        `/datasets/${encodeURIComponent(owner)}/${encodeURIComponent(resolved.dataset)}`,
-      );
-      const datasetFields = asRecord(asRecord(datasetDetail).dataset);
-      const datasetTask =
-        typeof datasetFields.task === "string" ? datasetFields.task : null;
-      validateCheckpointCompatibility(
-        datasetTask,
-        checkpointTask,
-        `${owner}/${resolved.dataset}`,
-      );
-    }
     const projectOwner =
       resolvedProject.owner ?? (await client.getAccountOwner());
     const created = await client.postJson("/models", {
