@@ -448,7 +448,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       classIds: z
         .array(z.string())
         .optional()
-        .describe("Comma-separated class IDs; empty matches no images."),
+        .describe(
+          "Class IDs to filter by. An empty array is treated as no filter (all images match), not as a filter that excludes everything.",
+        ),
       limit: z.number().optional().describe("Maximum images to return."),
       offset: z.number().optional().describe("Images to skip."),
       includeImageUrls: z
@@ -1440,17 +1442,17 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .number()
         .optional()
         .describe(
-          "Confidence threshold (0.01-1, server default applies if omitted).",
+          "Confidence threshold (0.01-1); defaults to 0.25 when omitted.",
         ),
       iou: z
         .number()
         .optional()
-        .describe("IoU threshold (0-0.95, server default applies if omitted)."),
+        .describe("IoU threshold (0-0.95); defaults to 0.7 when omitted."),
       imgsz: z
         .number()
         .optional()
         .describe(
-          "Inference image size (32-1280, server default applies if omitted).",
+          "Inference image size (32-1280); defaults to 640 when omitted.",
         ),
     },
     annotations: {
@@ -1742,7 +1744,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .record(z.string(), z.unknown())
         .optional()
         .describe(
-          "Additional YOLO training arguments passed through to the platform. Keys covered by epochs, imgsz, batch, and name are reserved here.",
+          "Additional YOLO training arguments passed through to the platform. epochs, imgsz, batch, and name here are silently overridden by the matching top-level input when both are set; data and model are rejected outright if present here.",
         ),
       epochs: z
         .number()

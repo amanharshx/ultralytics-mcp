@@ -158,7 +158,7 @@ Metadata: read-only
 | `split` | string | No | Dataset split to filter by, for example train, val, or test. |
 | `search` | string | No | Image name or metadata search. |
 | `hasLabel` | boolean | No | Filter by annotation state. |
-| `classIds` | array<string> | No | Comma-separated class IDs; empty matches no images. |
+| `classIds` | array<string> | No | Class IDs to filter by. An empty array is treated as no filter (all images match), not as a filter that excludes everything. |
 | `limit` | number | No | Maximum images to return. |
 | `offset` | number | No | Images to skip. |
 | `includeImageUrls` | boolean | No | Include signed full-size image URLs. |
@@ -382,9 +382,9 @@ Metadata: read-only, external/live
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `source` | string | Yes | Image URL, raw base64-encoded image, or base64 data: URI (data:<mime>;base64,<payload>). Local file paths are not supported. |
 | `project` | string | No | Project ref required when model is given by slug. |
-| `conf` | number | No | Confidence threshold (0.01-1, server default applies if omitted). |
-| `iou` | number | No | IoU threshold (0-0.95, server default applies if omitted). |
-| `imgsz` | number | No | Inference image size (32-1280, server default applies if omitted). |
+| `conf` | number | No | Confidence threshold (0.01-1); defaults to 0.25 when omitted. |
+| `iou` | number | No | IoU threshold (0-0.95); defaults to 0.7 when omitted. |
+| `imgsz` | number | No | Inference image size (32-1280); defaults to 640 when omitted. |
 
 #### Predict from image URL
 
@@ -460,7 +460,7 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 | `project` | string | Yes | Project ref that owns the training job and resolved model. |
 | `dataset` | union | Yes | Dataset ref by slug, owner/slug, or ul:// URI, or a list of refs to fine-tune on sequentially. |
 | `gpu_type` | string | Yes | Cloud GPU type to allocate for training. |
-| `train_args` | record<string, unknown> | No | Additional YOLO training arguments passed through to the platform. Keys covered by epochs, imgsz, batch, and name are reserved here. |
+| `train_args` | record<string, unknown> | No | Additional YOLO training arguments passed through to the platform. epochs, imgsz, batch, and name here are silently overridden by the matching top-level input when both are set; data and model are rejected outright if present here. |
 | `epochs` | number | No | Maximum full passes over the training set. |
 | `imgsz` | number | No | Target input size: square batches normally, or the long-side size with rect=true. |
 | `batch` | number | No | Images per batch: -1 targets about 60% GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count. |
