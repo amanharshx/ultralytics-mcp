@@ -18,6 +18,7 @@ import {
   datasetUploadFolder,
   datasetUploadVideo,
   datasetVersionCreate,
+  datasetVersionRestore,
   exploreDatasets,
 } from "../../src/tools/datasets.js";
 import { BASE, jsonResponse, KEY, routeClient } from "../helpers.js";
@@ -1408,6 +1409,119 @@ describe("datasetVersionCreate", () => {
     await expect(
       datasetVersionCreate(client, { dataset: "alice/cars" }),
     ).rejects.toThrow(/Dataset must be ready to create a version/);
+  });
+});
+
+describe("datasetVersionRestore", () => {
+  function clientForVersionRestore(
+    response: unknown,
+    options: { accountOwner?: string; status?: number } = {},
+  ) {
+    const calls: { path: string; method: string; body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const parsed = new URL(String(url));
+      let body: unknown;
+      if (typeof init.body === "string") {
+        body = JSON.parse(init.body);
+      }
+      calls.push({
+        path: parsed.pathname,
+        method: (init.method ?? "GET").toUpperCase(),
+        body,
+      });
+      if (parsed.pathname === "/api/account/summary") {
+        if (options.accountOwner === undefined) {
+          return jsonResponse({ error: "unexpected account lookup" }, 500);
+        }
+        return jsonResponse({ username: options.accountOwner });
+      }
+      if (
+        parsed.pathname === "/api/datasets/alice/cars/restore" &&
+        (init.method ?? "GET").toUpperCase() === "POST"
+      ) {
+        return jsonResponse(response, options.status ?? 200);
+      }
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+    return { client, calls };
+  }
+
+  test("restores by dataset ref and version, sending the version and surfacing the response verbatim", async () => {
+    const { client, calls } = clientForVersionRestore({
+      version: 1,
+      imageCount: 8,
+    });
+
+    const result = await datasetVersionRestore(client, {
+      dataset: "alice/cars",
+      version: 1,
+    });
+
+    expect(calls).toEqual([
+      {
+        path: "/api/datasets/alice/cars/restore",
+        method: "POST",
+        body: { version: 1 },
+      },
+    ]);
+    expect(result.data).toEqual({ version: 1, imageCount: 8 });
+  });
+
+  test("summary states the image-ID reassignment trap", async () => {
+    const { client } = clientForVersionRestore({ version: 1, imageCount: 8 });
+
+    const result = await datasetVersionRestore(client, {
+      dataset: "alice/cars",
+      version: 1,
+    });
+
+    expect(result.summary).toMatch(/image ids? (were|are) reassigned/i);
+    expect(result.summary).toMatch(/re-list/i);
+  });
+
+  test("fills a missing owner from the account summary", async () => {
+    const { client, calls } = clientForVersionRestore(
+      { version: 1, imageCount: 8 },
+      { accountOwner: "alice" },
+    );
+
+    const result = await datasetVersionRestore(client, {
+      dataset: "cars",
+      version: 1,
+    });
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/api/account/summary",
+      "/api/datasets/alice/cars/restore",
+    ]);
+    expect(result.summary).toContain("owner 'alice'");
+  });
+
+  test("surfaces the server's message for an invalid or nonexistent version", async () => {
+    const { client } = clientForVersionRestore(
+      { error: "Version not found" },
+      { status: 404 },
+    );
+
+    await expect(
+      datasetVersionRestore(client, { dataset: "alice/cars", version: 99 }),
+    ).rejects.toThrow("Version not found");
+  });
+
+  test("surfaces the server's message for an out-of-range version", async () => {
+    const { client } = clientForVersionRestore(
+      { error: "Invalid version" },
+      { status: 400 },
+    );
+
+    await expect(
+      datasetVersionRestore(client, { dataset: "alice/cars", version: 0 }),
+    ).rejects.toThrow("Invalid version");
   });
 });
 
