@@ -617,7 +617,6 @@ describe("trainingStart", () => {
   const DATASET_REF = `${OWNER}/${DATASET}`;
   const DATASET_URI = `ul://${OWNER}/datasets/${DATASET}`;
   const MODEL_PATH = `/api/models/${OWNER}/${PROJECT}/${MODEL}`;
-  const DATASET_PATH = `/api/datasets/${OWNER}/${DATASET}`;
   const CREATE_MODEL_PATH = "/api/models";
   const START_PATH = "/api/training/start";
   const MODEL_DB_ID = "d".repeat(24);
@@ -1026,9 +1025,6 @@ describe("trainingStart", () => {
           body,
         });
         const path = new URL(String(url)).pathname;
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
             id: CREATED_MODEL_ID,
@@ -1058,8 +1054,10 @@ describe("trainingStart", () => {
         confirmCost: true,
       });
 
+      // No dataset detail fetch: checkpoint/dataset task compatibility is
+      // enforced by the server at POST /training/start itself (verified
+      // live), so no client-side pre-check needs the dataset's task first.
       expect(calls).toMatchObject([
-        { url: `${ORIGIN}${DATASET_PATH}`, method: "GET" },
         {
           url: `${ORIGIN}${CREATE_MODEL_PATH}`,
           method: "POST",
@@ -1095,11 +1093,6 @@ describe("trainingStart", () => {
           calls.push({
             body: typeof init.body === "string" ? JSON.parse(init.body) : null,
           });
-        }
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
-        if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
             id: CREATED_MODEL_ID,
             owner: OWNER,
@@ -1132,9 +1125,6 @@ describe("trainingStart", () => {
         let body: unknown;
         if (typeof init.body === "string") body = JSON.parse(init.body);
         const path = new URL(String(url)).pathname;
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
             id: CREATED_MODEL_ID,
@@ -1195,16 +1185,13 @@ describe("trainingStart", () => {
       expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
     });
 
-    test("allows semantic checkpoints for segment datasets", async () => {
+    test("sends the checkpoint suffix's inferred task to the create-model endpoint", async () => {
       const calls: { url: string; body: unknown }[] = [];
       const impl = (async (url: string | URL, init: RequestInit = {}) => {
         let body: unknown;
         if (typeof init.body === "string") body = JSON.parse(init.body);
         calls.push({ url: String(url), body });
         const path = new URL(String(url)).pathname;
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "segment" } });
-        }
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
             id: CREATED_MODEL_ID,
@@ -1221,6 +1208,9 @@ describe("trainingStart", () => {
         fetchImpl: impl,
       });
 
+      // Checkpoint/dataset task compatibility (e.g. a semantic checkpoint
+      // against a non-semantic dataset) is enforced by the server at
+      // POST /training/start itself (verified live), not checked here.
       await trainingStart(client, {
         model: "yolo26n-sem.pt",
         project: PROJECT_REF,
@@ -1229,39 +1219,14 @@ describe("trainingStart", () => {
         confirmCost: true,
       });
 
-      expect(calls[1]).toMatchObject({
+      expect(calls[0]).toMatchObject({
         url: `${ORIGIN}${CREATE_MODEL_PATH}`,
         body: { task: "semantic" },
       });
     });
 
-    test("rejects incompatible checkpoint and dataset task combinations", async () => {
-      const { client, calls } = routeClient((path) => {
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "semantic" } });
-        }
-        return jsonResponse({}, 404);
-      });
-
-      await expect(
-        trainingStart(client, {
-          model: "yolo26n-seg.pt",
-          project: PROJECT_REF,
-          dataset: DATASET_REF,
-          gpuType: "l4",
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(/not compatible/);
-
-      expect(calls).toHaveLength(1);
-      expect(calls[0]?.path).toBe(DATASET_PATH);
-    });
-
     test("throws clearly when the create-model response has no id", async () => {
       const { client } = routeClient((path) => {
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({ owner: OWNER, project: PROJECT });
         }
@@ -1277,6 +1242,128 @@ describe("trainingStart", () => {
           confirmCost: true,
         }),
       ).rejects.toThrow(/did not include an id/);
+    });
+
+    test("never deletes the freshly created model, but names it in the error when POST /training/start rejects it", async () => {
+      const calls: { url: string; method: string }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const method = (init.method ?? "GET").toUpperCase();
+        calls.push({ url: String(url), method });
+        const path = new URL(String(url)).pathname;
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse({ error: "Dataset task mismatch." }, 400);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      // A 4xx is not treated as proof the model was never trained (a 4xx
+      // covers several distinct rejections, and only the task-mismatch case
+      // has actually been observed live): this tool never auto-deletes the
+      // model it created, on any failure, and always names it instead.
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(
+        new RegExp(
+          `Dataset task mismatch.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*not deleted`.replace(
+            /\//g,
+            "\\/",
+          ),
+          "s",
+        ),
+      );
+
+      // No DELETE call at all: create, then start, then nothing else.
+      expect(calls.map((call) => call.method)).toEqual(["POST", "POST"]);
+    });
+
+    test("names the created model in the error for a 5xx or a network failure too", async () => {
+      const calls: { url: string; method: string }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const method = (init.method ?? "GET").toUpperCase();
+        calls.push({ url: String(url), method });
+        const path = new URL(String(url)).pathname;
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        if (path === START_PATH) {
+          throw new Error("network timeout");
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(
+        new RegExp(
+          `network timeout.*${OWNER}/${PROJECT}/${CREATED_SLUG}.*not deleted`.replace(
+            /\//g,
+            "\\/",
+          ),
+          "s",
+        ),
+      );
+
+      expect(calls.map((call) => call.method)).toEqual(["POST", "POST"]);
+    });
+
+    test("does not touch the error for a model resolved from an existing ref (no model was created this call)", async () => {
+      const { client, calls } = routeClient((path) => {
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+          });
+        }
+        if (path === START_PATH) {
+          return jsonResponse({ error: "Some other failure." }, 400);
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/^HTTP 400.*Some other failure\.\s*\[/s);
+      expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
     });
   });
 
@@ -1443,9 +1530,6 @@ describe("trainingStart", () => {
     test("checkpoint mode never requires confirm_history_loss", async () => {
       const impl = (async (url: string | URL) => {
         const path = new URL(String(url)).pathname;
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
             id: "m".repeat(24),
@@ -1477,6 +1561,7 @@ describe("trainingStart", () => {
     const DATASET_2 = "road-data-2";
     const DATASET_2_REF = `${OWNER}/${DATASET_2}`;
     const DATASET_2_URI = `ul://${OWNER}/datasets/${DATASET_2}`;
+    const DATASET_PATH = `/api/datasets/${OWNER}/${DATASET}`;
     const DATASET_2_PATH = `/api/datasets/${OWNER}/${DATASET_2}`;
 
     test("rejects an empty dataset list before any network call", async () => {
@@ -1557,6 +1642,9 @@ describe("trainingStart", () => {
         fetchImpl: impl,
       });
 
+      // This client-side check stays only for multi-dataset arrays: the
+      // server's task-mismatch enforcement is verified live for a single
+      // dataset, but not for an array with a mismatch on a later entry.
       await trainingStart(client, {
         model: "yolo26n.pt",
         project: PROJECT_REF,
@@ -1605,6 +1693,62 @@ describe("trainingStart", () => {
 
       expect(calls).toHaveLength(2);
       expect(calls[1]?.path).toBe(DATASET_2_PATH);
+    });
+
+    test("skips the array-only check for a bare-string dataset (the shape actually verified live)", async () => {
+      // Guards against silently re-widening the reinstated check back to
+      // the bare-string path, which the server already validates live.
+      const { client, calls } = routeClient((path) => {
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: "m".repeat(24),
+            owner: OWNER,
+            project: PROJECT,
+            model: "exp-2",
+          });
+        }
+        return jsonResponse(startResponse({ modelId: "m".repeat(24) }));
+      });
+
+      await trainingStart(client, {
+        model: "yolo26n.pt",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      });
+
+      expect(calls.map((call) => call.path)).toEqual([
+        CREATE_MODEL_PATH,
+        START_PATH,
+      ]);
+    });
+
+    test("still runs the check for a single-element array, which sends an array-shaped trainArgs.data", async () => {
+      // A single-element array is not the bare-string shape verified live:
+      // `Array.isArray(dataset)` is true, so `trainArgs.data` becomes
+      // `[uri]`, the same array shape a longer list sends. The guard must
+      // key off that original shape, not `resolvedDatasets.length` (which
+      // is 1 for both a bare string and a single-element array).
+      const { client, calls } = routeClient((path) => {
+        if (path === DATASET_PATH) {
+          return jsonResponse({ dataset: { task: "detect" } });
+        }
+        return jsonResponse({}, 404);
+      });
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo26n-cls.pt",
+          project: PROJECT_REF,
+          dataset: [DATASET_REF],
+          gpuType: "l4",
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/not compatible/);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.path).toBe(DATASET_PATH);
     });
   });
 });

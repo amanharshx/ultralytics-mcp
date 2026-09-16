@@ -12,18 +12,13 @@ import { zipSync } from "fflate";
 import type { UltralyticsClient } from "../client.js";
 import { resolveDataset } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { exploreSearch, validateExploreTasks } from "./explore.js";
+import { exploreSearch, joinExploreTasks } from "./explore.js";
 import { asRecord, listField, pyCount, pyField } from "./shared.js";
 
-const DATASET_TASKS = new Set([
-  "detect",
-  "segment",
-  "semantic",
-  "classify",
-  "pose",
-  "obb",
-]);
-
+/** Split names used only to recognize a split-like folder segment when
+ * zip-building an upload archive locally (`hasSplitLikePath`). Not used to
+ * validate `targetSplit` or `split` inputs: the server rejects those itself
+ * (verified live), so no client-side allowlist gates them. */
 const TARGET_SPLITS = new Set(["train", "val", "test"]);
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 const IMAGE_SUFFIXES = new Set([
@@ -51,15 +46,6 @@ const UPLOAD_TYPES: Array<[suffix: string, contentType: string]> = [
   [".ndjson", "application/x-ndjson"],
 ];
 const execFile = promisify(execFileCb);
-
-function validateTargetSplit(targetSplit?: string): void {
-  if (targetSplit !== undefined && !TARGET_SPLITS.has(targetSplit)) {
-    const allowed = Array.from(TARGET_SPLITS).sort().join(", ");
-    throw new Error(
-      `Unsupported targetSplit '${targetSplit}'. Expected one of: ${allowed}.`,
-    );
-  }
-}
 
 function findToolOnPath(name: string): string | null {
   const paths = process.env.PATH?.split(":") ?? [];
@@ -382,7 +368,7 @@ export async function exploreDatasets(
   const data = await exploreSearch(client, "datasets", options.q, {
     sort: options.sort,
     offset: options.offset,
-    task: validateExploreTasks(options.task),
+    task: joinExploreTasks(options.task),
   });
   const items = listField(data, "datasets").map((dataset) => ({
     id: dataset._id ?? null,
@@ -453,12 +439,12 @@ export async function datasetsCreate(
   client: UltralyticsClient,
   options: DatasetsCreateOptions,
 ): Promise<NormalizedToolResult> {
-  if (!DATASET_TASKS.has(options.task)) {
-    const allowed = Array.from(DATASET_TASKS).sort().join(", ");
-    throw new Error(
-      `Unsupported dataset task '${options.task}'. Expected one of: ${allowed}.`,
-    );
-  }
+  // No local task validation: the server rejects an unrecognized task itself
+  // (verified live: `task: "notarealtask"` on `POST /datasets` returns 400
+  // `"Invalid option: expected one of \"detect\"|\"segment\"|\"semantic\"|
+  // \"depth\"|\"classify\"|\"pose\"|\"obb\""` — a superset of the removed
+  // allowlist, which omitted the valid `depth` task), and that message
+  // surfaces verbatim.
   if (!options.dataset?.trim()) {
     throw new Error("`dataset` is required.");
   }
@@ -515,12 +501,10 @@ export async function datasetImagesList(
   client: UltralyticsClient,
   options: DatasetImagesListOptions,
 ): Promise<NormalizedToolResult> {
-  if (options.split !== undefined && !TARGET_SPLITS.has(options.split)) {
-    const allowed = Array.from(TARGET_SPLITS).sort().join(", ");
-    throw new Error(
-      `Unsupported split '${options.split}'. Expected one of: ${allowed}.`,
-    );
-  }
+  // No local split validation: the server rejects an unrecognized split
+  // itself (verified live: `?split=notarealsplit` on `/datasets/{owner}/
+  // {dataset}/images` returns 400 `"Invalid option: expected one of
+  // \"train\"|\"val\"|\"test\""`), and that message surfaces verbatim.
   if (options.limit !== undefined) {
     if (options.limit <= 0) {
       throw new Error("`limit` must be greater than 0.");
@@ -629,29 +613,14 @@ export interface DatasetsIngestOptions {
   conflictPolicy?: string;
 }
 
-const INGEST_CONFLICT_POLICIES: ReadonlySet<string> = new Set([
-  "skip",
-  "keep_both",
-  "replace",
-]);
-
-/** Conflict policies the live ingest endpoint accepts. The platform default
- * is undocumented, so tools always send one explicitly. Option inputs stay
- * `string` because MCP arguments arrive unvalidated; this type names the
- * validated value. */
-export type IngestConflictPolicy = "skip" | "keep_both" | "replace";
-
-function validateIngestConflictPolicy(
-  conflictPolicy?: string,
-): IngestConflictPolicy {
-  const effective = conflictPolicy ?? "skip";
-  if (!INGEST_CONFLICT_POLICIES.has(effective)) {
-    const allowed = Array.from(INGEST_CONFLICT_POLICIES).sort().join(", ");
-    throw new Error(
-      `Unsupported conflictPolicy '${effective}'. Expected one of: ${allowed}.`,
-    );
-  }
-  return effective as IngestConflictPolicy;
+/** Default the ingest conflict policy to the non-destructive `skip` when
+ * unset (the platform default is undocumented, so tools always send one
+ * explicitly). No local enum: the server rejects an unrecognized
+ * conflictPolicy itself (verified live: `"notarealpolicy"` on
+ * `/datasets/{owner}/{dataset}/ingest` returns 400 `"Invalid input"`), and
+ * that message surfaces verbatim. */
+function defaultConflictPolicy(conflictPolicy?: string): string {
+  return conflictPolicy ?? "skip";
 }
 
 /** Start a remote URL ingest job for an existing dataset.
@@ -671,8 +640,9 @@ export async function datasetsIngest(
   if (!options.sourceUrl?.trim()) {
     throw new Error("`sourceUrl` is required.");
   }
-  validateTargetSplit(options.targetSplit);
-  const conflictPolicy = validateIngestConflictPolicy(options.conflictPolicy);
+  // No local targetSplit validation: the server rejects an unrecognized
+  // split itself (verified live), and that message surfaces verbatim.
+  const conflictPolicy = defaultConflictPolicy(options.conflictPolicy);
 
   const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
   const resolvedOwner = refOwner ?? (await client.getAccountOwner());
@@ -772,8 +742,9 @@ export async function datasetUploadFile(
   client: UltralyticsClient,
   options: DatasetUploadFileOptions,
 ): Promise<NormalizedToolResult> {
-  validateTargetSplit(options.targetSplit);
-  const conflictPolicy = validateIngestConflictPolicy(options.conflictPolicy);
+  // No local targetSplit validation: the server rejects an unrecognized
+  // split itself (verified live), and that message surfaces verbatim.
+  const conflictPolicy = defaultConflictPolicy(options.conflictPolicy);
 
   const meta = await datasetUploadFileMeta(options.filePath);
   const sizeWarning = archiveSizeWarning(meta.filename, meta.totalBytes);
@@ -901,8 +872,9 @@ export async function datasetUploadFolder(
   client: UltralyticsClient,
   options: DatasetUploadFolderOptions,
 ): Promise<NormalizedToolResult> {
-  validateTargetSplit(options.targetSplit);
-  const conflictPolicy = validateIngestConflictPolicy(options.conflictPolicy);
+  // No local targetSplit validation: the server rejects an unrecognized
+  // split itself (verified live), and that message surfaces verbatim.
+  const conflictPolicy = defaultConflictPolicy(options.conflictPolicy);
 
   const folder = await datasetFolderImages(options.folderPath);
   if (options.targetSplit !== undefined && folder.hasSplitDirs) {
@@ -1043,8 +1015,9 @@ export async function datasetUploadVideo(
   client: UltralyticsClient,
   options: DatasetUploadVideoOptions,
 ): Promise<NormalizedToolResult> {
-  validateTargetSplit(options.targetSplit);
-  const conflictPolicy = validateIngestConflictPolicy(options.conflictPolicy);
+  // No local targetSplit validation: the server rejects an unrecognized
+  // split itself (verified live), and that message surfaces verbatim.
+  const conflictPolicy = defaultConflictPolicy(options.conflictPolicy);
   if (!options.videoPath.trim()) {
     throw new Error("`videoPath` is required.");
   }

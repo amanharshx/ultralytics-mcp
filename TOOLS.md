@@ -140,7 +140,7 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `name` | string | Yes | Display name. |
 | `dataset` | string | Yes | URL slug for the new dataset (distinct from the display name given by name). |
-| `task` | string | Yes | Dataset task such as detect, segment, semantic, pose, obb, or classify. |
+| `task` | string | Yes | Dataset task. Server-validated; for example detect, segment, or classify. |
 | `owner` | string | No | Workspace owner; defaults to the account owner. |
 | `visibility` | string | No | Visibility "private" (default) or "public". |
 | `description` | string | No | Dataset description. |
@@ -228,7 +228,7 @@ Metadata: state-changing, non-idempotent, external/live
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `sourceUrl` | string | Yes | Remote dataset archive or NDJSON URL. |
 | `targetSplit` | string | No | Target split for new images (overrides archive structure). |
-| `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
+| `conflictPolicy` | string | No | Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated. |
 
 ### dataset_upload_file
 
@@ -241,7 +241,7 @@ Metadata: state-changing, non-idempotent
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `file_path` | string | Yes | Local path to dataset archive file. |
 | `targetSplit` | string | No | Target split for new images (overrides archive structure). |
-| `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
+| `conflictPolicy` | string | No | Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated. |
 
 Notes: Uses a local archive file path and starts ingest into an existing dataset. Named YOLO ZIP archives preserve labels and classes on later ingests; archives without class names may map labels by positional index.
 
@@ -266,7 +266,7 @@ Metadata: state-changing, non-idempotent
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `folder_path` | string | Yes | Local path to image folder. |
 | `targetSplit` | string | No | Target split for new images. Rejected if the folder itself has train/val/test subdirectories; use one or the other, not both. |
-| `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
+| `conflictPolicy` | string | No | Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated. |
 
 Notes: Uses a local image folder path, zips it client-side, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.
 
@@ -293,7 +293,7 @@ Metadata: state-changing, non-idempotent
 | `fps` | number | No | Maximum frame extraction rate in frames per second; may be reduced to keep the total within max_frames. |
 | `max_frames` | number | No | Maximum number of frames to extract. |
 | `targetSplit` | string | No | Target split for new images (overrides archive structure). |
-| `conflictPolicy` | string | No | Conflict policy "skip" (default), "keep_both", or "replace". |
+| `conflictPolicy` | string | No | Conflict policy, e.g. "skip" (default), "keep_both", or "replace". Server-validated. |
 
 Notes: Uses a local video path, extracts JPEG frames with ffmpeg, and starts ingest into an existing dataset. Images-only uploads may be inferred as classify by the platform; include task-specific labels when task preservation matters.
 
@@ -450,7 +450,7 @@ Metadata: read-only, external/live
 
 ### training_start
 
-Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts; checkpoint mode also checks the checkpoint's task against every dataset's task up front. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Training an existing model that already has a recorded run (any status past pending/untrained) replaces that model's status, epoch count, and per-epoch metric history the instant the new job starts, and that history cannot be recovered afterward; the previously uploaded weights survive. That path requires confirm_history_loss=true in addition to confirm_cost=true. Checkpoint mode always creates a new model and destroys nothing, so it never needs confirm_history_loss. An untrained or never-trained model needs no extra confirmation either. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.
+Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts. In checkpoint mode a project model is created first, then the checkpoint's task is checked against the dataset's task: with a list of datasets this is checked for every entry before that model is created, but with a single dataset the check happens server-side when training starts, by which point the model already exists — a mismatch there still leaves that model behind, unrequested, and the error names it so it can be reviewed and deleted (models_delete) if unwanted. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Training an existing model that already has a recorded run (any status past pending/untrained) replaces that model's status, epoch count, and per-epoch metric history the instant the new job starts, and that history cannot be recovered afterward; the previously uploaded weights survive. That path requires confirm_history_loss=true in addition to confirm_cost=true. Checkpoint mode never destroys an existing model's history since it always creates a new one, so it never needs confirm_history_loss — its own risk is the possible leftover model described above. An untrained or never-trained model needs no extra confirmation either. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.
 
 Metadata: state-changing, destructive, non-idempotent, external/live
 

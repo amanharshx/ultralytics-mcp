@@ -28,6 +28,19 @@ const CHECKPOINT_TASK_SUFFIXES = [
 ] as const;
 const BASE_CHECKPOINT_RE =
   /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
+/** Checkpoint/dataset task compatibility for an array-shaped `dataset`
+ * input, at any length — including a single-element array, which still
+ * sends `trainArgs.data` as `[uri]` rather than the bare string a
+ * non-array `dataset` sends. Only the bare-string shape is enforced by the
+ * server at POST /training/start itself (verified live: a classify
+ * checkpoint against a detect dataset returns 400 "Dataset task
+ * mismatch..."). Whether the server checks an array-shaped `data` the same
+ * way — every entry, rather than, say, only the first, or only failing
+ * partway through a sequential paid run — has not been verified live for
+ * any array length. Per "verify, then delete," a guard whose server-side
+ * enforcement can't be demonstrated stays; this one does, scoped to every
+ * array input, so only the bare-string path can drop its own client-side
+ * check. */
 const DATASET_TASK_COMPATIBILITY: Record<string, string[]> = {
   detect: ["detect"],
   segment: ["segment", "semantic"],
@@ -384,23 +397,34 @@ export async function trainingCancel(
  * slug — and reuses its own stored base checkpoint for `trainArgs.model`
  * verbatim. Checkpoint mode creates a project model first from owner and
  * project slug (the platform assigns the new model's slug; it no longer
- * accepts a requested name) and validates the checkpoint's inferred task
- * against every dataset's task before creating anything, so a list with one
- * incompatible entry is refused up front rather than partway through. The
- * endpoint validates at creation, so an unusable dataset is rejected before
- * any compute starts; use `training_cancel` to stop a job that is already
- * running. Starting is billable immediately: the platform has no cost
- * preview before that, so the projected cost and remaining balance are only
- * known from the start response, and are surfaced verbatim rather than
- * discarded. Training an existing model that already has a recorded run
- * (any status past pending/untrained, or existing `trainResults`) replaces
- * that run's status, epoch count, and per-epoch metric history the moment
- * the new job starts; the previously uploaded weights survive but the
- * metric history does not, and the API has no way to recover it. This is a
- * separate consent from spending money, so it needs its own
- * `confirmHistoryLoss` flag rather than piggybacking on `confirmCost`.
- * Checkpoint mode always creates a new model, so nothing is ever destroyed
- * there.
+ * accepts a requested name). For a `dataset` list, the checkpoint's
+ * inferred task is validated against every entry's task before that model
+ * is created, so an incompatible list is refused up front with nothing
+ * created — that check is not itself confirmed live for every array length
+ * and stays client-side for that reason (see `DATASET_TASK_COMPATIBILITY`).
+ * For a single, non-array `dataset`, there is no such pre-check: the
+ * server enforces the same task match at `POST /training/start` itself
+ * (confirmed live), which runs *after* the model above is already created.
+ * A mismatch there still leaves that model behind — nothing deletes it
+ * automatically, since no status code reliably proves the job never
+ * started — so the thrown error names the model and the caller is expected
+ * to review and remove it (`models_delete`) if it turns out to be
+ * unwanted. The dataset itself is validated at creation either way, so an
+ * unusable dataset is rejected before any compute starts; use
+ * `training_cancel` to stop a job that is already running. Starting is
+ * billable immediately: the platform has no cost preview before that, so
+ * the projected cost and remaining balance are only known from the start
+ * response, and are surfaced verbatim rather than discarded. Training an
+ * existing model that already has a recorded run (any status past
+ * pending/untrained, or existing `trainResults`) replaces that run's
+ * status, epoch count, and per-epoch metric history the moment the new job
+ * starts; the previously uploaded weights survive but the metric history
+ * does not, and the API has no way to recover it. This is a separate
+ * consent from spending money, so it needs its own `confirmHistoryLoss`
+ * flag rather than piggybacking on `confirmCost`. Checkpoint mode never
+ * destroys an existing model's history — it always creates a new one — so
+ * it never needs `confirmHistoryLoss`; the risk it carries instead is the
+ * possible leftover model described above.
  */
 export async function trainingStart(
   client: UltralyticsClient,
@@ -472,6 +496,15 @@ export async function trainingStart(
     data: Array.isArray(dataset) ? datasetUris : datasetUris[0],
   };
 
+  // Set only when this call creates a fresh model from a base checkpoint.
+  // On a POST /training/start failure this tool never deletes that model —
+  // no status code reliably proves it was never trained — it only names
+  // the model in the error so the caller can check and remove it by hand.
+  let createdModelRef: {
+    owner: string;
+    project: string;
+    model: string;
+  } | null = null;
   let modelId: string;
   let modelOwnerDisplay: string;
   let modelProjectDisplay: string;
@@ -504,21 +537,40 @@ export async function trainingStart(
     modelProjectDisplay = resolvedModel.project;
     modelSlugDisplay = resolvedModel.model;
   } else {
+    // A bare-string `data` (the caller passed a single, non-array dataset
+    // ref): checkpoint/dataset task compatibility is enforced by the server
+    // at POST /training/start itself, e.g. `{"error":"Dataset task
+    // mismatch. This dataset is \"detect\" but the selected model trains
+    // \"classify\". ..."}` (400, verified live). No client-side pre-check
+    // is needed for this case.
+    //
+    // An array-shaped `data` — which is what the request sends whenever the
+    // caller passed `dataset` as an array, INCLUDING a single-element one
+    // like `[ref]`: `trainArgs.data` becomes `[uri]`, not the bare string
+    // `uri` the case above verified. That shape has not itself been tested
+    // live (with a mismatch on any entry, first or later), so the
+    // pre-check below stays for every array input, regardless of length —
+    // see DATASET_TASK_COMPATIBILITY. The discriminator here is
+    // `Array.isArray(dataset)`, the caller's original input shape, not
+    // `resolvedDatasets.length`: both normalize to the same length-1 array
+    // internally, but only one of them changes what gets sent on the wire.
     const checkpointTask = inferCheckpointTask(checkpoint);
-    for (let i = 0; i < resolvedDatasets.length; i++) {
-      const owner = datasetOwners[i];
-      const resolved = resolvedDatasets[i];
-      const datasetDetail = await client.get(
-        `/datasets/${encodeURIComponent(owner)}/${encodeURIComponent(resolved.dataset)}`,
-      );
-      const datasetFields = asRecord(asRecord(datasetDetail).dataset);
-      const datasetTask =
-        typeof datasetFields.task === "string" ? datasetFields.task : null;
-      validateCheckpointCompatibility(
-        datasetTask,
-        checkpointTask,
-        `${owner}/${resolved.dataset}`,
-      );
+    if (Array.isArray(dataset)) {
+      for (let i = 0; i < resolvedDatasets.length; i++) {
+        const datasetOwnerForCheck = datasetOwners[i];
+        const resolved = resolvedDatasets[i];
+        const datasetDetail = await client.get(
+          `/datasets/${encodeURIComponent(datasetOwnerForCheck)}/${encodeURIComponent(resolved.dataset)}`,
+        );
+        const datasetFields = asRecord(asRecord(datasetDetail).dataset);
+        const datasetTask =
+          typeof datasetFields.task === "string" ? datasetFields.task : null;
+        validateCheckpointCompatibility(
+          datasetTask,
+          checkpointTask,
+          `${datasetOwnerForCheck}/${resolved.dataset}`,
+        );
+      }
     }
     const projectOwner =
       resolvedProject.owner ?? (await client.getAccountOwner());
@@ -540,6 +592,13 @@ export async function trainingStart(
         : resolvedProject.project;
     modelSlugDisplay =
       typeof createdFields.model === "string" ? createdFields.model : "?";
+    if (modelSlugDisplay !== "?") {
+      createdModelRef = {
+        owner: modelOwnerDisplay,
+        project: modelProjectDisplay,
+        model: modelSlugDisplay,
+      };
+    }
   }
 
   if (epochs !== undefined) {
@@ -555,11 +614,28 @@ export async function trainingStart(
     trainArgs.name = name;
   }
 
-  const data = await client.postJson("/training/start", {
-    modelId,
-    gpuType,
-    trainArgs,
-  });
+  let data: unknown;
+  try {
+    data = await client.postJson("/training/start", {
+      modelId,
+      gpuType,
+      trainArgs,
+    });
+  } catch (error) {
+    if (createdModelRef !== null && error instanceof Error) {
+      // No status code is treated as proof the model was never trained: a
+      // 4xx covers several distinct rejections (config, auth, credits,
+      // access, not-found, conflict, rate limit) and only one of
+      // them — a dataset task mismatch — has actually been observed live,
+      // so generalizing "4xx means safe to delete" would itself be an
+      // unverified rule cached locally. This tool never deletes the model
+      // it created; it only names it, on every failure, so the caller can
+      // decide (`models_delete` if it's confirmed unwanted).
+      const ref = `${createdModelRef.owner}/${createdModelRef.project}/${createdModelRef.model}`;
+      error.message += ` Model '${ref}' was created for this run and was not deleted; check whether it should be removed.`;
+    }
+    throw error;
+  }
   const record = asRecord(data);
   const status = record.status ?? null;
   const responseGpuType = record.gpuType ?? gpuType;
