@@ -94,7 +94,7 @@ Metadata: state-changing, destructive, non-idempotent
 
 ## Datasets
 
-13 tools.
+14 tools.
 
 ### datasets_list
 
@@ -195,6 +195,17 @@ Metadata: state-changing, non-idempotent
 | --- | --- | --- | --- |
 | `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
 | `description` | string | No |  |
+
+### dataset_version_restore
+
+Restore a dataset to a previously saved version by slug, owner/slug, or dataset ul:// URI, and an integer version number. Versions are listed via datasets_get (the versions array, already returned unprojected). This REPLACES the dataset's current images, labels, and splits with that snapshot outright: anything done since that version, including un-versioned manual annotation work, is discarded. Ships ungated anyway, since it is the undo tool — an auto-annotate run snapshots a version before labelling, so restoring that version undoes the run exactly, and a mistaken restore is itself recoverable by restoring a later version. Restore also reassigns image IDs: a pre-restore image ID still resolves afterward but returns an empty label array rather than a 404, so callers must re-list images (for example with dataset_images_list) after a restore instead of reusing held IDs.
+
+Metadata: state-changing, destructive, non-idempotent
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or ul:// URI. |
+| `version` | number | Yes | Version number to restore, as listed in datasets_get's versions array. |
 
 ### datasets_delete
 

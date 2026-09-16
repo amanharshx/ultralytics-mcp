@@ -1310,6 +1310,60 @@ export async function datasetVersionCreate(
   };
 }
 
+export interface DatasetVersionRestoreOptions {
+  dataset: string;
+  version: number;
+}
+
+/** Restore a dataset to a previously saved version snapshot.
+ *
+ * Resolves the reference by pure string parsing (ids are not addressable),
+ * fills a missing owner from the account summary, and restores through the
+ * live owner-scoped endpoint. The response (`version`, `imageCount`) is
+ * surfaced verbatim.
+ *
+ * This ships ungated even though it is destructive: it is the undo tool for
+ * an auto-annotate run and for `dataset_version_create`'s snapshots, and
+ * gating the recovery path would make it harder to reach than the damage
+ * path. Restore replaces current images, labels, and splits with the
+ * snapshot outright — anything done since that version, including
+ * un-versioned manual annotation work, is discarded. A mistaken restore is
+ * itself recoverable by restoring a later version, since the platform
+ * retains every version.
+ *
+ * Restore also reassigns image IDs. A stale, pre-restore ID still resolves
+ * afterwards but reports an empty label array rather than a 404 — the
+ * summary states this explicitly so a caller re-lists images (for example
+ * with `dataset_images_list`) instead of concluding a held ID's data was
+ * destroyed.
+ */
+export async function datasetVersionRestore(
+  client: UltralyticsClient,
+  options: DatasetVersionRestoreOptions,
+): Promise<NormalizedToolResult> {
+  const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
+  const resolvedOwner = refOwner ?? (await client.getAccountOwner());
+  const data = asRecord(
+    await client.postJson(
+      `/datasets/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}/restore`,
+      { version: options.version },
+    ),
+  );
+  return {
+    summary:
+      `Restored dataset '${refSlug}' for owner '${resolvedOwner}' to version ` +
+      `${pyField(data.version)} (${pyField(data.imageCount)} images). This replaced ` +
+      "current images, labels, and splits with that snapshot; anything done since " +
+      "then, including un-versioned manual annotation work, is discarded. Image IDs " +
+      "were reassigned during the restore — re-list images (for example with " +
+      "dataset_images_list) rather than reusing IDs held from before the restore.",
+    data: {
+      version: data.version ?? null,
+      imageCount: data.imageCount ?? null,
+    },
+  };
+}
+
 export interface DatasetClassStatsOptions {
   dataset: string;
   includeHistograms?: boolean;

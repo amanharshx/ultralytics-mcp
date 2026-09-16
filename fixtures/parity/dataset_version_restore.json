@@ -1,0 +1,28 @@
+{
+  "tool": "dataset_version_restore",
+  "args": {
+    "dataset": "example-owner/example-dataset-1",
+    "version": 1
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/datasets/example-owner/example-dataset-1/restore",
+      "json": { "version": 1 },
+      "response": {
+        "status": 200,
+        "json": {
+          "version": 1,
+          "imageCount": 8
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Restored dataset 'example-dataset-1' for owner 'example-owner' to version 1 (8 images). This replaced current images, labels, and splits with that snapshot; anything done since then, including un-versioned manual annotation work, is discarded. Image IDs were reassigned during the restore — re-list images (for example with dataset_images_list) rather than reusing IDs held from before the restore.",
+    "data": {
+      "version": 1,
+      "imageCount": 8
+    }
+  }
+}

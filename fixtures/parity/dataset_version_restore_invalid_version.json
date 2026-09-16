@@ -1,0 +1,24 @@
+{
+  "tool": "dataset_version_restore",
+  "args": {
+    "dataset": "example-owner/example-dataset-1",
+    "version": 999
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/datasets/example-owner/example-dataset-1/restore",
+      "json": { "version": 999 },
+      "response": {
+        "status": 404,
+        "json": {
+          "error": "Version not found"
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 404,
+    "message": "Version not found"
+  }
+}

@@ -249,7 +249,7 @@ You should see `ultralytics` in configured MCP servers.
 See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-path behavior, and examples for tricky tools.
 
 - Projects: 5 tools
-- Datasets: 12 tools
+- Datasets: 14 tools
 - Models: 7 tools
 - Training: 3 tools
 - Exports: 4 tools

@@ -27,6 +27,7 @@ import {
   datasetUploadFolder,
   datasetUploadVideo,
   datasetVersionCreate,
+  datasetVersionRestore,
   deploymentGet,
   deploymentHealth,
   deploymentLogs,
@@ -305,6 +306,11 @@ const TOOL_RUNNERS: Record<
       dataset: args.dataset as string,
       description: args.description as string | undefined,
     }),
+  dataset_version_restore: (client, args) =>
+    datasetVersionRestore(client, {
+      dataset: args.dataset as string,
+      version: args.version as number,
+    }),
   explore_projects: (client, args) =>
     exploreProjects(client, {
       q: args.q as string,
@@ -529,6 +535,8 @@ describe("parity fixtures", () => {
         "explore_datasets.json",
         "explore_projects.json",
         "dataset_version_create.json",
+        "dataset_version_restore.json",
+        "dataset_version_restore_invalid_version.json",
         "dataset_upload_file.json",
         "dataset_upload_folder.json",
         "dataset_upload_video.json",
@@ -609,7 +617,8 @@ describe("parity fixtures", () => {
       fixtureFile === "training_start_history_warning.json" ||
       fixtureFile === "deployment_stop_already_stopped.json" ||
       fixtureFile === "auto_annotate_start_refused.json" ||
-      fixtureFile === "auto_annotate_stop_refused.json"
+      fixtureFile === "auto_annotate_stop_refused.json" ||
+      fixtureFile === "dataset_version_restore_invalid_version.json"
     ) {
       continue;
     }
@@ -745,6 +754,28 @@ describe("parity fixtures", () => {
     ).catch((e) => e as Error);
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: dataset_version_restore_invalid_version.json", async () => {
+    // Live capture: POST .../restore {version:999} on a dataset with no
+    // such version -> 404 {"error":"Version not found"}.
+    const raw = readFileSync(
+      join(fixtureDir, "dataset_version_restore_invalid_version.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await datasetVersionRestore(client, {
+      dataset: fixture.args.dataset as string,
+      version: fixture.args.version as number,
+    }).catch((e) => e as UltralyticsApiError);
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(fixture.expectedError?.status);
+    expect(error.apiMessage).toBe(fixture.expectedError?.message);
   });
 
   test("parity output: training_start_no_checkpoint.json", async () => {

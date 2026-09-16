@@ -29,6 +29,7 @@ import {
   datasetUploadFolder,
   datasetUploadVideo,
   datasetVersionCreate,
+  datasetVersionRestore,
   exploreDatasets,
 } from "./datasets.js";
 import {
@@ -79,6 +80,7 @@ export {
   datasetUploadFolder,
   datasetUploadVideo,
   datasetVersionCreate,
+  datasetVersionRestore,
   exploreDatasets,
 } from "./datasets.js";
 export {
@@ -642,6 +644,38 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           await datasetVersionCreate(getClient(), {
             dataset: dataset as string,
             description: description as string | undefined,
+          }),
+        ),
+  }),
+  tool({
+    name: "dataset_version_restore",
+    registrationGroup: "write",
+    stateChanging: true,
+    description:
+      "Restore a dataset to a previously saved version by slug, owner/slug, or dataset ul:// URI, and an integer version number. Versions are listed via datasets_get (the versions array, already returned unprojected). This REPLACES the dataset's current images, labels, and splits with that snapshot outright: anything done since that version, including un-versioned manual annotation work, is discarded. Ships ungated anyway, since it is the undo tool — an auto-annotate run snapshots a version before labelling, so restoring that version undoes the run exactly, and a mistaken restore is itself recoverable by restoring a later version. Restore also reassigns image IDs: a pre-restore image ID still resolves afterward but returns an empty label array rather than a 404, so callers must re-list images (for example with dataset_images_list) after a restore instead of reusing held IDs.",
+    inputSchema: {
+      dataset: z
+        .string()
+        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+      version: z
+        .number()
+        .int()
+        .describe(
+          "Version number to restore, as listed in datasets_get's versions array.",
+        ),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    },
+    createHandler:
+      (getClient) =>
+      async ({ dataset, version }) =>
+        toMcpTextResult(
+          await datasetVersionRestore(getClient(), {
+            dataset: dataset as string,
+            version: version as number,
           }),
         ),
   }),
