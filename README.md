@@ -11,43 +11,37 @@ dataset uploads.
 > [!IMPORTANT]
 > Independent community project. Not affiliated with or endorsed by Ultralytics.
 
-## Demo
+[Install](#installation) · [Tools](./TOOLS.md) · [Safety](#safety) · [Troubleshooting](#troubleshooting)
+
+## Try Asking
+
+- "Show me my Ultralytics projects and which datasets are ready to train on."
+- "Create a private project called `traffic-cams` and upload `./clips/junction.mp4` as a dataset."
+- "Fine-tune `yolo11n` on `traffic-cams` for 50 epochs."
+- "Fine-tune `traffic-cams/detector` across `day-shots`, then `night-shots`, in one run."
+- "How is that training going? Show me the last 10 epochs of metrics."
+- "Run the trained model on `https://example.com/frame.jpg`, then download the weights to `./weights`."
+- "Move my `scratch` project to trash." (restorable for 30 days)
 
 https://github.com/user-attachments/assets/9e049bcd-e562-4a1b-a4de-e9fe70af6d43
 
----
+## Installation
 
-## Table of Contents
-
-- [Requirements](#requirements)
-- [Get API Key](#get-api-key)
-- [Environment Variables](#environment-variables)
-- [Installation](#installation)
-- [Verify Setup](#verify-setup)
-- [What You Can Do](#what-you-can-do)
-- [Tools](#tools)
-- [Safety](#safety)
-- [Troubleshooting](#troubleshooting)
-- [Development](#development)
-
----
-
-## Requirements
+You need:
 
 - Node.js `>=20`
-- Ultralytics Platform API key
-- `ffmpeg` and `ffprobe` on `PATH` to upload a dataset from a local video file
+- An Ultralytics Platform API key
+- `ffmpeg` and `ffprobe` on `PATH`, to upload a dataset from a local video file
 - Claude Code, Codex, or another MCP client that can launch stdio servers
 
-## Get API Key
+### Get an API key
 
-1. Sign in at [Ultralytics Platform](https://platform.ultralytics.com).
-2. Open `Settings -> API Keys`.
-3. Create or copy an API key.
+Sign in at [Ultralytics Platform](https://platform.ultralytics.com), open
+`Settings -> API Keys`, and create or copy a key. The official
+[API key docs](https://docs.ultralytics.com/platform/account/api-keys) cover
+creation, usage, and revocation.
 
-See the official [Ultralytics API key docs](https://docs.ultralytics.com/platform/account/api-keys) for key creation, usage, and revocation details.
-
-## Environment Variables
+### Environment variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
@@ -60,11 +54,9 @@ committed config files. Project-scoped `.mcp.json` files are ignored by this rep
 to reduce accidental key commits; if a key is exposed, revoke it in Ultralytics
 Platform and create a replacement.
 
-## Installation
+### Standard config
 
-### Standard Config
-
-Works in many MCP clients that accept JSON stdio server definitions.
+Works in MCP clients that accept JSON stdio server definitions.
 
 ```json
 {
@@ -79,32 +71,21 @@ Works in many MCP clients that accept JSON stdio server definitions.
   }
 }
 ```
+
+These examples track the latest published npm release. Restart your MCP client
+or session after upgrading, so the new server process picks up the latest
+package.
 
 <details>
 <summary>Antigravity</summary>
 
-Add via the Antigravity settings or by updating your configuration file:
-
-```json
-{
-  "mcpServers": {
-    "ultralytics": {
-      "command": "npx",
-      "args": ["-y", "ultralytics-mcp@latest"],
-      "env": {
-        "ULTRALYTICS_API_KEY": "ul_your_api_key_here"
-      }
-    }
-  }
-}
-```
+Add the standard config above through Antigravity settings, or by editing your
+configuration file directly.
 
 </details>
 
 <details>
 <summary>Claude Code</summary>
-
-Add server with Claude Code CLI:
 
 ```bash
 claude mcp add ultralytics --env ULTRALYTICS_API_KEY=ul_your_api_key_here -- npx -y ultralytics-mcp@latest
@@ -131,14 +112,13 @@ Or add a project-scoped server in repo-root `.mcp.json`:
 <details>
 <summary>Claude Desktop</summary>
 
-Follow the MCP install [guide](https://modelcontextprotocol.io/quickstart/user), use the standard config above.
+Follow the MCP install [guide](https://modelcontextprotocol.io/quickstart/user)
+with the standard config above.
 
 </details>
 
 <details>
 <summary>Codex</summary>
-
-Add server with Codex CLI:
 
 ```bash
 codex mcp add ultralytics --env ULTRALYTICS_API_KEY=ul_your_api_key_here -- npx -y ultralytics-mcp@latest
@@ -160,109 +140,63 @@ ULTRALYTICS_API_KEY = "ul_your_api_key_here"
 <details>
 <summary>Cursor</summary>
 
-#### Click the button to install:
-
 [<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install in Cursor">](https://cursor.com/en/install-mcp?name=ultralytics&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsInVsdHJhbHl0aWNzLW1jcEBsYXRlc3QiXSwiZW52Ijp7IlVMVFJBTFlUSUNTX0FQSV9LRVkiOiJ1bF95b3VyX2FwaV9rZXlfaGVyZSJ9fQ%3D%3D)
 
 > **Important**
 > The install button writes a placeholder key. After installing, open your Cursor MCP config and replace `ul_your_api_key_here` with your Ultralytics API key, then restart Cursor.
 
-#### Or install manually:
-
-Go to `Cursor Settings` -> `MCP` -> `Add new MCP Server` (or edit `~/.cursor/mcp.json` directly) and use the standard config above: `command` set to `npx`, `args` set to `["-y", "ultralytics-mcp@latest"]`, and `ULTRALYTICS_API_KEY` in `env`.
+To install manually, go to `Cursor Settings` -> `MCP` -> `Add new MCP Server`
+(or edit `~/.cursor/mcp.json`) and use the standard config above.
 
 </details>
 
 <details>
 <summary>Gemini CLI</summary>
 
-Follow the MCP install [guide](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md#configure-the-mcp-server-in-settingsjson), use the standard config above.
+Follow the MCP install [guide](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md#configure-the-mcp-server-in-settingsjson)
+with the standard config above.
 
 </details>
 
 <details>
 <summary>VS Code / Copilot</summary>
 
-#### Click the button to install:
-
 [<img src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF" alt="Install in VS Code">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ultralytics%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522ultralytics-mcp%2540latest%2522%255D%252C%2522env%2522%253A%257B%2522ULTRALYTICS_API_KEY%2522%253A%2522ul_your_api_key_here%2522%257D%257D)
 
 > **Important**
 > The install button writes a placeholder key. After installing, open your VS Code MCP config and replace `ul_your_api_key_here` with your Ultralytics API key, then restart VS Code.
 
-#### Or install manually:
-
-Follow the MCP install [guide](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_add-an-mcp-server), use the standard config above. You can also install the server using the VS Code CLI:
+To install manually, follow the MCP install
+[guide](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_add-an-mcp-server),
+or use the VS Code CLI:
 
 ```bash
-# For VS Code
 code --add-mcp '{"name":"ultralytics","command":"npx","args":["-y","ultralytics-mcp@latest"],"env":{"ULTRALYTICS_API_KEY":"ul_your_api_key_here"}}'
 ```
 
-After installation, the Ultralytics MCP server will be available for use with your GitHub Copilot agent in VS Code.
-
 </details>
 
-These examples track latest published npm release. Restart MCP client or session after upgrading so new server process picks up latest package.
+## Verify
 
-## Verify Setup
-
-### Claude Code
-
-```bash
-claude mcp list
-```
-
-You should see `ultralytics` in configured MCP servers.
-
-### Codex
-
-```bash
-codex mcp list
-```
-
-You should see `ultralytics` in configured MCP servers.
-
-## What You Can Do
-
-- Browse projects, datasets, models, exports, GPU availability
-- Resolve project refs by slug, `owner/slug`, or `ul://` (project ids are not addressable); dataset refs by slug, `owner/slug`, or `ul://` (dataset ids are not addressable)
-- Resolve model refs by `owner/project/model`, `ul://owner/project/model`, or a bare slug with a project (model ids are not addressable)
-- Search public projects and datasets on Ultralytics Explore
-- Create projects private by default (the platform defaults to public)
-- Create datasets private by default (the platform defaults to public)
-- Soft-delete projects to trash, restorable for 30 days, with the cascade count reported
-- Soft-delete datasets to trash, restorable for 30 days; images and annotations move with the dataset, models trained on it are unaffected
-- Start dataset ingest jobs and upload archive files, folders, or videos
-- Monitor training progress and inspect latest metrics or recent metric history
-- Cancel a running training job; the latest checkpoint is preserved and the model is kept
-- Run model prediction from image URL or base64 input
-- Download model weights to local path
-- Create exports and training jobs with explicit cost confirmation; starting is billable immediately, so the estimated cost and remaining balance are reported after the job starts, not before
-- Cancel an active export before it finishes; refuses on a finished export instead of deleting its artifact
-- Pass advanced YOLO training settings through `training_start.train_args`
-- Start training from existing project models or official YOLO base checkpoints
-- Fine-tune sequentially across a list of datasets in one training job
+Run `claude mcp list` or `codex mcp list`. You should see `ultralytics` among
+the configured MCP servers.
 
 ## Tools
 
-See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-path behavior, and examples for tricky tools.
-
-- Projects: 5 tools
-- Datasets: 14 tools
-- Models: 7 tools
-- Training: 3 tools
-- Exports: 4 tools
-- Deployments: 7 tools
-- Auto-annotate: 3 tools
-- Infrastructure: 1 tool
+See [TOOLS.md](./TOOLS.md) for the full parameter reference, safety notes,
+local-path behavior, and examples for the tricky tools.
 
 ## Safety
 
-- `ULTRALYTICS_API_KEY` is a bearer token; pass it via MCP client `env` and never commit real keys
+- Projects and datasets are created private by default, even though the platform itself defaults to public
 - `export_create` requires `confirm_cost: true`
-- `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run — that path replaces its status, epoch count, and per-epoch metric history irrecoverably
-- `training_start` in checkpoint mode (a base checkpoint like `yolo11n.pt`, not an existing model ref) with a single dataset creates a project model before the platform checks the checkpoint's task against the dataset's; if that check fails, the model it created is not deleted automatically and the error names it — review and delete it (`models_delete`) if it's unwanted
+- `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run. That path replaces its status, epoch count, and per-epoch metric history irrecoverably
+- Starting a training job or an export is billable immediately, so the estimated cost and remaining balance are reported after the job starts, not before
+- `training_start` in checkpoint mode (a base checkpoint like `yolo11n.pt`, not an existing model ref) with a single dataset creates the project model before the platform checks the checkpoint's task against the dataset's
+- If that check fails, the model it already created is not deleted automatically. The error names the model; review it and delete it with `models_delete` if it is unwanted
+- Cancelling a running training job preserves the latest checkpoint and keeps the model
+- `export_cancel` proceeds only when it observes an export as `queued` or `running`, and refuses every other status, including unrecognized ones. Because the status check and the cancel request are not atomic, an export that finishes between them may have its artifact irreversibly deleted
+- Deleting a project or dataset is a soft delete to trash, restorable for 30 days. Deleting a project reports the cascade count; deleting a dataset moves its images and annotations with it and leaves models trained on it unaffected
 - Ambiguous project or dataset refs fail instead of guessing
 - Signed upload and download URLs do not forward `Authorization`
 - Local upload tools and `deployment_predict` read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
@@ -275,28 +209,23 @@ See [TOOLS.md](./TOOLS.md) for full parameter reference, safety notes, local-pat
 ### Invalid API key
 
 `ULTRALYTICS_API_KEY` must start with `ul_` and contain exactly 40 hex
-characters after prefix.
+characters after the prefix.
 
-### Server not loading in Claude Code
+### Server not loading
 
-- run `claude mcp list`
-- verify `npx` and Node.js are installed
-- verify `ULTRALYTICS_API_KEY` was passed with `--env` when adding server
-- if needed, inspect server config with `claude mcp get ultralytics`
+Run `claude mcp list` or `codex mcp list`, then verify that `npx` and Node.js
+are installed and that `ULTRALYTICS_API_KEY` reached the client — passed with
+`--env` when adding the server, or set in `~/.codex/config.toml`. In Claude
+Code, `claude mcp get ultralytics` shows the resolved config.
 
-### Server not loading in Codex
-
-- run `codex mcp list`
-- verify `npx` and Node.js are installed
-- verify `ULTRALYTICS_API_KEY` value in `~/.codex/config.toml` or `codex mcp add` command
-
-### Manual server smoke test
+To smoke-test the server on its own:
 
 ```bash
 ULTRALYTICS_API_KEY=ul_your_api_key_here npx -y ultralytics-mcp@latest
 ```
 
-If command exits immediately with config error, fix environment first.
+If the command exits immediately with a config error, fix the environment
+first.
 
 ### Platform API errors
 
@@ -306,48 +235,7 @@ When asking for help, include the tool name, request summary, response status,
 redacted response body, and a minimal reproduction. Do not include real API
 keys, signed URLs, private dataset contents, or private model artifacts.
 
-## Development
+## Contributing
 
-```bash
-npm install
-npm run check
-npm test
-npm run build
-npm run generate:tools
-```
-
-Live smoke test (requires a platform key):
-
-```bash
-export ULTRALYTICS_API_KEY=ul_...
-npm run test:live
-```
-
-Reads the key from `ULTRALYTICS_API_KEY` (same as the server). Skipped
-silently when unset and excluded from `npm test`. Creates one disposable
-`mcp-smoke-*` project and disposable `mcp-smoke-ds-*` datasets and
-deletes them again, even on failure. Covers the project tools, the
-dataset resource tools (list, get, create, images, export, version create,
-and delete), and the dataset upload and ingest flow: a two-image folder
-upload exercises the signed-upload chain (signed URL, storage transfer,
-completion, ingest), pins the completion gate and the runtime storage
-headers, and polls the ingest to a terminal status. The version snapshot
-coverage needs `ULTRALYTICS_SMOKE_DATASET_REF`
-set to `owner/slug` for a ready dataset with ingested images. It skips
-without the variable. Re-creating an unchanged version is a no-op, but an
-opted-in fixture that changed since its last snapshot gains an immutable
-snapshot version.
-
-Also covers the model, training, and export tools. One disposable
-`mcp-smoke-*` model (list, get, training status, and the training-cancel
-refusal for a job that never started) is created and deleted again even on
-failure. Starting training or creating an export bills the account, so
-neither runs here; that live verification runs separately. The surfaces that
-need a model with real weights and history — downloading weights, running
-inference, the training-cancel refusal for a job that already finished, and
-the export tools' field shapes, including a cancel refusal on a finished
-export — run against one existing fixture, opted into with
-`ULTRALYTICS_SMOKE_EXPORT_REF=owner/project/model:exportId`. The fixture must
-be a trained model with downloadable weights, a terminal training status, and
-an export whose own job has also reached a terminal status. It skips without
-the variable.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, the check suite, and the
+live smoke test.
