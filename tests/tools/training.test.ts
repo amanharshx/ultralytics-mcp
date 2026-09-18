@@ -889,6 +889,39 @@ describe("trainingStart", () => {
     expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
   });
 
+  test("round-trips a canonical ul://owner/datasets/slug dataset URI into data", async () => {
+    const calls: { body: unknown }[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      calls.push({
+        body: typeof init.body === "string" ? JSON.parse(init.body) : null,
+      });
+      const path = new URL(String(url)).pathname;
+      if (path === MODEL_PATH) {
+        return jsonResponse({
+          model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+        });
+      }
+      return jsonResponse(startResponse());
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: impl,
+    });
+
+    await trainingStart(client, {
+      model: MODEL_REF,
+      project: PROJECT_REF,
+      dataset: DATASET_URI,
+      gpuType: "l4",
+      confirmCost: true,
+    });
+
+    expect(calls[1]).toMatchObject({
+      body: { trainArgs: { data: DATASET_URI } },
+    });
+  });
+
   test("fills a missing owner from the account summary for bare slugs", async () => {
     const calls: { path: string }[] = [];
     const impl = (async (url: string | URL) => {
