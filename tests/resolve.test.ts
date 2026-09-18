@@ -153,9 +153,15 @@ describe("resolveDataset", () => {
     );
   });
 
-  test("a malformed dataset ul:// URI names the expected form", () => {
+  test("a malformed dataset ul:// URI names the canonical form first", () => {
     expect(() => resolveDataset("ul://only-one-part")).toThrow(
-      /Unsupported dataset ul:\/\/ URI.*ul:\/\/owner\/dataset/s,
+      /Unsupported dataset ul:\/\/ URI.*ul:\/\/owner\/datasets\/slug.*ul:\/\/owner\/dataset'/s,
+    );
+  });
+
+  test("a near-miss on the canonical URI names the canonical form", () => {
+    expect(() => resolveDataset("ul://u/datasets/data/extra")).toThrow(
+      /Unsupported dataset ul:\/\/ URI.*ul:\/\/owner\/datasets\/slug/s,
     );
   });
 });

@@ -132,7 +132,8 @@ export function resolveDataset(ref: string): ResolvedDatasetRef {
     }
     if (parts.length !== 2) {
       throw new ResolutionError(
-        `Unsupported dataset ul:// URI '${trimmed}'. Expected 'ul://owner/dataset'.`,
+        `Unsupported dataset ul:// URI '${trimmed}'. Expected ` +
+          "'ul://owner/datasets/slug' or 'ul://owner/dataset'.",
       );
     }
     return { owner: parts[0], dataset: parts[1] };
