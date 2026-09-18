@@ -105,10 +105,11 @@ describe("resolveDataset", () => {
     });
   });
 
-  test("rejects the legacy ul://owner/datasets/slug URI and points at the current form", () => {
-    expect(() => resolveDataset("ul://u/datasets/data")).toThrow(
-      /legacy dataset URI.*ul:\/\/owner\/dataset/s,
-    );
+  test("parses the canonical ul://owner/datasets/slug URI into a pair", () => {
+    expect(resolveDataset("ul://u/datasets/data")).toEqual({
+      owner: "u",
+      dataset: "data",
+    });
   });
 
   test("parses a bare slug with a null owner and no network call", () => {

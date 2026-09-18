@@ -134,7 +134,7 @@ function renderSharedSections() {
   return [
     "## Conventions",
     "",
-    "- Many project, dataset, and model lookup tools accept ids, slugs, `username/slug`, or `ul://` refs.",
+    "- Many project, dataset, and model lookup tools accept slugs, `username/slug`, or `ul://` refs. Bare ids are not addressable.",
     "- Local-path tools operate on files or folders available to the MCP client host.",
     "- Exact accepted ref variants are documented in tool descriptions and notes when behavior differs.",
     "",

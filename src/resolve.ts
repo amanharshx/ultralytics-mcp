@@ -93,14 +93,15 @@ export interface ResolvedDatasetRef {
 }
 
 const DATASET_REF_HELP =
-  "Use 'slug', 'owner/slug', or a 'ul://owner/dataset' URI.";
+  "Use a 'ul://owner/datasets/slug' URI, 'slug', 'owner/slug', or " +
+  "'ul://owner/dataset'.";
 const DATASET_IDS_NOT_ADDRESSABLE = "Dataset ids are not addressable.";
 
 /** Parse a dataset ref into an `{owner, dataset}` pair with no network call.
  *
- * Accepts `owner/slug`, `ul://owner/dataset`, and a bare `slug`. Rejects
- * bare 24-character hex ids (not addressable), model `ul://` URIs, and the
- * legacy `ul://owner/datasets/slug` URI form with errors that point at the
+ * Accepts the canonical `ul://owner/datasets/slug` URI, `owner/slug`,
+ * `ul://owner/dataset`, and a bare `slug`. Rejects bare 24-character hex ids
+ * (not addressable) and model `ul://` URIs with errors that point at the
  * correct form. A 2-part `ul://` project URI is structurally identical to a
  * dataset URI, so it resolves as a dataset ref; the tool context decides the
  * kind, exactly as the `owner/slug` path form does.
@@ -122,9 +123,7 @@ export function resolveDataset(ref: string): ResolvedDatasetRef {
   const { isUlUri, parts } = parseRef(trimmed);
   if (isUlUri) {
     if (parts.length === 3 && parts[1] === "datasets") {
-      throw new ResolutionError(
-        `'${trimmed}' is a legacy dataset URI. ${DATASET_REF_HELP}`,
-      );
+      return { owner: parts[0], dataset: parts[2] };
     }
     if (parts.length === 3) {
       throw new ResolutionError(
