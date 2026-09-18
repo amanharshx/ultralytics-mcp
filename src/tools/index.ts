@@ -317,11 +317,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Get details for one dataset by slug, owner/slug, or dataset ul:// URI.",
+      "Get details for one dataset by slug, owner/slug, or a ul://owner/datasets/slug URI.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
@@ -432,11 +434,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "List images in a dataset by slug, owner/slug, or dataset ul:// URI with optional filtering.",
+      "List images in a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI with optional filtering.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       split: z
         .string()
         .optional()
@@ -489,11 +493,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Get a time-limited export download link for a dataset by slug, owner/slug, or dataset ul:// URI, for the latest export or one frozen version.",
+      "Get a time-limited export download link for a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI, for the latest export or one frozen version.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       version: z.number().optional().describe("Saved version number."),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
@@ -512,11 +518,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Get per-class annotation counts for a dataset by slug, owner/slug, or dataset ul:// URI. By default omits the bulky histogram and heatmap groups (image size, file size, format, points-per-annotation, bbox distributions, and location/dimension heatmaps), naming them in the summary; pass include_histograms: true to get the full payload unmodified.",
+      "Get per-class annotation counts for a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI. By default omits the bulky histogram and heatmap groups (image size, file size, format, points-per-annotation, bbox distributions, and location/dimension heatmaps), naming them in the summary; pass include_histograms: true to get the full payload unmodified.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       include_histograms: z
         .boolean()
         .optional()
@@ -540,11 +548,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Get an auto-annotation run's status for a dataset by slug, owner/slug, or dataset ul:// URI. Surfaces activeJob and lastRun unmodified: both null means the dataset has never run one; activeJob carries progress for a run in flight; lastRun carries failed/stopped booleans plus results, or an error when the run failed.",
+      "Get an auto-annotation run's status for a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI. Surfaces activeJob and lastRun unmodified: both null means the dataset has never run one; activeJob carries progress for a run in flight; lastRun carries failed/stopped booleans plus results, or an error when the run failed.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
@@ -559,11 +569,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Start an auto-annotation run on a dataset by slug, owner/slug, or dataset ul:// URI, labelling it with a model given by owner/project/model, ul://owner/project/model, or slug with a project (state-changing, billable, may cost credits). Requires confirm_cost=true: there is no cost preview, no published rate, and a 402 signals insufficient credits; gauge magnitude with datasets_get (the unlabeled image count by default, the total count when include_annotated is true). Sends only modelId plus any of confidence, iou, class_mapping, and include_annotated the caller sets explicitly, omitting the rest so the server's own defaults (confidence 0.25, iou 0.7, include_annotated false, illustrative only) apply undisturbed. There is no imgsz parameter. class_mapping bridges a model/dataset class-taxonomy mismatch (for example a 1-class model against an 80-class dataset, which otherwise fails outright); it passes through with no length check. Labels are additive, never overwritten, so no overwrite confirmation is needed. Every start snapshots a dataset version before labelling, listed via datasets_get and undoable exactly with dataset_version_restore. Billing settles at run time, not at dismissal, so auto_annotate_stop does not refund a charge already incurred. Use auto_annotate_status to poll and auto_annotate_stop to cancel.",
+      "Start an auto-annotation run on a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI, labelling it with a model given by owner/project/model, ul://owner/project/model, or slug with a project (state-changing, billable, may cost credits). Requires confirm_cost=true: there is no cost preview, no published rate, and a 402 signals insufficient credits; gauge magnitude with datasets_get (the unlabeled image count by default, the total count when include_annotated is true). Sends only modelId plus any of confidence, iou, class_mapping, and include_annotated the caller sets explicitly, omitting the rest so the server's own defaults (confidence 0.25, iou 0.7, include_annotated false, illustrative only) apply undisturbed. There is no imgsz parameter. class_mapping bridges a model/dataset class-taxonomy mismatch (for example a 1-class model against an 80-class dataset, which otherwise fails outright); it passes through with no length check. Labels are additive, never overwritten, so no overwrite confirmation is needed. Every start snapshots a dataset version before labelling, listed via datasets_get and undoable exactly with dataset_version_restore. Billing settles at run time, not at dismissal, so auto_annotate_stop does not refund a charge already incurred. Use auto_annotate_status to poll and auto_annotate_stop to cancel.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       model: z
         .string()
         .describe(
@@ -655,11 +667,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Stop or dismiss a dataset's auto-annotation run by slug, owner/slug, or dataset ul:// URI. Reads status first and refuses without calling the endpoint when no run is active, since there is nothing to stop. When a run is active it sends the request and surfaces the server's own action verbatim rather than inferring it: cancelled for an active run stopped mid-flight, dismissed for a terminal run's summary being cleared, or none if nothing acted on. Ships ungated, consistent with training_cancel and export_cancel: an off-switch is never gated. An undismissed terminal run does not block the next start, so this never strands anything; dismissal moves no money.",
+      "Stop or dismiss a dataset's auto-annotation run by slug, owner/slug, or a ul://owner/datasets/slug URI. Reads status first and refuses without calling the endpoint when no run is active, since there is nothing to stop. When a run is active it sends the request and surfaces the server's own action verbatim rather than inferring it: cancelled for an active run stopped mid-flight, dismissed for a terminal run's summary being cleared, or none if nothing acted on. Ships ungated, consistent with training_cancel and export_cancel: an off-switch is never gated. An undismissed terminal run does not block the next start, so this never strands anything; dismissal moves no money.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -677,11 +691,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Create a frozen dataset version snapshot by slug, owner/slug, or dataset ul:// URI. If the dataset is unchanged since the previous snapshot the existing version is returned instead of a new one.",
+      "Create a frozen dataset version snapshot by slug, owner/slug, or a ul://owner/datasets/slug URI. If the dataset is unchanged since the previous snapshot the existing version is returned instead of a new one.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       description: z
         .string()
         .optional()
@@ -707,11 +723,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Restore a dataset to a previously saved version by slug, owner/slug, or dataset ul:// URI, and an integer version number. Versions are listed via datasets_get (the versions array, already returned unprojected). This REPLACES the dataset's current images, labels, and splits with that snapshot outright: anything done since that version, including un-versioned manual annotation work, is discarded. Ships ungated anyway, since it is the undo tool — an auto-annotate run snapshots a version before labelling, so restoring that version undoes the run exactly, and a mistaken restore is itself recoverable by restoring a later version. Restore also reassigns image IDs: a pre-restore image ID still resolves afterward but returns an empty label array rather than a 404, so callers must re-list images (for example with dataset_images_list) after a restore instead of reusing held IDs.",
+      "Restore a dataset to a previously saved version by slug, owner/slug, or a ul://owner/datasets/slug URI, and an integer version number. Versions are listed via datasets_get (the versions array, already returned unprojected). This REPLACES the dataset's current images, labels, and splits with that snapshot outright: anything done since that version, including un-versioned manual annotation work, is discarded. Ships ungated anyway, since it is the undo tool — an auto-annotate run snapshots a version before labelling, so restoring that version undoes the run exactly, and a mistaken restore is itself recoverable by restoring a later version. Restore also reassigns image IDs: a pre-restore image ID still resolves afterward but returns an empty label array rather than a 404, so callers must re-list images (for example with dataset_images_list) after a restore instead of reusing held IDs.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       version: z
         .number()
         .int()
@@ -739,11 +757,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Delete a dataset by slug, owner/slug, or dataset ul:// URI. Deleting a dataset moves its images and annotations to trash with it; models trained on it are not deleted. Trashed items remain restorable for a bounded window.",
+      "Delete a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI. Deleting a dataset moves its images and annotations to trash with it; models trained on it are not deleted. Trashed items remain restorable for a bounded window.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -760,11 +780,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Start a remote URL ingest job for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
+      "Start a remote URL ingest job for a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       sourceUrl: z.string().describe("Remote dataset archive or NDJSON URL."),
       targetSplit: z
         .string()
@@ -800,11 +822,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Upload a local dataset archive through the signed-upload flow for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
+      "Upload a local dataset archive through the signed-upload flow for a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       file_path: z.string().describe("Local path to dataset archive file."),
       targetSplit: z
         .string()
@@ -851,11 +875,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Upload a local image folder as a zip through the signed-upload flow for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
+      "Upload a local image folder as a zip through the signed-upload flow for a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       folder_path: z.string().describe("Local path to image folder."),
       targetSplit: z
         .string()
@@ -904,11 +930,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Upload a local video as extracted frames through the signed-upload flow for a dataset by slug, owner/slug, or dataset ul:// URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
+      "Upload a local video as extracted frames through the signed-upload flow for a dataset by slug, owner/slug, or a ul://owner/datasets/slug URI. Defaults conflictPolicy to skip (the platform default is undocumented). Reports the queued job id with the dataset's current ingest status; use datasets_get to follow up.",
     inputSchema: {
       dataset: z
         .string()
-        .describe("Dataset ref by slug, owner/slug, or ul:// URI."),
+        .describe(
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
+        ),
       video_path: z.string().describe("Local path to source video file."),
       fps: z
         .number()
@@ -1743,7 +1771,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       dataset: z
         .union([z.string(), z.array(z.string())])
         .describe(
-          "Dataset ref by slug, owner/slug, or ul:// URI, or a list of refs to fine-tune on sequentially.",
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI, or a list of refs to fine-tune on sequentially.",
         ),
       gpu_type: z.string().describe("Cloud GPU type to allocate for training."),
       train_args: z
