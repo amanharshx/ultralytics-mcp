@@ -23,7 +23,7 @@ dataset uploads.
 - "Run the trained model on `https://example.com/frame.jpg`, then download the weights to `./weights`."
 - "Move my `scratch` project to trash." (restorable for 30 days)
 
-https://github.com/user-attachments/assets/c686717a-b499-44c8-817e-b0ea6e78c3b3
+https://github.com/user-attachments/assets/449d051b-d162-4539-93c5-94be478303f0
 
 ## Installation
 
