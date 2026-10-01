@@ -198,7 +198,7 @@ local-path behavior, and examples for the tricky tools.
 - Deleting a project or dataset is a soft delete to trash, restorable for 30 days. Deleting a project reports the cascade count; deleting a dataset moves its images and annotations with it and leaves models trained on it unaffected
 - Ambiguous project or dataset refs fail instead of guessing
 - Signed upload and download URLs do not forward `Authorization`
-- Local upload tools and `deployment_predict` read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
+- Local upload tools, `model_predict` with `file_path`, and `deployment_predict` read files from the MCP client host; approve calls only for paths you expect to share with Ultralytics
 - `model_download` writes to the requested local path; review `output_path` and `overwrite` before approving
 - Adding a named YOLO ZIP (with `data.yaml` class names) to an existing dataset imports its labels and merges classes
 - Re-ingest does not re-label images already in the dataset (use the annotation editor); re-uploading the same image under a different split can create a duplicate

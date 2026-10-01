@@ -1473,7 +1473,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Run inference with a trained model on an image URL or base64 source (no local file paths).",
+      "Run inference with a trained model on an image URL or base64 image (`source`), or on a local image or video file (`file_path`). Give exactly one.",
     inputSchema: {
       model: z
         .string()
@@ -1482,8 +1482,15 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         ),
       source: z
         .string()
+        .optional()
         .describe(
-          "Image URL, base64-encoded image (standard or URL-safe; optional padding; ASCII whitespace ignored), or base64 data: URI (data:<mime>;base64,<payload>). Base64 is uploaded as an image file, bypassing the API source field's 4,096-character limit; MCP client argument limits may still apply. Local file paths are not supported.",
+          "Image URL, base64-encoded image (standard or URL-safe; optional padding; ASCII whitespace ignored), or base64 data: URI (data:<mime>;base64,<payload>). Base64 is uploaded as an image file, bypassing the API source field's 4,096-character limit; MCP client argument limits may still apply, so prefer file_path for local files.",
+        ),
+      file_path: z
+        .string()
+        .optional()
+        .describe(
+          "Local path to an image or video file, uploaded as-is. The server decides which formats and sizes it accepts.",
         ),
       project: z
         .string()
@@ -1529,13 +1536,21 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           source: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
         },
       },
+      {
+        title: "Predict from a local file",
+        input: {
+          model: "team/project/my-model",
+          file_path: "/path/to/image.jpg",
+        },
+      },
     ],
     createHandler:
       (getClient) =>
-      async ({ model, source, project, conf, iou, imgsz }) =>
+      async ({ model, source, file_path, project, conf, iou, imgsz }) =>
         toMcpTextResult(
           await modelPredict(getClient(), model as string, {
-            source: source as string,
+            source: source as string | undefined,
+            filePath: file_path as string | undefined,
             project: project as string | undefined,
             conf: conf as number | undefined,
             iou: iou as number | undefined,

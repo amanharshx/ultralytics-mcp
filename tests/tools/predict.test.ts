@@ -1,4 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { UltralyticsClient } from "../../src/client.js";
 import { modelPredict } from "../../src/tools/predict.js";
@@ -87,11 +91,15 @@ function predictClient(options: PredictClientOptions = {}) {
 }
 
 describe("modelPredict", () => {
-  test("rejects a blank source before any request", async () => {
+  test.each([
+    ["neither input", {}],
+    ["a blank source", { source: "  " }],
+    ["both inputs", { source: "https://x/y.jpg", filePath: "/tmp/y.jpg" }],
+  ])("requires exactly one input, rejecting %s before any request", async (_label, input) => {
     const { client, calls } = predictClient();
-    await expect(
-      modelPredict(client, "alice/road/exp", { source: "  " }),
-    ).rejects.toThrow(/`source` is required/);
+    await expect(modelPredict(client, "alice/road/exp", input)).rejects.toThrow(
+      /exactly one of `source`.*or `file_path`/,
+    );
     expect(calls).toHaveLength(0);
   });
 
@@ -350,5 +358,58 @@ describe("modelPredict", () => {
     await expect(
       modelPredict(client, "alice/road/exp", { source: "https://x/y.jpg" }),
     ).rejects.toThrow(/Too big/);
+  });
+});
+
+describe("modelPredict with a local file", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "ul-mcp-model-predict-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  // Live capture: an `.mp4` file part returns one image entry per frame, so
+  // the file goes up under its own name with no local format allowlist.
+  test("uploads the file under its own basename with no source field", async () => {
+    const { client, calls } = predictClient();
+    const filePath = join(tmpDir, "clip.mp4");
+    await writeFile(filePath, BYTES);
+
+    const result = await modelPredict(client, "alice/road/exp", {
+      filePath,
+      imgsz: 320,
+    });
+
+    expect(calls).toHaveLength(1);
+    const body = calls[0].body;
+    expect(body?.get("source")).toBeNull();
+    expect(body?.get("imgsz")).toBe("320");
+    const file = body?.get("file") as File;
+    expect(file.name).toBe("clip.mp4");
+    expect(Buffer.from(await file.arrayBuffer())).toEqual(BYTES);
+    expect(result.summary).toBe(
+      "Model 'exp' for owner 'alice' project 'road': 1 image(s), 2 detection(s).",
+    );
+  });
+
+  test("rejects a missing path before any request", async () => {
+    const { client, calls } = predictClient();
+    const filePath = join(tmpDir, "missing.jpg");
+    await expect(
+      modelPredict(client, "alice/road/exp", { filePath }),
+    ).rejects.toThrow(`File does not exist: ${filePath}`);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("rejects a directory before any request", async () => {
+    const { client, calls } = predictClient();
+    await expect(
+      modelPredict(client, "alice/road/exp", { filePath: tmpDir }),
+    ).rejects.toThrow(`Path is not a file: ${tmpDir}`);
+    expect(calls).toHaveLength(0);
   });
 });

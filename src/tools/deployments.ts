@@ -292,8 +292,8 @@ export async function deploymentMetrics(
 /** Run inference against one deployment by `owner/deployment` or a bare slug.
  *
  * Posts a local image file straight through as `multipart/form-data`; the
- * endpoint's `file` branch is the only one used here (a URL/base64 `source`
- * belongs to `model_predict`, which never accepts a local path). `images`
+ * endpoint's `file` branch is the only one used here (URL and base64 inputs
+ * belong to `model_predict`'s `source`). `images`
  * and `metadata` are returned verbatim, including metadata's undocumented
  * fields (`functionTimeAlive`, `functionTimeCall`, `task`, `version`) — none
  * of them are projected away. `conf`/`iou`/`imgsz` are optional and only
