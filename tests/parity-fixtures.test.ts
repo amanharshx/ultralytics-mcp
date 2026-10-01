@@ -388,6 +388,9 @@ const TOOL_RUNNERS: Record<
       args.model as string,
       args.project as string | undefined,
     ),
+  // model_metrics_ambiguous_best_epoch.json and training_monitor_cancelled.json
+  // are full live captures kept minified, like model_plots.json below.
+  // Re-minify them on any future recapture.
   model_metrics: (client, args) =>
     modelMetrics(
       client,
@@ -552,8 +555,6 @@ describe("parity fixtures", () => {
         "model_metrics.json",
         "model_metrics_ambiguous_best_epoch.json",
         "model_metrics_cancelled.json",
-        "model_metrics_unordered_history.json",
-        "model_metrics_uploaded.json",
         "model_plots.json",
         "models_list.json",
         "models_list_limit_reached.json",
