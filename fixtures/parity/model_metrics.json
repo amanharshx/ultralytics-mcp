@@ -2286,7 +2286,7 @@
     }
   ],
   "expected": {
-    "summary": "Model 'example-model-eval-1' for owner 'example-owner' project 'example-project-1': best epoch 17 (fitness 0.85528); final epoch 118 of 119 recorded epoch(s).",
+    "summary": "Model 'example-model-eval-1' for owner 'example-owner' project 'example-project-1': best epoch 17 (fitness 0.85528); reported metrics available; 119 result record(s).",
     "data": {
       "owner": "example-owner",
       "project": "example-project-1",
@@ -2294,7 +2294,7 @@
       "modelId": "000000000000000000000023",
       "status": "completed",
       "epochs": 200,
-      "epochsDone": 119,
+      "resultRecordCount": 119,
       "bestEpoch": 17,
       "bestFitness": 0.85528,
       "bestEpochMetrics": {
@@ -2311,13 +2311,13 @@
         "lr": 0.000641
       },
       "bestEpochNote": null,
-      "finalEpoch": 118,
-      "finalEpochMetrics": {
+      "reportedMetrics": {
         "mAP50": 0.977335,
         "mAP50-95": 0.85463,
         "precision": 0.967925,
         "recall": 0.875
-      }
+      },
+      "reportedMetricsNote": "The platform's model-level metrics, passed through verbatim; the API does not say which evaluation produced them. On Platform-trained runs observed live they match the post-training evaluation of the best checkpoint, not the last training epoch. On uploaded models they can match the last recorded epoch."
     }
   }
 }

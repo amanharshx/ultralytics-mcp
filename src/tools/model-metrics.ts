@@ -1,9 +1,12 @@
-/** Model evaluation metrics: best-epoch vs. final-epoch, never confused. */
+/** Model evaluation metrics: validated best epoch vs. the platform's reported metrics. */
 
 import type { UltralyticsClient } from "../client.js";
 import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { projectModelTraining } from "./model-training-projection.js";
+import {
+  describeResultHistory,
+  projectModelTraining,
+} from "./model-training-projection.js";
 import { asRecord, pyField, validatePositiveInt } from "./shared.js";
 
 interface ModelMetricsOptions {
@@ -19,46 +22,84 @@ interface BestEpochResolution {
   note: string | null;
 }
 
-/** Resolve the model's best epoch against its recorded `trainResults`,
- * matched by the `epoch` field, never by array position: early stopping and
- * gaps mean array index and epoch number are not the same thing.
+/** Where the model-level `metrics` field comes from, stated statically
+ * because the API does not say. Verified live 2026-10-01: on every
+ * Platform-trained model checked, `metrics` equals the post-training
+ * evaluation record (the best checkpoint re-validated after training ends),
+ * not the last training epoch; on the uploaded `pothole/yolo26s` it equals
+ * the last recorded epoch. */
+const REPORTED_METRICS_NOTE =
+  "The platform's model-level metrics, passed through verbatim; the API " +
+  "does not say which evaluation produced them. On Platform-trained runs " +
+  "observed live they match the post-training evaluation of the best " +
+  "checkpoint, not the last training epoch. On uploaded models they can " +
+  "match the last recorded epoch.";
+
+/** Validate the model's reported best epoch against its `trainResults`.
  *
- * A model can report a `bestEpoch` with no matching entry at all (see
- * `eggs-and-bowls/exp`, observed live with `bestEpoch: 99` beside zero
- * `trainResults`). When that happens this reports `bestEpoch: null` and
- * `bestFitness: null` — not the platform's raw, incoherent values — since
- * surfacing them unqualified in fields literally named `bestEpoch` and
- * `bestFitness` is exactly the "reported as fact" failure mode the ticket
- * calls out. The reported values are preserved only inside `note`, which is
- * the diagnostic surface, not the answer.
+ * The reported pair is trusted only when exactly one record carries
+ * `epoch === bestEpoch` and that record's `fitness` exactly equals
+ * `bestFitness`. Anything else is reported as `null`, with the platform's
+ * raw values kept only in `note`, since fields literally named `bestEpoch`
+ * and `bestFitness` would otherwise state an incoherent value as fact.
+ * Observed live (17-model workspace scan, 2026-10-01):
+ *
+ * - no matching record: `eggs-and-bowls/exp` reports `bestEpoch: 99` beside
+ *   zero `trainResults`;
+ * - several matching records: before v8.4.52 the post-training evaluation
+ *   record reused the last epoch's number, and before v8.4.48 `bestEpoch`
+ *   itself was the last epoch (fixed upstream in #24425). So `pothole/exp-2`
+ *   reports epoch 99 — matched by two records — while its `bestFitness`
+ *   belongs to epoch 66, and on `eggs-and-bowls/exp-2` both epoch-99
+ *   records even carry the reported fitness.
+ *
+ * The fitness check is not observed deciding a case on its own: it guards a
+ * pre-v8.4.48 history whose duplicate record never arrived, which would
+ * leave the wrong `bestEpoch` with exactly one match (records do go
+ * missing: `butterfly2/exp` lacks epochs 60 and 63).
+ *
+ * Exact equality, no tolerance: both sides come from the same rounded
+ * values, and a near-miss is not evidence of the same record.
  */
 function resolveBestEpoch(
   trainResults: Record<string, unknown>[],
   reportedBestEpoch: number | null,
   reportedBestFitness: number | null,
-  totalEpochs: number | null,
 ): BestEpochResolution {
+  const unresolved = (note: string): BestEpochResolution => ({
+    bestEpoch: null,
+    bestFitness: null,
+    metrics: null,
+    note,
+  });
   if (reportedBestEpoch === null) {
-    return {
-      bestEpoch: null,
-      bestFitness: null,
-      metrics: null,
-      note: "bestEpoch is not recorded for this model.",
-    };
+    return unresolved("bestEpoch is not recorded for this model.");
   }
-  const match = trainResults.find((entry) => entry.epoch === reportedBestEpoch);
-  if (!match) {
-    return {
-      bestEpoch: null,
-      bestFitness: null,
-      metrics: null,
-      note:
-        `the model reports bestEpoch ${reportedBestEpoch} ` +
-        `(bestFitness ${pyField(reportedBestFitness)}), but no entry among ` +
-        `the ${trainResults.length} recorded epoch(s)` +
-        (totalEpochs !== null ? ` (epochs: ${totalEpochs})` : "") +
-        ` matches epoch ${reportedBestEpoch}; not treated as fact.`,
-    };
+  const reported =
+    `the model reports bestEpoch ${reportedBestEpoch} ` +
+    `(bestFitness ${pyField(reportedBestFitness)}), but `;
+  const matches = trainResults.filter(
+    (record) => record.epoch === reportedBestEpoch,
+  );
+  if (matches.length === 0) {
+    return unresolved(
+      `${reported}none of the ${trainResults.length} result record(s) ` +
+        `reports epoch ${reportedBestEpoch}; not treated as fact.`,
+    );
+  }
+  if (matches.length > 1) {
+    return unresolved(
+      `${reported}${matches.length} result records report epoch ` +
+        `${reportedBestEpoch}, so which one it refers to is ambiguous; ` +
+        `not treated as fact.`,
+    );
+  }
+  const [match] = matches;
+  if (match.fitness !== reportedBestFitness) {
+    return unresolved(
+      `${reported}the result record for epoch ${reportedBestEpoch} reports ` +
+        `fitness ${pyField(match.fitness)}; not treated as fact.`,
+    );
   }
   return {
     bestEpoch: reportedBestEpoch,
@@ -68,65 +109,23 @@ function resolveBestEpoch(
   };
 }
 
-/** Format the `include_history` window label. Load-bearing per the ticket: a
- * truncated curve with no window label reads as "converged fine" when the
- * omitted portion actually diverged, so this is never left off, even when
- * the requested window happens to cover every recorded epoch. */
-function formatWindowLabel(
-  windowEntries: Record<string, unknown>[],
-  epochsDone: number,
-  totalEpochs: number | null,
-): string {
-  const totalLabel = totalEpochs !== null ? String(totalEpochs) : "?";
-  if (windowEntries.length === 0) {
-    return `no recorded epochs (0 of ${totalLabel})`;
-  }
-  const start = windowEntries[0].epoch ?? "?";
-  const end = windowEntries[windowEntries.length - 1].epoch ?? "?";
-  return `epochs ${pyField(start)}-${pyField(end)} of ${totalLabel} (${epochsDone} recorded)`;
-}
-
-/** Report a model's best-epoch and final-epoch evaluation metrics.
+/** Report a model's validated best epoch and its reported metrics.
  *
- * Built on the shared training projection from ticket 1 (`trainResults`,
- * top-level `metrics`, `bestEpoch`, `bestFitness`, `trainArgs`) with no
- * second reading of `trainResults`: `training_monitor` and this tool import
- * the same helper.
+ * Built on the shared training projection (`trainResults`, top-level
+ * `metrics`, `bestEpoch`, `bestFitness`, `trainArgs`). `bestEpochMetrics`
+ * is the single `trainResults` record validated by `resolveBestEpoch`,
+ * found regardless of any `include_history` window, with its raw per-epoch
+ * keys (`metrics/mAP50(B)`, etc.) verbatim. `reportedMetrics` is the
+ * model-level `metrics` field verbatim under a name that claims no epoch:
+ * `trainResults` cannot say which record produced it, and a last-record
+ * "final epoch" label was observed live to pair an epoch with metrics from
+ * a different record. `resultRecordCount` counts records, not epochs.
  *
- * Verified live 2026-09-15 against `fish/exp-2`, `carparts/exp-2`,
- * `pothole/exp-2`, and `road-safety-101/exp-3`: on every one, the Model's
- * top-level `metrics` is byte-identical to the *last* recorded
- * `trainResults` entry's cleaned metric names, never the best-epoch entry.
- * So `metrics` answers "how did it end up", not "how good did it get" —
- * `finalEpochMetrics` below is that field, surfaced under a name that says
- * what it is. `bestEpochMetrics` is pulled explicitly from `trainResults` by
- * matching its `epoch` field against `bestEpoch`, retrievable regardless of
- * any `include_history` window, and carries the entry's raw per-epoch keys
- * (`metrics/mAP50(B)`, etc.) verbatim rather than invented clean names,
- * since which suffixes exist depends on task and was not verified for every
- * task type. The two are never merged, so best cannot be read as final or
- * vice versa.
- *
- * Both degenerate shapes observed live survive without throwing:
- * `pothole/yolo26s` (`bestEpoch: null`, `epochs: -1`, 70 results, top-level
- * `metrics` still present) reports `bestEpoch`/`bestFitness`/
- * `bestEpochMetrics` all as `null` with a note, and `finalEpochMetrics` from
- * the top-level field as usual; `eggs-and-bowls/exp` (`bestEpoch: 99` beside
- * zero `trainResults` and a null top-level `metrics`) reports `bestEpoch`,
- * `bestFitness`, `bestEpochMetrics`, and `finalEpochMetrics` all as `null`,
- * each best-epoch field backed by an explanatory note. The platform's raw
- * `bestEpoch: 99` and its `bestFitness` are never echoed back in those
- * fields — only inside the note — so a caller reading `bestEpoch` alone
- * never mistakes an incoherent value for fact.
- *
- * `include_train_args` surfaces `trainArgs` verbatim (111 keys, observed
- * live); omitted by default since it is too heavy for a default payload,
- * not because it would be wrong to include.
- *
- * `include_history` returns a slice of `trainResults` and always states the
- * window it covers, including when the full curve is returned — the label
- * is what keeps a truncated curve legible as "incomplete" rather than
- * silently "converged fine".
+ * `include_train_args` surfaces `trainArgs` verbatim (111 keys observed
+ * live); omitted by default as too heavy, not because it would be wrong.
+ * `include_history` returns the last N records described by
+ * `describeResultHistory`, whose window label is what keeps a truncated
+ * curve legible as incomplete rather than silently "converged fine".
  */
 export async function modelMetrics(
   client: UltralyticsClient,
@@ -149,7 +148,6 @@ export async function modelMetrics(
   const projection = projectModelTraining(fields);
 
   const trainResults = projection.trainResults;
-  const epochsDone = trainResults.length;
   const rawTotalEpochs = fields.epochs;
   const totalEpochs =
     typeof rawTotalEpochs === "number" && rawTotalEpochs > 0
@@ -165,11 +163,8 @@ export async function modelMetrics(
     trainResults,
     projection.bestEpoch,
     projection.bestFitness,
-    totalEpochs,
   );
-  const finalEpoch =
-    epochsDone > 0 ? (trainResults[epochsDone - 1].epoch ?? null) : null;
-  const finalEpochMetrics = projection.metrics;
+  const reportedMetrics = projection.metrics;
 
   const result: Record<string, unknown> = {
     owner: resolvedOwner,
@@ -178,13 +173,13 @@ export async function modelMetrics(
     modelId: fields.id ?? null,
     status: fields.status ?? null,
     epochs: totalEpochs,
-    epochsDone,
+    resultRecordCount: trainResults.length,
     bestEpoch,
     bestFitness,
     bestEpochMetrics,
     bestEpochNote,
-    finalEpoch,
-    finalEpochMetrics,
+    reportedMetrics,
+    reportedMetricsNote: REPORTED_METRICS_NOTE,
   };
 
   if (includeTrainArgs) {
@@ -192,29 +187,22 @@ export async function modelMetrics(
   }
 
   if (includeHistory) {
-    const windowEntries = trainResults.slice(-historyLastN);
-    result.history = {
-      window: formatWindowLabel(windowEntries, epochsDone, totalEpochs),
-      entries: windowEntries.map((entry) => ({
-        epoch: entry.epoch ?? null,
-        metrics: asRecord(entry.metrics),
-      })),
-    };
+    result.history = describeResultHistory(trainResults, historyLastN);
   }
 
   const bestLabel =
-    bestEpoch !== null && bestEpochMetrics !== null
+    bestEpoch !== null
       ? `best epoch ${bestEpoch} (fitness ${pyField(bestFitness)})`
       : `best epoch unavailable (${pyField(bestEpochNote)})`;
-  const finalLabel =
-    finalEpoch !== null && finalEpochMetrics !== null
-      ? `final epoch ${finalEpoch}`
-      : "final epoch unavailable";
+  const reportedLabel =
+    reportedMetrics !== null
+      ? "reported metrics available"
+      : "reported metrics unavailable";
 
   return {
     summary:
       `Model '${resolved.model}' for owner '${resolvedOwner}' project '${resolved.project}': ` +
-      `${bestLabel}; ${finalLabel} of ${epochsDone} recorded epoch(s).`,
+      `${bestLabel}; ${reportedLabel}; ${trainResults.length} result record(s).`,
     data: result,
   };
 }

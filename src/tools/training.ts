@@ -9,7 +9,10 @@ import {
   resolveProject,
 } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
-import { projectModelTraining } from "./model-training-projection.js";
+import {
+  describeResultHistory,
+  projectModelTraining,
+} from "./model-training-projection.js";
 import { asRecord, pyField, validatePositiveInt } from "./shared.js";
 
 const KEY_METRICS = [
@@ -28,11 +31,6 @@ const CHECKPOINT_TASK_SUFFIXES = [
 ] as const;
 const BASE_CHECKPOINT_RE =
   /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
-
-/** Format a percentage like Python's `str(round(x, 1))` (whole numbers keep `.0`). */
-function formatPercent(value: number): string {
-  return Number.isInteger(value) ? value.toFixed(1) : String(value);
-}
 
 function validateTrainArgs(trainArgs: Record<string, unknown>): void {
   for (const key of RESERVED_TRAIN_ARG_KEYS) {
@@ -142,21 +140,43 @@ interface TrainingMonitorOptions {
   historyLastN?: number;
 }
 
+/** What the training job's progress counters do and do not mean. Observed
+ * live: after a run ends, `currentEpoch` and `percentage` count the
+ * post-training evaluation record as an epoch, so an early-stopped
+ * `fish/exp-2` reports 119 (118 trained) and a cancelled
+ * `road-safety-101/exp-3` reports 45 and 45% (44 trained); both still
+ * report a nonzero `etaMs`. Stated statically rather than corrected,
+ * because telling a running job from a finished one would mean caching the
+ * platform's status values. */
+const REPORTED_PROGRESS_NOTE =
+  "reportedCurrentEpoch, reportedProgressPercentage, and etaMs are the " +
+  "training job's own counters, passed through verbatim. After a run ends " +
+  "the epoch and percentage can count a post-training evaluation as an " +
+  "epoch, so they may be one epoch higher than the epochs actually " +
+  "trained, and etaMs can stay nonzero. resultRecordCount counts " +
+  "trainResults records, not epochs.";
+
 /** Report a model's training status and progress.
  *
  * Resolves the model reference by pure string parsing (ids are not
  * addressable), fills a missing owner from the account summary, and reads
  * the model record and its training job through the live owner-scoped
- * endpoints. Per-epoch history and key metrics come from the model record's
- * `trainResults` via the shared training projection; live progress and
- * timing come from the training job. A never-trained model reports a
- * `pending` or `untrained` job with null args and metrics, while an absent
- * job (null or a 404 from the training endpoint) falls back to
- * `trainResults`-derived progress. The job status is surfaced verbatim so a
- * cancelled or failed run stays distinguishable from a running one. The
- * recorded compute cost and the training error are surfaced when present.
- * This tool answers "how is this training run going right now?" only: the
- * top-level `metrics` object and `trainArgs` belong to `model_metrics`.
+ * endpoints. Progress comes only from the training job's own counters,
+ * surfaced verbatim as `reportedCurrentEpoch` and
+ * `reportedProgressPercentage` with a static note on their known
+ * inflation; when there is no job (null or a 404 from the training
+ * endpoint) progress is reported unavailable rather than inferred from the
+ * `trainResults` record count, which is not an epoch count. A never-trained
+ * model reports a `pending` or `untrained` job with null args and metrics.
+ * The job status is surfaced verbatim so a cancelled or failed run stays
+ * distinguishable from a running one. The recorded compute cost and the
+ * training error are surfaced when present. `lastReportedMetrics` is the
+ * last `trainResults` record in API order with its reported epoch, filtered
+ * to key metrics; it is not guaranteed to be the latest epoch.
+ * This tool answers "how is this training run going right now?" only:
+ * model quality — the best epoch, the top-level `metrics` object, and
+ * `trainArgs` — belongs to `model_metrics`, which validates the platform's
+ * reported best epoch before stating it.
  * `timing.elapsedMs` is wall-clock since model creation, evaluated at
  * request time: it tracks elapsed run time while training is active, but
  * for a finished model it reflects the model's age, not training duration.
@@ -184,24 +204,24 @@ export async function trainingMonitor(
   const totalEpochs = fields.epochs;
   const hasTotal = typeof totalEpochs === "number" && totalEpochs > 0;
   const trainResults = projection.trainResults;
-  const epochsDone = trainResults.length;
-  const latestMetrics =
-    epochsDone > 0
-      ? asRecord(asRecord(trainResults[epochsDone - 1]).metrics)
-      : {};
-  const keyMetrics: Record<string, unknown> = {};
-  for (const key of KEY_METRICS) {
-    if (key in latestMetrics) {
-      keyMetrics[key] = latestMetrics[key];
+  let lastReportedMetrics: {
+    epoch: unknown;
+    metrics: Record<string, unknown>;
+  } | null = null;
+  if (trainResults.length > 0) {
+    const lastRecord = asRecord(trainResults[trainResults.length - 1]);
+    const lastMetrics = asRecord(lastRecord.metrics);
+    const keyMetrics: Record<string, unknown> = {};
+    for (const key of KEY_METRICS) {
+      if (key in lastMetrics) {
+        keyMetrics[key] = lastMetrics[key];
+      }
     }
-  }
-  const metricsHistory = trainResults.slice(-historyLastN).map((entry) => {
-    const record = asRecord(entry);
-    return {
-      epoch: record.epoch ?? null,
-      metrics: asRecord(record.metrics),
+    lastReportedMetrics = {
+      epoch: lastRecord.epoch ?? null,
+      metrics: keyMetrics,
     };
-  });
+  }
   const computeCost = projection.computeCost;
   const modelTrainingError = fields.trainingError ?? null;
 
@@ -220,58 +240,46 @@ export async function trainingMonitor(
     job = null;
   }
 
-  const deriveFromHistory = (): {
-    progressPct: number | null;
-    progressText: string | null;
-  } => {
-    if (!hasTotal) {
-      return { progressPct: null, progressText: null };
-    }
-    const progressPct =
-      Math.round(((100 * epochsDone) / (totalEpochs as number)) * 10) / 10;
-    return { progressPct, progressText: formatPercent(progressPct) };
-  };
-
-  let progressPct: number | null;
-  let progressText: string | null;
-  let etaMs: number | null;
-  let source: string;
-  let timing: Record<string, unknown> | null;
-  let jobStatus: unknown;
-  let trainingError: unknown;
-  if (job === null) {
-    jobStatus = null;
-    trainingError = modelTrainingError;
-    timing = null;
-    source = "model.trainResults";
-    ({ progressPct, progressText } = deriveFromHistory());
-    etaMs = null;
-  } else {
-    const progress = asRecord(job.progress);
-    const timingRecord = asRecord(job.timing);
-    jobStatus = job.status ?? null;
-    if (typeof progress.percentage === "number") {
-      progressPct = progress.percentage;
-      progressText = String(progress.percentage);
-    } else {
-      ({ progressPct, progressText } = deriveFromHistory());
-    }
-    etaMs = typeof timingRecord.etaMs === "number" ? timingRecord.etaMs : null;
-    source = "models/{owner}/{project}/{model}/training";
-    timing = {
-      etaMs: timingRecord.etaMs ?? null,
-      timePerEpochMs: timingRecord.timePerEpochMs ?? null,
-      elapsedMs: timingRecord.elapsedMs ?? null,
-    };
-    trainingError = job.error ?? modelTrainingError ?? null;
-  }
+  const progress = asRecord(job?.progress);
+  const timingRecord = asRecord(job?.timing);
+  const reportedCurrentEpoch =
+    typeof progress.currentEpoch === "number" ? progress.currentEpoch : null;
+  const reportedProgressPercentage =
+    typeof progress.percentage === "number" ? progress.percentage : null;
+  const etaMs =
+    typeof timingRecord.etaMs === "number" ? timingRecord.etaMs : null;
+  const jobStatus = job === null ? null : (job.status ?? null);
+  const trainingError =
+    job === null
+      ? modelTrainingError
+      : (job.error ?? modelTrainingError ?? null);
+  const timing =
+    job === null
+      ? null
+      : {
+          etaMs: timingRecord.etaMs ?? null,
+          timePerEpochMs: timingRecord.timePerEpochMs ?? null,
+          elapsedMs: timingRecord.elapsedMs ?? null,
+        };
 
   const totalDisplay = hasTotal ? (totalEpochs as number) : "?";
+  const progressParts = [
+    ...(reportedCurrentEpoch !== null
+      ? [`epoch ${reportedCurrentEpoch}/${totalDisplay}`]
+      : []),
+    ...(reportedProgressPercentage !== null
+      ? [`~${reportedProgressPercentage}%`]
+      : []),
+  ];
+  const progressLabel =
+    progressParts.length > 0
+      ? `reported ${progressParts.join(", ")}`
+      : "reported progress unavailable";
   const summary =
     `Model '${resolved.model}' for owner '${resolvedOwner}' project '${resolved.project}': ` +
-    `training status=${pyField(status)} job=${pyField(jobStatus)}; epoch ${epochsDone}/${totalDisplay}` +
-    (progressPct !== null ? `; ~${progressText}%` : "") +
-    (etaMs ? `; ETA ${Math.round(etaMs / 60000)}min` : "");
+    `training status=${pyField(status)} job=${pyField(jobStatus)}; ${progressLabel}; ` +
+    `${trainResults.length} result record(s)` +
+    (etaMs ? `; reported ETA ${Math.round(etaMs / 60000)}min` : "");
 
   return {
     summary,
@@ -282,18 +290,19 @@ export async function trainingMonitor(
       modelId: fields.id ?? null,
       status,
       jobStatus,
-      epochsDone,
+      resultRecordCount: trainResults.length,
       totalEpochs: hasTotal ? (totalEpochs as number) : null,
-      progressPercentage: progressPct,
+      reportedCurrentEpoch,
+      reportedProgressPercentage,
+      progressNote: REPORTED_PROGRESS_NOTE,
       etaMs,
-      bestEpoch: projection.bestEpoch,
-      bestFitness: projection.bestFitness,
-      latestMetrics: keyMetrics,
+      lastReportedMetrics,
       computeCost,
       trainingError,
-      progressSource: source,
       timing,
-      ...(includeHistory ? { metricsHistory } : {}),
+      ...(includeHistory
+        ? { history: describeResultHistory(trainResults, historyLastN) }
+        : {}),
     },
   };
 }

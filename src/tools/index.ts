@@ -1318,7 +1318,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Report a model's training status and progress (works for private and public projects). timing.elapsedMs is wall-clock since model creation, evaluated at request time: it tracks elapsed run time while training is active, but for a finished model it reflects the model's age, not training duration. Billed training time is computeCost.durationMs.",
+      "Report a model's training status and progress (works for private and public projects). reportedCurrentEpoch, reportedProgressPercentage, and etaMs are the training job's own counters, passed through verbatim; after a run ends the epoch and percentage can count a post-training evaluation as an epoch, so they may be one higher than the epochs actually trained, and etaMs can stay nonzero. With no training job, progress is reported unavailable rather than inferred. resultRecordCount counts trainResults records, which are not epochs: a history can include a post-training evaluation record, duplicate or missing epoch numbers, and records out of epoch order. lastReportedMetrics is the last record in API order with its reported epoch, not necessarily the latest epoch. Model quality (best epoch, the model's reported metrics) belongs to model_metrics. timing.elapsedMs is wall-clock since model creation, evaluated at request time: it tracks elapsed run time while training is active, but for a finished model it reflects the model's age, not training duration. Billed training time is computeCost.durationMs.",
     inputSchema: {
       model: z
         .string()
@@ -1333,7 +1333,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .boolean()
         .optional()
         .describe(
-          "Include the epoch metrics history curve; omitted by default.",
+          "Include the trainResults history (per-record epoch and metrics); omitted by default.",
         ),
       history_last_n: z
         .number()
@@ -1341,7 +1341,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .positive()
         .optional()
         .describe(
-          "Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
+          "Limit the history to the last N records in API order (default 20). Truncates a long run to its tail; the response always reports the window it covers (record counts and the min/max reported epoch), so a flat tail is not mistaken for a converged run.",
         ),
     },
     annotations: {
@@ -1369,7 +1369,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Report a model's best-epoch and final-epoch evaluation metrics, labelled so one cannot be mistaken for the other (works for private and public projects). bestEpochMetrics is pulled explicitly from trainResults by matching its epoch field against bestEpoch, retrievable regardless of any include_history window; finalEpochMetrics is the model's top-level metrics field, observed live to always equal the last recorded epoch, never the best one. On a model with incoherent or missing training data (for example bestEpoch pointing past the recorded epochs), bestEpoch, bestFitness, and bestEpochMetrics are all reported as null rather than echoing the platform's unreliable raw values, and bestEpochNote explains why. include_train_args adds the full trainArgs object (111 keys observed live), omitted by default. include_history adds a metricsHistory-style curve and always states the window it covers, including when the full curve is returned.",
+      "Report a model's best training epoch and its reported metrics, labelled so neither can be mistaken for the other (works for private and public projects). bestEpoch, bestFitness, and bestEpochMetrics are stated only when exactly one trainResults record has the reported bestEpoch and that record's fitness exactly equals the reported bestFitness; otherwise all three are null and bestEpochNote keeps the platform's raw values and says why (older Ultralytics versions reported the last epoch as bestEpoch). reportedMetrics is the model's top-level metrics field verbatim; the API does not say which evaluation produced it (on Platform-trained runs observed live it matches the post-training evaluation of the best checkpoint, not the last training epoch), so it makes no epoch claim. resultRecordCount counts trainResults records, not epochs. include_train_args adds the full trainArgs object (111 keys observed live), omitted by default. include_history adds the last N records in API order and always states the window it covers, with record counts, the min/max reported epoch, and duplicate and missing epoch numbers in that range.",
     inputSchema: {
       model: z
         .string()
@@ -1384,7 +1384,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .boolean()
         .optional()
         .describe(
-          "Include the epoch metrics history curve; omitted by default.",
+          "Include the trainResults history (per-record epoch and metrics); omitted by default.",
         ),
       history_last_n: z
         .number()
@@ -1392,7 +1392,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .positive()
         .optional()
         .describe(
-          "Limit the history curve to the most recent N epochs (default 20). Truncates a long run to its tail; the response always reports the epoch window it covers, so a flat tail is not mistaken for a converged run.",
+          "Limit the history to the last N records in API order (default 20). Truncates a long run to its tail; the response always reports the window it covers (record counts and the min/max reported epoch), so a flat tail is not mistaken for a converged run.",
         ),
       include_train_args: z
         .boolean()

@@ -16,7 +16,6 @@ describe("trainingMonitor", () => {
   const REF = `${OWNER}/${PROJECT}/${MODEL}`;
   const MODEL_PATH = `/api/models/${OWNER}/${PROJECT}/${MODEL}`;
   const TRAINING_PATH = `${MODEL_PATH}/training`;
-  const LIVE_SOURCE = "models/{owner}/{project}/{model}/training";
 
   const completedModel = {
     id: "c".repeat(24),
@@ -111,8 +110,11 @@ describe("trainingMonitor", () => {
 
     expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, TRAINING_PATH]);
     expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': training status=completed job=completed; epoch 2/100; ~101%",
+      "Model 'exp' for owner 'alice' project 'road': training status=completed job=completed; reported epoch 101/100, ~101%; 2 result record(s)",
     );
+    // The job's counters are surfaced verbatim, never corrected or derived,
+    // and the model's bestEpoch/bestFitness are not reported at all: model
+    // quality belongs to model_metrics, which validates them first.
     expect(result.data).toEqual({
       owner: OWNER,
       project: PROJECT,
@@ -120,13 +122,15 @@ describe("trainingMonitor", () => {
       modelId: "c".repeat(24),
       status: "completed",
       jobStatus: "completed",
-      epochsDone: 2,
+      resultRecordCount: 2,
       totalEpochs: 100,
-      progressPercentage: 101,
+      reportedCurrentEpoch: 101,
+      reportedProgressPercentage: 101,
+      progressNote: expect.stringContaining(
+        "may be one epoch higher than the epochs actually trained",
+      ),
       etaMs: 0,
-      bestEpoch: 78,
-      bestFitness: 0.38792,
-      latestMetrics: { "metrics/mAP50(B)": 0.6 },
+      lastReportedMetrics: { epoch: 1, metrics: { "metrics/mAP50(B)": 0.6 } },
       computeCost: {
         gpuType: "rtx-pro-6000",
         pricePerHour: 1.89,
@@ -134,7 +138,6 @@ describe("trainingMonitor", () => {
         durationMs: 139413,
       },
       trainingError: null,
-      progressSource: LIVE_SOURCE,
       timing: { etaMs: 0, timePerEpochMs: 1322.8, elapsedMs: 139413 },
     });
   });
@@ -241,15 +244,15 @@ describe("trainingMonitor", () => {
     const result = await trainingMonitor(client, REF);
 
     expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': training status=cancelled job=cancelled; epoch 2/100; ~10%; ETA 40min",
+      "Model 'exp' for owner 'alice' project 'road': training status=cancelled job=cancelled; reported epoch 10/100, ~10%; 2 result record(s); reported ETA 40min",
     );
     expect(result.data).toMatchObject({
       status: "cancelled",
       jobStatus: "cancelled",
-      progressPercentage: 10,
+      reportedCurrentEpoch: 10,
+      reportedProgressPercentage: 10,
       etaMs: 2403081,
       trainingError: null,
-      progressSource: LIVE_SOURCE,
     });
   });
 
@@ -337,7 +340,7 @@ describe("trainingMonitor", () => {
     );
 
     expect(result.summary).toBe(
-      "Model 'fresh' for owner 'alice' project 'road': training status=untrained job=untrained; epoch 0/?; ~0%",
+      "Model 'fresh' for owner 'alice' project 'road': training status=untrained job=untrained; reported epoch 0/?, ~0%; 0 result record(s)",
     );
     expect(result.data).toEqual({
       owner: OWNER,
@@ -346,21 +349,20 @@ describe("trainingMonitor", () => {
       modelId: "d".repeat(24),
       status: "untrained",
       jobStatus: "untrained",
-      epochsDone: 0,
+      resultRecordCount: 0,
       totalEpochs: null,
-      progressPercentage: 0,
+      reportedCurrentEpoch: 0,
+      reportedProgressPercentage: 0,
+      progressNote: expect.any(String),
       etaMs: 0,
-      bestEpoch: null,
-      bestFitness: null,
-      latestMetrics: {},
+      lastReportedMetrics: null,
       computeCost: null,
       trainingError: null,
-      progressSource: LIVE_SOURCE,
       timing: { etaMs: 0, timePerEpochMs: 0, elapsedMs: 0 },
     });
   });
 
-  test("handles an absent job by falling back to trainResults", async () => {
+  test("reports progress unavailable for an absent job rather than inferring it from the record count", async () => {
     const { client } = monitorClient({
       modelBody: { model: completedModel, isOwner: true },
       jobBody: { job: null },
@@ -369,21 +371,22 @@ describe("trainingMonitor", () => {
     const result = await trainingMonitor(client, REF);
 
     expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': training status=completed job=None; epoch 2/100; ~2.0%",
+      "Model 'exp' for owner 'alice' project 'road': training status=completed job=None; reported progress unavailable; 2 result record(s)",
     );
     expect(result.data).toMatchObject({
       status: "completed",
       jobStatus: null,
-      epochsDone: 2,
+      resultRecordCount: 2,
       totalEpochs: 100,
-      progressPercentage: 2,
+      reportedCurrentEpoch: null,
+      reportedProgressPercentage: null,
       etaMs: null,
-      progressSource: "model.trainResults",
-      latestMetrics: { "metrics/mAP50(B)": 0.6 },
+      timing: null,
+      lastReportedMetrics: { epoch: 1, metrics: { "metrics/mAP50(B)": 0.6 } },
     });
   });
 
-  test("falls back to trainResults when the training endpoint 404s", async () => {
+  test("reports progress unavailable when the training endpoint 404s", async () => {
     const { client } = monitorClient({
       modelBody: { model: completedModel, isOwner: true },
       jobBody: { error: "Job not found" },
@@ -394,8 +397,8 @@ describe("trainingMonitor", () => {
 
     expect(result.data).toMatchObject({
       jobStatus: null,
-      progressPercentage: 2,
-      progressSource: "model.trainResults",
+      reportedCurrentEpoch: null,
+      reportedProgressPercentage: null,
     });
   });
 
@@ -451,7 +454,7 @@ describe("trainingMonitor", () => {
     expect(error.statusCode).toBe(429);
   });
 
-  test("current-epoch metrics stay filtered to key metrics and timing is always present, with no flag", async () => {
+  test("last reported metrics carry their reported epoch, stay filtered to key metrics, and timing is always present, with no flag", async () => {
     const { client } = monitorClient({
       modelBody: {
         model: {
@@ -485,9 +488,12 @@ describe("trainingMonitor", () => {
 
     const result = await trainingMonitor(client, REF);
     expect(result.data).toMatchObject({
-      latestMetrics: {
-        "metrics/mAP50(B)": 0.58282,
-        "metrics/mAP50-95(M)": 0.48394,
+      lastReportedMetrics: {
+        epoch: 69,
+        metrics: {
+          "metrics/mAP50(B)": 0.58282,
+          "metrics/mAP50-95(M)": 0.48394,
+        },
       },
       timing: {
         etaMs: 432343,
@@ -500,7 +506,7 @@ describe("trainingMonitor", () => {
     expect(result.data).not.toHaveProperty("trainArgs");
   });
 
-  test("include_history returns recent verbatim series", async () => {
+  test("include_history returns recent records verbatim with their window label", async () => {
     const { client } = monitorClient({
       modelBody: {
         model: {
@@ -522,12 +528,18 @@ describe("trainingMonitor", () => {
       historyLastN: 2,
     });
     expect(result.data).toMatchObject({
-      latestMetrics: { "metrics/mAP50(B)": 0.6 },
-      metricsHistory: [
-        { epoch: 2, metrics: { lr: 0.0001 } },
-        { epoch: 3, metrics: { "metrics/mAP50(B)": 0.6, lr: 0.00001 } },
-      ],
+      lastReportedMetrics: { epoch: 3, metrics: { "metrics/mAP50(B)": 0.6 } },
+      history: {
+        window:
+          "last 2 of 4 record(s) in API order; reported epochs 2-3, " +
+          "0 duplicate and 0 missing epoch number(s) in that range",
+        entries: [
+          { epoch: 2, metrics: { lr: 0.0001 } },
+          { epoch: 3, metrics: { "metrics/mAP50(B)": 0.6, lr: 0.00001 } },
+        ],
+      },
     });
+    expect(result.data).not.toHaveProperty("metricsHistory");
   });
 
   test.each([
@@ -543,7 +555,7 @@ describe("trainingMonitor", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test("unknown epoch total skips percentage math", async () => {
+  test("unknown epoch total renders as ? and no progress is derived", async () => {
     const { client } = monitorClient({
       modelBody: {
         model: {
@@ -558,11 +570,11 @@ describe("trainingMonitor", () => {
 
     const result = await trainingMonitor(client, REF);
     expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': training status=completed job=None; epoch 1/?",
+      "Model 'exp' for owner 'alice' project 'road': training status=completed job=None; reported progress unavailable; 1 result record(s)",
     );
     expect(result.data).toMatchObject({
       totalEpochs: null,
-      progressPercentage: null,
+      reportedProgressPercentage: null,
     });
   });
 
@@ -602,7 +614,7 @@ describe("trainingMonitor", () => {
       jobStatus: "running",
       computeCost: null,
       trainingError: null,
-      latestMetrics: {},
+      lastReportedMetrics: null,
     });
   });
 });

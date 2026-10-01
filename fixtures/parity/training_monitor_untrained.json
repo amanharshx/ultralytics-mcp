@@ -46,7 +46,7 @@
     }
   ],
   "expected": {
-    "summary": "Model 'example-untrained-1' for owner 'example-owner' project 'example-project-1': training status=pending job=pending; epoch 0/?; ~0%",
+    "summary": "Model 'example-untrained-1' for owner 'example-owner' project 'example-project-1': training status=pending job=pending; reported ~0%; 0 result record(s)",
     "data": {
       "owner": "example-owner",
       "project": "example-project-1",
@@ -54,16 +54,15 @@
       "modelId": "000000000000000000000003",
       "status": "pending",
       "jobStatus": "pending",
-      "epochsDone": 0,
+      "resultRecordCount": 0,
       "totalEpochs": null,
-      "progressPercentage": 0,
+      "reportedCurrentEpoch": null,
+      "reportedProgressPercentage": 0,
+      "progressNote": "reportedCurrentEpoch, reportedProgressPercentage, and etaMs are the training job's own counters, passed through verbatim. After a run ends the epoch and percentage can count a post-training evaluation as an epoch, so they may be one epoch higher than the epochs actually trained, and etaMs can stay nonzero. resultRecordCount counts trainResults records, not epochs.",
       "etaMs": 0,
-      "bestEpoch": null,
-      "bestFitness": null,
-      "latestMetrics": {},
+      "lastReportedMetrics": null,
       "computeCost": null,
       "trainingError": null,
-      "progressSource": "models/{owner}/{project}/{model}/training",
       "timing": {
         "etaMs": 0,
         "timePerEpochMs": 0,

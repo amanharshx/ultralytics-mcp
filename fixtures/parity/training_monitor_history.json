@@ -124,7 +124,7 @@
     }
   ],
   "expected": {
-    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': training status=completed job=completed; epoch 4/100; ~101%",
+    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': training status=completed job=completed; reported ~101%; 4 result record(s)",
     "data": {
       "owner": "example-owner",
       "project": "example-project-1",
@@ -132,15 +132,18 @@
       "modelId": "000000000000000000000001",
       "status": "completed",
       "jobStatus": "completed",
-      "epochsDone": 4,
+      "resultRecordCount": 4,
       "totalEpochs": 100,
-      "progressPercentage": 101,
+      "reportedCurrentEpoch": null,
+      "reportedProgressPercentage": 101,
+      "progressNote": "reportedCurrentEpoch, reportedProgressPercentage, and etaMs are the training job's own counters, passed through verbatim. After a run ends the epoch and percentage can count a post-training evaluation as an epoch, so they may be one epoch higher than the epochs actually trained, and etaMs can stay nonzero. resultRecordCount counts trainResults records, not epochs.",
       "etaMs": 0,
-      "bestEpoch": 78,
-      "bestFitness": 0.38792,
-      "latestMetrics": {
-        "metrics/mAP50(B)": 0.04556,
-        "metrics/mAP50-95(B)": 0.02595
+      "lastReportedMetrics": {
+        "epoch": 3,
+        "metrics": {
+          "metrics/mAP50(B)": 0.04556,
+          "metrics/mAP50-95(B)": 0.02595
+        }
       },
       "computeCost": {
         "gpuType": "rtx-pro-6000",
@@ -150,61 +153,70 @@
         "durationMs": 139413
       },
       "trainingError": null,
-      "progressSource": "models/{owner}/{project}/{model}/training",
-      "metricsHistory": [
-        {
-          "epoch": 1,
-          "metrics": {
-            "train/box_loss": 1.82718,
-            "train/cls_loss": 3.87334,
-            "train/dfl_loss": 0.00285,
-            "metrics/precision(B)": 0.04,
-            "metrics/recall(B)": 0.11429,
-            "metrics/mAP50(B)": 0.01108,
-            "metrics/mAP50-95(B)": 0.00553,
-            "val/box_loss": 1.35829,
-            "val/cls_loss": 3.92495,
-            "val/dfl_loss": 0.0032,
-            "lr": 0.00002
-          }
-        },
-        {
-          "epoch": 2,
-          "metrics": {
-            "train/box_loss": 1.44327,
-            "train/cls_loss": 3.75205,
-            "train/dfl_loss": 0.00328,
-            "metrics/precision(B)": 0.04,
-            "metrics/recall(B)": 0.11429,
-            "metrics/mAP50(B)": 0.01108,
-            "metrics/mAP50-95(B)": 0.00553,
-            "val/box_loss": 1.35829,
-            "val/cls_loss": 3.92495,
-            "val/dfl_loss": 0.0032,
-            "lr": 0.000039
-          }
-        },
-        {
-          "epoch": 3,
-          "metrics": {
-            "train/box_loss": 1.59761,
-            "train/cls_loss": 3.78163,
-            "train/dfl_loss": 0.0029,
-            "metrics/precision(B)": 0.07,
-            "metrics/recall(B)": 0.2,
-            "metrics/mAP50(B)": 0.04556,
-            "metrics/mAP50-95(B)": 0.02595,
-            "val/box_loss": 1.22555,
-            "val/cls_loss": 3.37073,
-            "val/dfl_loss": 0.00279,
-            "lr": 0.000058
-          }
-        }
-      ],
       "timing": {
         "etaMs": 0,
         "timePerEpochMs": 1322.851485148515,
         "elapsedMs": 6050547803
+      },
+      "history": {
+        "window": "last 3 of 4 record(s) in API order; reported epochs 1-3, 0 duplicate and 0 missing epoch number(s) in that range",
+        "returnedRecords": 3,
+        "totalRecords": 4,
+        "minEpoch": 1,
+        "maxEpoch": 3,
+        "duplicateEpochs": 0,
+        "missingEpochs": 0,
+        "note": "Records are returned in API order. In observed Platform-trained histories this follows timestamp order, but epoch values are not guaranteed to be ordered, unique, or contiguous. A record may be a post-training evaluation rather than a training epoch; the API does not mark which. Uploaded/backfilled histories may lack timestamps.",
+        "entries": [
+          {
+            "epoch": 1,
+            "metrics": {
+              "train/box_loss": 1.82718,
+              "train/cls_loss": 3.87334,
+              "train/dfl_loss": 0.00285,
+              "metrics/precision(B)": 0.04,
+              "metrics/recall(B)": 0.11429,
+              "metrics/mAP50(B)": 0.01108,
+              "metrics/mAP50-95(B)": 0.00553,
+              "val/box_loss": 1.35829,
+              "val/cls_loss": 3.92495,
+              "val/dfl_loss": 0.0032,
+              "lr": 0.00002
+            }
+          },
+          {
+            "epoch": 2,
+            "metrics": {
+              "train/box_loss": 1.44327,
+              "train/cls_loss": 3.75205,
+              "train/dfl_loss": 0.00328,
+              "metrics/precision(B)": 0.04,
+              "metrics/recall(B)": 0.11429,
+              "metrics/mAP50(B)": 0.01108,
+              "metrics/mAP50-95(B)": 0.00553,
+              "val/box_loss": 1.35829,
+              "val/cls_loss": 3.92495,
+              "val/dfl_loss": 0.0032,
+              "lr": 0.000039
+            }
+          },
+          {
+            "epoch": 3,
+            "metrics": {
+              "train/box_loss": 1.59761,
+              "train/cls_loss": 3.78163,
+              "train/dfl_loss": 0.0029,
+              "metrics/precision(B)": 0.07,
+              "metrics/recall(B)": 0.2,
+              "metrics/mAP50(B)": 0.04556,
+              "metrics/mAP50-95(B)": 0.02595,
+              "val/box_loss": 1.22555,
+              "val/cls_loss": 3.37073,
+              "val/dfl_loss": 0.00279,
+              "lr": 0.000058
+            }
+          }
+        ]
       }
     }
   }
