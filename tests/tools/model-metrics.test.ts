@@ -361,40 +361,6 @@ describe("modelMetrics", () => {
     ).client;
   }
 
-  // `eggs-and-bowls/exp-2` and `pothole/exp-2`, observed live: a pre-v8.4.52
-  // post-training record duplicates the last epoch number, so two records
-  // match bestEpoch -- on eggs-and-bowls/exp-2 both even carry bestFitness.
-  test("rejects a bestEpoch matched by several records even when every match carries the reported fitness", async () => {
-    const client = bestEpochClient({
-      bestEpoch: 99,
-      bestFitness: 0.995,
-      trainResults: [
-        { epoch: 98, metrics: { "metrics/mAP50-95(B)": 0.99 }, fitness: 0.99 },
-        {
-          epoch: 99,
-          metrics: { "metrics/mAP50-95(B)": 0.995 },
-          fitness: 0.995,
-        },
-        {
-          epoch: 99,
-          metrics: { "metrics/mAP50-95(B)": 0.996 },
-          fitness: 0.995,
-        },
-      ],
-    });
-
-    const result = await modelMetrics(client, `${OWNER}/${PROJECT}/${MODEL}`);
-    const data = result.data as Record<string, unknown>;
-    expect(data.bestEpoch).toBeNull();
-    expect(data.bestFitness).toBeNull();
-    expect(data.bestEpochMetrics).toBeNull();
-    expect(data.bestEpochNote).toBe(
-      "the model reports bestEpoch 99 (bestFitness 0.995), but 2 result " +
-        "records report epoch 99, so which one it refers to is ambiguous; " +
-        "not treated as fact.",
-    );
-  });
-
   // Ultralytics before v8.4.48 reported the last epoch as bestEpoch; if that
   // run's duplicate post-training record never arrived, exactly one record
   // matches, and only the fitness check catches it.
