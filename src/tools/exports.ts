@@ -11,7 +11,7 @@ import { asRecord, listField, pyField } from "./shared.js";
  * artifact instead of stopping it, and an unrecognized status is exactly the
  * kind of platform-behaviour cache that should fail closed rather than
  * assume it is safe to proceed. */
-const ACTIVE_EXPORT_STATUSES = new Set(["queued", "running"]);
+const ACTIVE_EXPORT_STATUSES = new Set(["queued", "starting", "running"]);
 
 /** Unwrap an export API response, which nests the job as `{export}` on some
  * endpoints and returns it flat on others. */
@@ -225,14 +225,15 @@ export async function exportCreate(
  * before acting. The cancel verb is dual-purpose: sent to an active export it
  * cancels the job, but sent to a finished one it deletes the produced
  * artifact irreversibly, with no trash recovery. This tool sends the request
- * only while the export is affirmatively active (`queued` or `running`) and
- * otherwise refuses — including for a status it doesn't recognize, so an
- * unexpected future value fails closed instead of falling through to the
- * destructive path — explaining that it cancels running exports and does not
- * delete finished ones. The status check cannot be atomic: an export that
- * finishes between the check and the cancel request will still have its
- * artifact deleted rather than cancelled, and that deletion is irreversible.
- * The action the API reports is surfaced verbatim rather than assumed.
+ * only while the export is affirmatively active (`queued`, `starting`, or
+ * `running`) and otherwise refuses — including for a status it doesn't
+ * recognize, so an unexpected future value fails closed instead of falling
+ * through to the destructive path — explaining that it cancels running
+ * exports and does not delete finished ones. The status check cannot be
+ * atomic: an export that finishes between the check and the cancel request
+ * will still have its artifact deleted rather than cancelled, and that
+ * deletion is irreversible. The action the API reports is surfaced verbatim
+ * rather than assumed.
  */
 export async function exportCancel(
   client: UltralyticsClient,
@@ -250,7 +251,7 @@ export async function exportCancel(
     throw new Error(
       `Export '${exportId}' for model '${resolved.model}' for owner '${resolvedOwner}' ` +
         `project '${resolved.project}' has status '${pyField(status)}' and is not active. ` +
-        "export_cancel only cancels queued or running exports; it does not delete finished ones.",
+        "export_cancel only cancels queued, starting, or running exports; it does not delete finished ones.",
     );
   }
 

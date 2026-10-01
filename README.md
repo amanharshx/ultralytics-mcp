@@ -194,7 +194,7 @@ local-path behavior, and examples for the tricky tools.
 - `training_start` in checkpoint mode (a base checkpoint like `yolo11n.pt`, not an existing model ref) creates the project model before the platform checks the checkpoint's task against the dataset's
 - If that check fails, the model it already created is not deleted automatically. The error names the model; review it and delete it with `models_delete` if it is unwanted
 - Cancelling a running training job preserves the latest checkpoint and keeps the model
-- `export_cancel` proceeds only when it observes an export as `queued` or `running`, and refuses every other status, including unrecognized ones. Because the status check and the cancel request are not atomic, an export that finishes between them may have its artifact irreversibly deleted
+- `export_cancel` proceeds only when it observes an export as `queued`, `starting`, or `running`, and refuses every other status, including unrecognized ones. Because the status check and the cancel request are not atomic, an export that finishes between them may have its artifact irreversibly deleted
 - Deleting a project or dataset is a soft delete to trash, restorable for 30 days. Deleting a project reports the cascade count; deleting a dataset moves its images and annotations with it and leaves models trained on it unaffected
 - Ambiguous project or dataset refs fail instead of guessing
 - Signed upload and download URLs do not forward `Authorization`
