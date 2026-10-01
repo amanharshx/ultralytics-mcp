@@ -12,17 +12,25 @@ import { asRecord, listField, pyCount, pyField } from "./shared.js";
  * filled from the account summary and named in the summary output so the
  * caller can tell which workspace was read. An explicit `owner` always wins;
  * `username` remains as a compatibility alias for it.
+ *
+ * `limit` is forwarded only when given, so the server applies its own
+ * default. The response's `total` counts every project the caller can see,
+ * so a page shorter than it is labelled as partial rather than presented as
+ * the whole workspace.
  */
 export async function projectsList(
   client: UltralyticsClient,
   owner?: string,
   username?: string,
+  limit?: number,
 ): Promise<NormalizedToolResult> {
   const explicit = owner?.trim() || username?.trim() || undefined;
   const resolvedOwner = explicit ?? (await client.getAccountOwner());
   const data = await client.get(
     `/projects/${encodeURIComponent(resolvedOwner)}`,
+    { limit },
   );
+  const total = asRecord(data).total;
   const items = listField(data, "projects").map((project) => ({
     id: project.id ?? null,
     name: project.name ?? null,
@@ -31,10 +39,11 @@ export async function projectsList(
     visibility: project.visibility ?? null,
     modelCount: project.modelCount ?? null,
   }));
-  return {
-    summary: `${items.length} project(s) for owner '${resolvedOwner}'.`,
-    data: items,
-  };
+  const summary =
+    typeof total === "number" && total > items.length
+      ? `Showing ${items.length} of ${total} project(s) for owner '${resolvedOwner}'.`
+      : `${items.length} project(s) for owner '${resolvedOwner}'.`;
+  return { summary, data: items };
 }
 
 export interface ExploreProjectsOptions {

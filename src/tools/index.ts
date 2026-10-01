@@ -160,16 +160,23 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("Compatibility alias for owner."),
+      limit: z
+        .number()
+        .optional()
+        .describe(
+          "Maximum projects to return. Omit for the server default (currently 20); the API currently accepts up to 500.",
+        ),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
-      async ({ owner, username }) =>
+      async ({ owner, username, limit }) =>
         toMcpTextResult(
           await projectsList(
             getClient(),
             owner as string | undefined,
             username as string | undefined,
+            limit as number | undefined,
           ),
         ),
   }),
@@ -1010,12 +1017,24 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       project: z
         .string()
         .describe("Project ref by slug, owner/slug, or ul:// URI."),
+      limit: z
+        .number()
+        .optional()
+        .describe(
+          "Maximum models to return. Omit for the server default (currently 20); the API currently accepts up to 100.",
+        ),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
-      async ({ project }) =>
-        toMcpTextResult(await modelsList(getClient(), project as string)),
+      async ({ project, limit }) =>
+        toMcpTextResult(
+          await modelsList(
+            getClient(),
+            project as string,
+            limit as number | undefined,
+          ),
+        ),
   }),
   tool({
     name: "models_get",

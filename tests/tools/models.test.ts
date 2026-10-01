@@ -52,7 +52,7 @@ describe("modelsList", () => {
 
     const result = await modelsList(client, "road");
     expect(result.summary).toBe(
-      "2 model(s) for project 'road' for owner 'alice'.",
+      "2 model(s) for project 'road' for owner 'alice'. The API may have truncated this list; pass limit to request more.",
     );
     expect(result.data).toEqual([
       {
@@ -82,6 +82,21 @@ describe("modelsList", () => {
       "/api/account/summary",
       "/api/models/alice/road",
     ]);
+  });
+
+  test("reports a page under an explicit limit as complete", async () => {
+    const { client } = routeClient((path) =>
+      path === "/api/models/bob/road"
+        ? jsonResponse({
+            models: [{ model: "a" }, { model: "b" }],
+            region: "eu",
+          })
+        : jsonResponse({}, 404),
+    );
+    const result = await modelsList(client, "bob/road", 100);
+    expect(result.summary).toBe(
+      "2 model(s) for project 'road' for owner 'bob'.",
+    );
   });
 
   test("prefers an explicit owner and skips the account summary", async () => {
