@@ -217,6 +217,7 @@ const TOOL_RUNNERS: Record<
       client,
       args.owner as string | undefined,
       args.username as string | undefined,
+      args.limit as number | undefined,
     ),
   projects_get: (client, args) => projectsGet(client, args.project as string),
   projects_create: (client, args) =>
@@ -373,7 +374,12 @@ const TOOL_RUNNERS: Record<
     }),
   projects_delete: (client, args) =>
     projectsDelete(client, args.project as string),
-  models_list: (client, args) => modelsList(client, args.project as string),
+  models_list: (client, args) =>
+    modelsList(
+      client,
+      args.project as string,
+      args.limit as number | undefined,
+    ),
   models_get: (client, args) =>
     modelsGet(client, args.model as string, args.project as string | undefined),
   models_delete: (client, args) =>
@@ -547,10 +553,12 @@ describe("parity fixtures", () => {
         "model_metrics_cancelled.json",
         "model_plots.json",
         "models_list.json",
+        "models_list_limit_reached.json",
         "projects_create.json",
         "projects_delete.json",
         "projects_get.json",
         "projects_list.json",
+        "projects_list_truncated.json",
         "deployments_list.json",
         "deployment_get_deploying.json",
         "deployment_get_ready.json",

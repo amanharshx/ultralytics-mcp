@@ -1,0 +1,97 @@
+{
+  "tool": "projects_list",
+  "args": {
+    "owner": "ultralytics",
+    "limit": 2
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/projects/ultralytics",
+      "query": {
+        "limit": "2"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "projects": [
+            {
+              "id": "6aa56d76f22cda46d8c79391",
+              "owner": "ultralytics",
+              "project": "solutions",
+              "name": "Solutions",
+              "description": "Professional computer vision models for Ultralytics industry and solution demos.",
+              "visibility": "public",
+              "license": "None",
+              "iconColor": "orange",
+              "modelCount": 12,
+              "modelNames": [
+                "Document Signature Detection YOLO26n",
+                "Driver Drowsiness Detection YOLO26n",
+                "Crowd Detection YOLO26x"
+              ],
+              "totalBytes": 323436647,
+              "starCount": 0,
+              "isStarred": false,
+              "cloneCount": 1,
+              "createdAt": "2026-09-12T15:19:18.296Z",
+              "updatedAt": "2026-09-12T15:19:18.296Z"
+            },
+            {
+              "id": "69674042917248ce44d80242",
+              "owner": "ultralytics",
+              "project": "yolo26",
+              "name": "YOLO26",
+              "description": "Newest SOTA Ultralytics models, released January 2026. Smaller, faster, and more accurate than previous versions with native end-to-end inference.",
+              "visibility": "public",
+              "license": "AGPL-3.0",
+              "iconColor": "red",
+              "iconLetter": "26",
+              "iconImage": "https://cdn.ul.run/eu/users/user_38BClQ6JUxGqFjffFWUROzyWDIf/projects/69674042917248ce44d80242/icon.webp?Expires=1790832600&KeyName=key-v1&Signature=REDACTED",
+              "modelCount": 35,
+              "modelNames": [
+                "yolo26x-depth",
+                "yolo26l-depth",
+                "yolo26m-depth"
+              ],
+              "totalBytes": 1609221683,
+              "starCount": 72,
+              "isStarred": false,
+              "cloneCount": 882,
+              "viewPreferences": {
+                "sortBy": "size-asc",
+                "groupBy": "task",
+                "statusFilter": "all"
+              },
+              "createdAt": "2026-01-14T07:05:38.390Z",
+              "updatedAt": "2026-08-21T19:16:16.916Z"
+            }
+          ],
+          "total": 5,
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Showing 2 of 5 project(s) for owner 'ultralytics'.",
+    "data": [
+      {
+        "id": "6aa56d76f22cda46d8c79391",
+        "name": "Solutions",
+        "slug": "solutions",
+        "username": "ultralytics",
+        "visibility": "public",
+        "modelCount": 12
+      },
+      {
+        "id": "69674042917248ce44d80242",
+        "name": "YOLO26",
+        "slug": "yolo26",
+        "username": "ultralytics",
+        "visibility": "public",
+        "modelCount": 35
+      }
+    ]
+  }
+}

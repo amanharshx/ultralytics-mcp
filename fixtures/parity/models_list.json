@@ -42,7 +42,7 @@
     }
   ],
   "expected": {
-    "summary": "2 model(s) for project 'example-project-1' for owner 'example-owner'.",
+    "summary": "2 model(s) for project 'example-project-1' for owner 'example-owner'. The API may have truncated this list; pass limit to request more.",
     "data": [
       {
         "id": "000000000000000000000001",

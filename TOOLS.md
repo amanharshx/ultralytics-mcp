@@ -45,6 +45,7 @@ Metadata: read-only
 | --- | --- | --- | --- |
 | `owner` | string | No | Workspace owner; defaults to the account owner. Takes precedence over username when both are given. |
 | `username` | string | No | Compatibility alias for owner. |
+| `limit` | number | No | Maximum projects to return. Omit for the server default (currently 20); the API currently accepts up to 500. |
 
 ### projects_get
 
@@ -322,6 +323,7 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `project` | string | Yes | Project ref by slug, owner/slug, or ul:// URI. |
+| `limit` | number | No | Maximum models to return. Omit for the server default (currently 20); the API currently accepts up to 100. |
 
 ### models_get
 

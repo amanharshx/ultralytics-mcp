@@ -12,15 +12,22 @@ import { asRecord, listField, pyField } from "./shared.js";
  * the live owner-scoped endpoint. The API returns `{models[], region}`;
  * items name the resource via `id`, `model` (slug), `owner`, and `name`,
  * which the tool surfaces.
+ *
+ * `limit` is forwarded only when given, so the server applies its own
+ * default. The response carries no total and the tool does not mirror the
+ * server's default, so a non-empty list is never presented as complete
+ * unless an explicit limit was not reached.
  */
 export async function modelsList(
   client: UltralyticsClient,
   project: string,
+  limit?: number,
 ): Promise<NormalizedToolResult> {
   const { owner: refOwner, project: refSlug } = resolveProject(project);
   const resolvedOwner = refOwner ?? (await client.getAccountOwner());
   const data = await client.get(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(refSlug)}`,
+    { limit },
   );
   const items = listField(data, "models").map((model) => ({
     id: model.id ?? null,
@@ -33,10 +40,14 @@ export async function modelsList(
     epochs: model.epochs ?? null,
     bestFitness: model.bestFitness ?? null,
   }));
-  return {
-    summary: `${items.length} model(s) for project '${refSlug}' for owner '${resolvedOwner}'.`,
-    data: items,
-  };
+  let summary = `${items.length} model(s) for project '${refSlug}' for owner '${resolvedOwner}'.`;
+  if (items.length > 0 && limit === undefined) {
+    summary +=
+      " The API may have truncated this list; pass limit to request more.";
+  } else if (limit !== undefined && items.length >= limit) {
+    summary += ` The requested limit of ${limit} was reached; more may exist.`;
+  }
+  return { summary, data: items };
 }
 
 /** Get one model by owner/project/model, ul:// URI, or slug with a project.
