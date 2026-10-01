@@ -693,9 +693,9 @@ describe("exportCancel", () => {
     });
   });
 
-  test("cancels a running export", async () => {
+  test.each(["starting", "running"])("cancels a %s export", async (status) => {
     const { client, calls } = sequenceClient([
-      () => jsonResponse(exportStatusBody("running")),
+      () => jsonResponse(exportStatusBody(status)),
       () => jsonResponse({ success: true, action: "cancelled" }),
     ]);
 
@@ -733,7 +733,7 @@ describe("exportCancel", () => {
 
     await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
       new RegExp(
-        `has status '${status}' and is not active.*only cancels queued or running exports`,
+        `has status '${status}' and is not active.*only cancels queued, starting, or running exports`,
         "s",
       ),
     );
@@ -746,7 +746,7 @@ describe("exportCancel", () => {
     ]);
 
     await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
-      /has status 'archived' and is not active.*only cancels queued or running exports/s,
+      /has status 'archived' and is not active.*only cancels queued, starting, or running exports/s,
     );
     expect(calls).toEqual([{ method: "GET", path: EXPORT_PATH }]);
   });
