@@ -48,6 +48,6 @@
   ],
   "expectedError": {
     "status": 200,
-    "message": "Model 'example-model-1' already has a recorded run (status=completed, 2 recorded epoch(s)). Starting training again replaces this model's status, epoch count, and per-epoch metric history, and that history cannot be recovered through the API; the previously uploaded weights survive. Set confirm_history_loss=true to proceed. This is separate from confirm_cost."
+    "message": "Model 'example-model-1' already has a recorded run (status=completed, 2 training result record(s)). Starting training again replaces this model's status, epoch count, and training result history, and that history cannot be recovered through the API; the previously uploaded weights survive. Set confirm_history_loss=true to proceed. This is separate from confirm_cost."
   }
 }

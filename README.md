@@ -189,7 +189,7 @@ local-path behavior, and examples for the tricky tools.
 
 - Projects and datasets are created private by default, even though the platform itself defaults to public
 - `export_create` requires `confirm_cost: true`
-- `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run. That path replaces its status, epoch count, and per-epoch metric history irrecoverably
+- `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run. That path replaces its status, epoch count, and training result history irrecoverably
 - Starting a training job or an export is billable immediately, so the estimated cost and remaining balance are reported after the job starts, not before
 - `training_start` in checkpoint mode (a base checkpoint like `yolo11n.pt`, not an existing model ref) creates the project model before the platform checks the checkpoint's task against the dataset's
 - If that check fails, the model it already created is not deleted automatically. The error names the model; review it and delete it with `models_delete` if it is unwanted
