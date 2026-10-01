@@ -1700,10 +1700,6 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .optional()
         .describe("GPU type required for TensorRT engine exports."),
       imgsz: z.number().optional().describe("Image size for export."),
-      half: z
-        .boolean()
-        .optional()
-        .describe("Legacy FP16 export precision flag."),
       dynamic: z.boolean().optional().describe("Dynamic input shapes."),
       confirm_cost: z
         .boolean()
@@ -1736,7 +1732,6 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         project,
         gpu_type,
         imgsz,
-        half,
         dynamic,
         confirm_cost,
       }) =>
@@ -1745,7 +1740,6 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             project: project as string | undefined,
             gpuType: gpu_type as string | undefined,
             imgsz: imgsz as number | undefined,
-            half: half as boolean | undefined,
             dynamic: dynamic as boolean | undefined,
             confirmCost: confirm_cost as boolean | undefined,
           }),
@@ -1988,7 +1982,7 @@ function registerToolDefinitions(
       definition.name,
       {
         description: definition.description,
-        inputSchema: definition.inputSchema,
+        inputSchema: z.object(definition.inputSchema).strict(),
         annotations: definition.annotations,
       },
       definition.createHandler(getClient),

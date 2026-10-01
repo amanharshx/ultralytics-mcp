@@ -155,19 +155,11 @@ export async function exportCreate(
     project?: string;
     gpuType?: string;
     imgsz?: number;
-    half?: boolean;
     dynamic?: boolean;
     confirmCost?: boolean;
   } = {},
 ): Promise<NormalizedToolResult> {
-  const {
-    project,
-    gpuType,
-    imgsz,
-    half,
-    dynamic,
-    confirmCost = false,
-  } = options;
+  const { project, gpuType, imgsz, dynamic, confirmCost = false } = options;
   if (!confirmCost) {
     throw new Error("Set confirm_cost=true to create an export job.");
   }
@@ -190,9 +182,6 @@ export async function exportCreate(
   const args: Record<string, unknown> = {};
   if (imgsz !== undefined) {
     args.imgsz = imgsz;
-  }
-  if (half !== undefined) {
-    args.half = half;
   }
   if (dynamic !== undefined) {
     args.dynamic = dynamic;
