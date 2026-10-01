@@ -16,8 +16,9 @@ Auto-generated reference for Ultralytics Platform MCP tools.
 - `dataset_upload_folder` uploads a local image folder.
 - `dataset_upload_video` extracts frames from a local video file with `ffmpeg`.
 - `model_download` writes model weights to a local destination path.
+- `model_predict` reads a local image or video file from `file_path` to run inference.
 - `deployment_predict` reads a local image file to run inference.
-- Review local upload paths before approving tool calls; upload tools and `deployment_predict` read from the MCP client host.
+- Review local upload paths before approving tool calls; upload tools, `model_predict` with `file_path`, and `deployment_predict` read from the MCP client host.
 - Review `model_download.output_path` and `overwrite` before approving downloads.
 
 ## Cost and Safety
@@ -375,14 +376,15 @@ Metadata: read-only, external/live
 
 ### model_predict
 
-Run inference with a trained model on an image URL or base64 source (no local file paths).
+Run inference with a trained model on an image URL or base64 image (`source`), or on a local image or video file (`file_path`). Give exactly one.
 
 Metadata: read-only, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
-| `source` | string | Yes | Image URL, base64-encoded image (standard or URL-safe; optional padding; ASCII whitespace ignored), or base64 data: URI (data:<mime>;base64,<payload>). Base64 is uploaded as an image file, bypassing the API source field's 4,096-character limit; MCP client argument limits may still apply. Local file paths are not supported. |
+| `source` | string | No | Image URL, base64-encoded image (standard or URL-safe; optional padding; ASCII whitespace ignored), or base64 data: URI (data:<mime>;base64,<payload>). Base64 is uploaded as an image file, bypassing the API source field's 4,096-character limit; MCP client argument limits may still apply, so prefer file_path for local files. |
+| `file_path` | string | No | Local path to an image or video file, uploaded as-is. The server decides which formats and sizes it accepts. |
 | `project` | string | No | Project ref required when model is given by slug. |
 | `conf` | number | No | Confidence threshold (0.01-1, server default applies if omitted). |
 | `iou` | number | No | IoU threshold used for NMS (0-0.95, server default applies if omitted). |
@@ -404,6 +406,15 @@ Metadata: read-only, external/live
 {
   "model": "team/project/my-model",
   "source": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD..."
+}
+```
+
+#### Predict from a local file
+
+```json
+{
+  "model": "team/project/my-model",
+  "file_path": "/path/to/image.jpg"
 }
 ```
 

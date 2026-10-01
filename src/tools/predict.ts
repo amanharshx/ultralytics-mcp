@@ -1,6 +1,9 @@
-/** Inference tool. Accepts only an image URL or base64 source (no local paths). */
+/** Inference tool. Accepts an image URL, a base64 image, or a local file. */
 
-import type { UltralyticsClient } from "../client.js";
+import { readFile, stat } from "node:fs/promises";
+import { basename } from "node:path";
+
+import type { MultipartFile, UltralyticsClient } from "../client.js";
 import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { type PredictParams, projectPredictResult } from "./shared.js";
@@ -27,7 +30,7 @@ function decodeBase64(text: string): Buffer | null {
   return bytes.toString("base64url") === canonical ? bytes : null;
 }
 
-/** Run inference from an image URL or base64 source. Local paths are not accepted.
+/** Run inference from an image URL, a base64 image, or a local file.
  *
  * Resolves the model reference by pure string parsing (ids are not
  * addressable), fills a missing owner from the account summary, and posts
@@ -47,6 +50,14 @@ function decodeBase64(text: string): Buffer | null {
  * under that name (verified live). Malformed base64 and non-base64 `data:`
  * URIs are rejected before any request.
  *
+ * A `filePath` is uploaded as the `file` part under its own basename, typed
+ * `application/octet-stream`. Only existence and being a regular file are
+ * checked locally: which image and video formats are supported, and how
+ * large a file may be, are the server's rules and its errors are surfaced
+ * verbatim (verified live: an `.mp4` returns one image entry per frame; the
+ * spec documents `413` for oversized input). Exactly one of `source` and
+ * `filePath` must be given.
+ *
  * A model without weights fails with `400 {"error":"Model has no trained
  * weights"}` while an input the endpoint rejects (unreadable image,
  * unreachable URL) fails with its own `400`, so the surfaced message tells a
@@ -59,22 +70,37 @@ export async function modelPredict(
   client: UltralyticsClient,
   model: string,
   options: PredictParams & {
-    source: string;
+    source?: string;
+    filePath?: string;
     project?: string;
   },
 ): Promise<NormalizedToolResult> {
-  const { source, project, conf, iou, imgsz } = options;
-  if (!source?.trim()) {
+  const { project, conf, iou, imgsz } = options;
+  const source = options.source?.trim() ?? "";
+  const filePath = options.filePath?.trim() ?? "";
+  if (Boolean(source) === Boolean(filePath)) {
     throw new Error(
-      "`source` is required: an image URL or base64-encoded image.",
+      "Provide exactly one of `source` (an image URL or base64-encoded " +
+        "image) or `file_path` (a local image or video file).",
     );
   }
-  const trimmed = source.trim();
-  let bytes: Buffer | null = null;
-  if (!trimmed.includes("://")) {
-    let payload = trimmed;
-    if (/^data:/i.test(trimmed)) {
-      payload = /^data:[^,]*;base64,(.*)$/is.exec(trimmed)?.[1]?.trim() ?? "";
+  let file: MultipartFile | undefined;
+  if (filePath) {
+    const info = await stat(filePath).catch(() => null);
+    if (info === null) {
+      throw new Error(`File does not exist: ${filePath}`);
+    }
+    if (!info.isFile()) {
+      throw new Error(`Path is not a file: ${filePath}`);
+    }
+    file = {
+      blob: new Blob([await readFile(filePath)]),
+      filename: basename(filePath),
+    };
+  } else if (!source.includes("://")) {
+    let payload = source;
+    if (/^data:/i.test(source)) {
+      payload = /^data:[^,]*;base64,(.*)$/is.exec(source)?.[1]?.trim() ?? "";
       if (!payload) {
         throw new Error(
           "`source` data: URIs must be base64 with a non-empty payload " +
@@ -82,36 +108,27 @@ export async function modelPredict(
         );
       }
     }
-    bytes = decodeBase64(payload);
+    const bytes = decodeBase64(payload);
     if (!bytes) {
       throw new Error(
         "`source` is neither an image URL nor valid base64 (standard or " +
-          "URL-safe, optional padding, ASCII whitespace ignored). Local file " +
-          "paths are not supported.",
+          "URL-safe, optional padding, ASCII whitespace ignored). Pass a " +
+          "local file as `file_path` instead.",
       );
     }
+    file = { blob: new Blob([new Uint8Array(bytes)]), filename: "image.jpg" };
   }
 
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
   const data: Record<string, unknown> = {};
-  if (!bytes) data.source = trimmed;
+  if (!file) data.source = source;
   if (conf !== undefined) data.conf = conf;
   if (iou !== undefined) data.iou = iou;
   if (imgsz !== undefined) data.imgsz = imgsz;
   const result = await client.postMultipart(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/predict`,
-    {
-      data,
-      files: bytes
-        ? {
-            file: {
-              blob: new Blob([new Uint8Array(bytes)]),
-              filename: "image.jpg",
-            },
-          }
-        : undefined,
-    },
+    { data, files: file ? { file } : undefined },
   );
 
   const { images, metadata, detectionCount } = projectPredictResult(result);
