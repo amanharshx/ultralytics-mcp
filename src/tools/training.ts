@@ -28,9 +28,13 @@ const CHECKPOINT_TASK_SUFFIXES = [
   ["-pose", "pose"],
   ["-obb", "obb"],
   ["-cls", "classify"],
+  ["-depth", "depth"],
 ] as const;
+/** `-depth` is YOLO26-only, the one family that ships a depth head: a
+ * false match would create a project model before the server refuses to
+ * train it, while a miss just falls through to the existing-model lookup. */
 const BASE_CHECKPOINT_RE =
-  /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
+  /^yolo(?:(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?|26[nslmx]-depth)(?:\.pt)?$/i;
 
 function validateTrainArgs(trainArgs: Record<string, unknown>): void {
   for (const key of RESERVED_TRAIN_ARG_KEYS) {
