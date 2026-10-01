@@ -73,7 +73,9 @@ export async function exportsList(
  * addressable), fills a missing owner from the account summary, and reads
  * the export through the live model-scoped endpoint. The export id is
  * itself a 24-character id and a legitimate input, so it passes through
- * untouched with no id rejection. The API returns the job nested as
+ * untouched with no id rejection; only an empty id is refused, because
+ * `/exports/` redirects to the export list and would read back as an
+ * all-null export. The API returns the job nested as
  * `{export}`; the curated result reports the status, format, lifecycle
  * timestamps, the export `args`, and the artifact's size, filename, and
  * download link when the job produced one, plus the error when present.
@@ -86,6 +88,9 @@ export async function exportStatus(
   exportId: string,
   project?: string,
 ): Promise<NormalizedToolResult> {
+  if (!exportId) {
+    throw new Error("`export_id` is required.");
+  }
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
   const data = await client.get(
@@ -220,7 +225,8 @@ export async function exportCreate(
  *
  * Resolves the model reference by pure string parsing (ids are not
  * addressable; that rule applies to the model reference only, the export id
- * is itself a 24-character id and passes through untouched), fills a missing
+ * is itself a 24-character id and passes through untouched; only an empty id
+ * is refused), fills a missing
  * owner from the account summary, and reads the export's current status
  * before acting. The cancel verb is dual-purpose: sent to an active export it
  * cancels the job, but sent to a finished one it deletes the produced
@@ -241,6 +247,9 @@ export async function exportCancel(
   exportId: string,
   project?: string,
 ): Promise<NormalizedToolResult> {
+  if (!exportId) {
+    throw new Error("`export_id` is required.");
+  }
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
   const path = `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports/${encodeURIComponent(exportId)}`;

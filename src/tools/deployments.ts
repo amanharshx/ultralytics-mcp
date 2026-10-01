@@ -3,6 +3,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import type { UltralyticsClient } from "../client.js";
+import { ResolutionError } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import {
   asRecord,
@@ -28,6 +29,11 @@ const IMAGE_CONTENT_TYPES: Record<string, string> = {
  * platform rejects it either. `owner/deployment` splits on the last `/`;
  * anything without a `/` is a bare slug, and the caller fills the owner from
  * the account summary.
+ *
+ * A blank slug or a blank owner before the `/` is rejected before any
+ * network call: the platform redirects `/deployments/{owner}/` and
+ * `/deployments//{slug}` to a list endpoint, which would otherwise read back
+ * as an all-null deployment.
  */
 function splitDeploymentRef(ref: string): {
   owner: string | null;
@@ -35,13 +41,14 @@ function splitDeploymentRef(ref: string): {
 } {
   const trimmed = ref.trim();
   const slashIndex = trimmed.lastIndexOf("/");
-  if (slashIndex === -1) {
-    return { owner: null, deployment: trimmed };
+  const owner = slashIndex === -1 ? null : trimmed.slice(0, slashIndex);
+  const deployment = trimmed.slice(slashIndex + 1);
+  if (owner === "" || !deployment) {
+    throw new ResolutionError(
+      `Cannot parse deployment reference '${trimmed}'. Use 'slug' or 'owner/deployment'.`,
+    );
   }
-  return {
-    owner: trimmed.slice(0, slashIndex),
-    deployment: trimmed.slice(slashIndex + 1),
-  };
+  return { owner, deployment };
 }
 
 /** Split a deployment ref and fill a missing owner from the account summary.
