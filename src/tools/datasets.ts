@@ -501,22 +501,12 @@ export async function datasetImagesList(
   client: UltralyticsClient,
   options: DatasetImagesListOptions,
 ): Promise<NormalizedToolResult> {
-  // No local split validation: the server rejects an unrecognized split
-  // itself (verified live: `?split=notarealsplit` on `/datasets/{owner}/
-  // {dataset}/images` returns 400 `"Invalid option: expected one of
-  // \"train\"|\"val\"|\"test\""`), and that message surfaces verbatim.
-  if (options.limit !== undefined) {
-    if (options.limit <= 0) {
-      throw new Error("`limit` must be greater than 0.");
-    }
-    if (options.limit > 5000) {
-      throw new Error("`limit` must be at most 5000.");
-    }
-  }
-  if (options.offset !== undefined && options.offset < 0) {
-    throw new Error("`offset` must be greater than or equal to 0.");
-  }
-
+  // No local split, limit, or offset validation: the server rejects each
+  // itself (verified live on `/datasets/{owner}/{dataset}/images`:
+  // `?split=notarealsplit` returns 400 `"Invalid option: expected one of
+  // \"train\"|\"val\"|\"test\""`, and `?limit=0`, `?limit=5001`, and
+  // `?offset=-1` return 400 with the bound they break), and those messages
+  // surface verbatim.
   const { owner: refOwner, dataset: refSlug } = resolveDataset(options.dataset);
   const resolvedOwner = refOwner ?? (await client.getAccountOwner());
   const params: Record<string, unknown> = {};
