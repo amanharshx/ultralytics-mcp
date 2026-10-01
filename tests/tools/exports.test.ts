@@ -578,11 +578,22 @@ describe("exportCreate", () => {
       format: "litert",
       status: "queued",
     });
-    expect(calls[0]).toMatchObject({
+    expect(calls[0]).toEqual({
       url: `${BASE}/models/${OWNER}/${PROJECT}/${MODEL}/exports`,
       method: "POST",
       body: { format: "litert" },
     });
+  });
+
+  test("passes quantize through unchanged in args", async () => {
+    const { client, calls } = captureClient(() =>
+      jsonResponse({ id: EXPORT_ID, format: "onnx", status: "queued" }, 201),
+    );
+    await exportCreate(client, REF, "onnx", {
+      quantize: 16,
+      confirmCost: true,
+    });
+    expect(calls[0].body).toEqual({ format: "onnx", args: { quantize: 16 } });
   });
 
   test("fills a missing owner from the account summary for a bare slug", async () => {
