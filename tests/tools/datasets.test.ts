@@ -609,21 +609,24 @@ describe("datasetImagesList", () => {
     );
   });
 
-  test("validates limit and offset before network", async () => {
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: (async () => {
-        throw new Error("network should not be called");
-      }) as typeof fetch,
-    });
+  test.each([
+    [{ limit: 0 }, "Too small: expected number to be >=1"],
+    [{ limit: 5001 }, "Too big: expected number to be <=5000"],
+    [{ offset: -1 }, "Too small: expected number to be >=0"],
+  ])("passes out-of-range %j through to the server rather than rejecting it locally", async (bounds, message) => {
+    // Live captures: GET /datasets/{owner}/{dataset}/images with each value
+    // returns 400 carrying the server's own bound message.
+    const { client, calls } = routeClient((path) =>
+      path === "/api/datasets/alice/cars/images"
+        ? jsonResponse({ error: message }, 400)
+        : jsonResponse({}, 404),
+    );
 
     await expect(
-      datasetImagesList(client, { dataset: "data", limit: 5001 }),
-    ).rejects.toThrow(/at most 5000/);
-    await expect(
-      datasetImagesList(client, { dataset: "data", offset: -1 }),
-    ).rejects.toThrow(/greater than or equal to 0/);
+      datasetImagesList(client, { dataset: "alice/cars", ...bounds }),
+    ).rejects.toThrow(message);
+    const [key, value] = Object.entries(bounds)[0];
+    expect(calls[0].params.get(key)).toBe(String(value));
   });
 
   test("passes an unrecognized split through to the server rather than rejecting it locally", async () => {
