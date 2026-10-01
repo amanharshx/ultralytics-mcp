@@ -352,6 +352,28 @@ describe("modelMetrics", () => {
     expect(result.summary).toContain("reported metrics unavailable");
   });
 
+  test("keeps a reported bestFitness in the note when bestEpoch is null", async () => {
+    const { client } = routeClient((path) =>
+      path === MODEL_PATH
+        ? jsonResponse({
+            model: {
+              ...baseModelFields(),
+              bestEpoch: null,
+              bestFitness: 0.855,
+            },
+          })
+        : jsonResponse({}, 404),
+    );
+
+    const result = await modelMetrics(client, `${OWNER}/${PROJECT}/${MODEL}`);
+    const data = result.data as Record<string, unknown>;
+    expect(data.bestFitness).toBeNull();
+    expect(data.bestEpochNote).toBe(
+      "bestEpoch is not recorded for this model, but it reports " +
+        "bestFitness 0.855; not treated as fact.",
+    );
+  });
+
   /** Serve the base model with the given best-epoch fields and records. */
   function bestEpochClient(overrides: Record<string, unknown>) {
     return routeClient((path) =>

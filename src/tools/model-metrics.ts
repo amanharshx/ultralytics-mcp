@@ -73,7 +73,12 @@ function resolveBestEpoch(
     note,
   });
   if (reportedBestEpoch === null) {
-    return unresolved("bestEpoch is not recorded for this model.");
+    return unresolved(
+      reportedBestFitness === null
+        ? "bestEpoch is not recorded for this model."
+        : `bestEpoch is not recorded for this model, but it reports ` +
+            `bestFitness ${reportedBestFitness}; not treated as fact.`,
+    );
   }
   const reported =
     `the model reports bestEpoch ${reportedBestEpoch} ` +

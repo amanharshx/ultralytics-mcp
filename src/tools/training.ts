@@ -151,10 +151,10 @@ interface TrainingMonitorOptions {
 const REPORTED_PROGRESS_NOTE =
   "reportedCurrentEpoch, reportedProgressPercentage, and etaMs are the " +
   "training job's own counters, passed through verbatim. After a run ends " +
-  "the epoch and percentage can count a post-training evaluation as an " +
-  "epoch, so they may be one epoch higher than the epochs actually " +
-  "trained, and etaMs can stay nonzero. resultRecordCount counts " +
-  "trainResults records, not epochs.";
+  "reportedCurrentEpoch can count a post-training evaluation as an epoch, " +
+  "so it may be one higher than the epochs actually trained, with " +
+  "reportedProgressPercentage inflated to match; etaMs can stay nonzero. " +
+  "resultRecordCount counts trainResults records, not epochs.";
 
 /** Report a model's training status and progress.
  *

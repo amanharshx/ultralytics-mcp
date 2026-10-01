@@ -127,7 +127,7 @@ describe("trainingMonitor", () => {
       reportedCurrentEpoch: 101,
       reportedProgressPercentage: 101,
       progressNote: expect.stringContaining(
-        "may be one epoch higher than the epochs actually trained",
+        "may be one higher than the epochs actually trained",
       ),
       etaMs: 0,
       lastReportedMetrics: { epoch: 1, metrics: { "metrics/mAP50(B)": 0.6 } },
