@@ -450,7 +450,7 @@ Metadata: read-only, external/live
 
 ### training_start
 
-Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts. In checkpoint mode a project model is created first, then the checkpoint's task is checked against the dataset's task: with a list of datasets this is checked for every entry before that model is created, but with a single dataset the check happens server-side when training starts, by which point the model already exists — a mismatch there still leaves that model behind, unrequested, and the error names it so it can be reviewed and deleted (models_delete) if unwanted. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Training an existing model that already has a recorded run (any status past pending/untrained) replaces that model's status, epoch count, and per-epoch metric history the instant the new job starts, and that history cannot be recovered afterward; the previously uploaded weights survive. That path requires confirm_history_loss=true in addition to confirm_cost=true. Checkpoint mode never destroys an existing model's history since it always creates a new one, so it never needs confirm_history_loss — its own risk is the possible leftover model described above. An untrained or never-trained model needs no extra confirmation either. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.
+Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Trains on exactly one dataset and requires epochs. The dataset is validated immediately, so an unusable dataset is rejected before any compute starts. In checkpoint mode a project model is created first, then the checkpoint's task is checked against the dataset's task server-side when training starts, by which point the model already exists — a mismatch there still leaves that model behind, unrequested, and the error names it so it can be reviewed and deleted (models_delete) if unwanted. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Training an existing model that already has a recorded run (any status past pending/untrained) replaces that model's status, epoch count, and per-epoch metric history the instant the new job starts, and that history cannot be recovered afterward; the previously uploaded weights survive. That path requires confirm_history_loss=true in addition to confirm_cost=true. Checkpoint mode never destroys an existing model's history since it always creates a new one, so it never needs confirm_history_loss — its own risk is the possible leftover model described above. An untrained or never-trained model needs no extra confirmation either. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.
 
 Metadata: state-changing, destructive, non-idempotent, external/live
 
@@ -458,10 +458,10 @@ Metadata: state-changing, destructive, non-idempotent, external/live
 | --- | --- | --- | --- |
 | `model` | string | Yes | Existing model ref, or official YOLO base checkpoint such as yolo11n.pt or yolo11n-seg.pt. Checkpoint mode auto-creates a project model. |
 | `project` | string | Yes | Project ref that owns the training job and resolved model. |
-| `dataset` | union | Yes | Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI, or a list of refs to fine-tune on sequentially. |
+| `dataset` | string | Yes | Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI. |
 | `gpu_type` | string | Yes | Cloud GPU type to allocate for training. |
 | `train_args` | record<string, unknown> | No | Additional YOLO training arguments passed through to the platform. epochs, imgsz, batch, and name here are silently overridden by the matching top-level input when both are set; data and model are rejected outright if present here. |
-| `epochs` | number | No | Maximum full passes over the training set. |
+| `epochs` | number | Yes | Maximum full passes over the training set. |
 | `imgsz` | number | No | Target input size: square batches normally, or the long-side size with rect=true. |
 | `batch` | number | No | Images per batch: -1 targets about 60% GPU memory, a value between 0 and 1 sets a memory fraction, and a positive integer fixes the image count. |
 | `name` | string | No | Run name for callbacks. |
@@ -478,6 +478,7 @@ Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt`
   "project": "team/project",
   "dataset": "team/warehouse-items",
   "gpu_type": "rtx-4090",
+  "epochs": 100,
   "confirm_cost": true
 }
 ```
@@ -490,6 +491,7 @@ Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt`
   "project": "team/project",
   "dataset": "team/warehouse-items",
   "gpu_type": "rtx-4090",
+  "epochs": 100,
   "confirm_cost": true,
   "confirm_history_loss": true
 }
@@ -503,21 +505,7 @@ Notes: Checkpoint-pattern model values such as `yolo11n.pt` and `yolo11n-seg.pt`
   "project": "team/project",
   "dataset": "team/road-segments",
   "gpu_type": "rtx-4090",
-  "confirm_cost": true
-}
-```
-
-#### Fine-tune sequentially across multiple datasets
-
-```json
-{
-  "model": "team/project/my-model",
-  "project": "team/project",
-  "dataset": [
-    "team/road-segments",
-    "team/warehouse-items"
-  ],
-  "gpu_type": "rtx-4090",
+  "epochs": 100,
   "confirm_cost": true
 }
 ```

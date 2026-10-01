@@ -1758,7 +1758,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). The dataset is validated immediately, so an unusable dataset is rejected before any compute starts. In checkpoint mode a project model is created first, then the checkpoint's task is checked against the dataset's task: with a list of datasets this is checked for every entry before that model is created, but with a single dataset the check happens server-side when training starts, by which point the model already exists — a mismatch there still leaves that model behind, unrequested, and the error names it so it can be reviewed and deleted (models_delete) if unwanted. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Training an existing model that already has a recorded run (any status past pending/untrained) replaces that model's status, epoch count, and per-epoch metric history the instant the new job starts, and that history cannot be recovered afterward; the previously uploaded weights survive. That path requires confirm_history_loss=true in addition to confirm_cost=true. Checkpoint mode never destroys an existing model's history since it always creates a new one, so it never needs confirm_history_loss — its own risk is the possible leftover model described above. An untrained or never-trained model needs no extra confirmation either. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
+      "Start a cloud training job from an existing model or official YOLO base checkpoint (state-changing, may cost credits). Trains on exactly one dataset and requires epochs. The dataset is validated immediately, so an unusable dataset is rejected before any compute starts. In checkpoint mode a project model is created first, then the checkpoint's task is checked against the dataset's task server-side when training starts, by which point the model already exists — a mismatch there still leaves that model behind, unrequested, and the error names it so it can be reviewed and deleted (models_delete) if unwanted. Starting is billable immediately: the platform has no cost preview before that, so the projected cost and remaining balance are only reported after the job starts. Training an existing model that already has a recorded run (any status past pending/untrained) replaces that model's status, epoch count, and per-epoch metric history the instant the new job starts, and that history cannot be recovered afterward; the previously uploaded weights survive. That path requires confirm_history_loss=true in addition to confirm_cost=true. Checkpoint mode never destroys an existing model's history since it always creates a new one, so it never needs confirm_history_loss — its own risk is the possible leftover model described above. An untrained or never-trained model needs no extra confirmation either. Use training_cancel to stop a job that is already running. Requires confirm_cost=true.",
     inputSchema: {
       model: z
         .string()
@@ -1769,9 +1769,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .describe("Project ref that owns the training job and resolved model."),
       dataset: z
-        .union([z.string(), z.array(z.string())])
+        .string()
         .describe(
-          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI, or a list of refs to fine-tune on sequentially.",
+          "Dataset ref by slug, owner/slug, or a ul://owner/datasets/slug URI.",
         ),
       gpu_type: z.string().describe("Cloud GPU type to allocate for training."),
       train_args: z
@@ -1782,7 +1782,8 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         ),
       epochs: z
         .number()
-        .optional()
+        .int()
+        .positive()
         .describe("Maximum full passes over the training set."),
       imgsz: z
         .number()
@@ -1826,6 +1827,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           project: "team/project",
           dataset: "team/warehouse-items",
           gpu_type: "rtx-4090",
+          epochs: 100,
           confirm_cost: true,
         },
       },
@@ -1836,6 +1838,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           project: "team/project",
           dataset: "team/warehouse-items",
           gpu_type: "rtx-4090",
+          epochs: 100,
           confirm_cost: true,
           confirm_history_loss: true,
         },
@@ -1847,16 +1850,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           project: "team/project",
           dataset: "team/road-segments",
           gpu_type: "rtx-4090",
-          confirm_cost: true,
-        },
-      },
-      {
-        title: "Fine-tune sequentially across multiple datasets",
-        input: {
-          model: "team/project/my-model",
-          project: "team/project",
-          dataset: ["team/road-segments", "team/warehouse-items"],
-          gpu_type: "rtx-4090",
+          epochs: 100,
           confirm_cost: true,
         },
       },
@@ -1880,10 +1874,10 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
           await trainingStart(getClient(), {
             model: model as string,
             project: project as string,
-            dataset: dataset as string | string[],
+            dataset: dataset as string,
             gpuType: gpu_type as string,
             trainArgs: train_args as Record<string, unknown> | undefined,
-            epochs: epochs as number | undefined,
+            epochs: epochs as number,
             imgsz: imgsz as number | undefined,
             batch: batch as number | undefined,
             name: name as string | undefined,

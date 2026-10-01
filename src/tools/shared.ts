@@ -56,8 +56,8 @@ export function projectPredictResult(result: unknown): ProjectedPrediction {
 
 /** Validate a positive-integer tool parameter, naming it in the error.
  *
- * Shared by `training_monitor` and `model_metrics`, both of which accept a
- * `history_last_n`-shaped parameter over the same `trainResults` history.
+ * Shared by `training_monitor` and `model_metrics` for `history_last_n`, and
+ * by `training_start` for `epochs`.
  */
 export function validatePositiveInt(value: number, paramName: string): void {
   if (!Number.isInteger(value) || value <= 0) {

@@ -18,7 +18,6 @@ dataset uploads.
 - "Show me my Ultralytics projects and which datasets are ready to train on."
 - "Create a private project called `traffic-cams` and upload `./clips/junction.mp4` as a dataset."
 - "Fine-tune `yolo11n` on `traffic-cams` for 50 epochs."
-- "Fine-tune `traffic-cams/detector` across `day-shots`, then `night-shots`, in one run."
 - "How is that training going? Show me the last 10 epochs of metrics."
 - "Run the trained model on `https://example.com/frame.jpg`, then download the weights to `./weights`."
 - "Move my `scratch` project to trash." (restorable for 30 days)
@@ -192,7 +191,7 @@ local-path behavior, and examples for the tricky tools.
 - `export_create` requires `confirm_cost: true`
 - `training_start` requires `confirm_cost: true`, plus `confirm_history_loss: true` when restarting training on an existing model that already has a recorded run. That path replaces its status, epoch count, and per-epoch metric history irrecoverably
 - Starting a training job or an export is billable immediately, so the estimated cost and remaining balance are reported after the job starts, not before
-- `training_start` in checkpoint mode (a base checkpoint like `yolo11n.pt`, not an existing model ref) with a single dataset creates the project model before the platform checks the checkpoint's task against the dataset's
+- `training_start` in checkpoint mode (a base checkpoint like `yolo11n.pt`, not an existing model ref) creates the project model before the platform checks the checkpoint's task against the dataset's
 - If that check fails, the model it already created is not deleted automatically. The error names the model; review it and delete it with `models_delete` if it is unwanted
 - Cancelling a running training job preserves the latest checkpoint and keeps the model
 - `export_cancel` proceeds only when it observes an export as `queued` or `running`, and refuses every other status, including unrecognized ones. Because the status check and the cancel request are not atomic, an export that finishes between them may have its artifact irreversibly deleted
