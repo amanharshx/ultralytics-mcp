@@ -64,7 +64,6 @@ describe("modelsList", () => {
         status: "completed",
         task: "detect",
         epochs: 100,
-        bestFitness: 0.9,
       },
       {
         id: "b".repeat(24),
@@ -75,7 +74,6 @@ describe("modelsList", () => {
         status: null,
         task: null,
         epochs: null,
-        bestFitness: null,
       },
     ]);
     expect(calls.map((call) => call.path)).toEqual([
@@ -207,8 +205,6 @@ describe("modelsGet", () => {
         task: "detect",
         status: "completed",
         epochs: 100,
-        bestEpoch: 79,
-        bestFitness: 0.40382,
         hasWeights: true,
         dataset: { owner: "alice", dataset: "road-data" },
         datasetId: "d".repeat(24),
@@ -308,8 +304,6 @@ describe("modelsGet", () => {
         task: "detect",
         status: "untrained",
         epochs: 0,
-        bestEpoch: null,
-        bestFitness: null,
         hasWeights: false,
         dataset: null,
         datasetId: null,

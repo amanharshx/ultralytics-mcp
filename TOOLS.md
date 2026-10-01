@@ -317,7 +317,7 @@ Notes: Uses a local video path, extracts JPEG frames with ffmpeg, and starts ing
 
 ### models_list
 
-List models in a project by slug, owner/slug, or project ul:// URI.
+List models in a project by slug, owner/slug, or project ul:// URI. Model quality is not included; use model_metrics, which validates the platform's best-epoch fields.
 
 Metadata: read-only
 
@@ -328,7 +328,7 @@ Metadata: read-only
 
 ### models_get
 
-Get details for one model by owner/project/model, ul://owner/project/model, or slug with a project.
+Get details for one model by owner/project/model, ul://owner/project/model, or slug with a project. Model quality (best epoch and fitness) is not included; use model_metrics, which validates the platform's best-epoch fields.
 
 Metadata: read-only
 

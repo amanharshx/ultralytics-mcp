@@ -52,8 +52,7 @@
         "visibility": "private",
         "status": "completed",
         "task": "segment",
-        "epochs": 100,
-        "bestFitness": 1.08609
+        "epochs": 100
       },
       {
         "id": "000000000000000000000002",
@@ -63,8 +62,7 @@
         "visibility": "private",
         "status": "completed",
         "task": "segment",
-        "epochs": 100,
-        "bestFitness": 1.08609
+        "epochs": 100
       }
     ]
   }
