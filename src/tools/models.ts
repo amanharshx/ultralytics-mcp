@@ -11,7 +11,9 @@ import { asRecord, listField, pyField } from "./shared.js";
  * addressable), fills a missing owner from the account summary, and reads
  * the live owner-scoped endpoint. The API returns `{models[], region}`;
  * items name the resource via `id`, `model` (slug), `owner`, and `name`,
- * which the tool surfaces.
+ * which the tool surfaces. The raw `bestFitness` is omitted: it cannot be
+ * checked against the training records here, and model quality belongs to
+ * `model_metrics`, which validates it.
  *
  * `limit` is forwarded only when given, so the server applies its own
  * default. The response carries no total and the tool does not mirror the
@@ -38,7 +40,6 @@ export async function modelsList(
     status: model.status ?? null,
     task: model.task ?? null,
     epochs: model.epochs ?? null,
-    bestFitness: model.bestFitness ?? null,
   }));
   let summary = `${items.length} model(s) for project '${refSlug}' for owner '${resolvedOwner}'.`;
   if (items.length > 0 && limit === undefined) {
@@ -58,7 +59,11 @@ export async function modelsList(
  * with `isOwner` beside it; both are surfaced. The curated model carries
  * the database id training start needs, the training state callers depend
  * on, and the recorded compute cost when present. Evaluation plots are
- * deliberately omitted: the platform disclaims their shape as unstable.
+ * deliberately omitted: the platform disclaims their shape as unstable. The
+ * raw `bestEpoch` and `bestFitness` are omitted too: observed live, they can
+ * contradict the training records (`pothole/exp-2` reports epoch 99 while
+ * its fitness belongs to epoch 66) or have none to match, so model quality
+ * belongs to `model_metrics`, which validates them.
  */
 export async function modelsGet(
   client: UltralyticsClient,
@@ -91,8 +96,6 @@ export async function modelsGet(
   const task = fields.task ?? null;
   const status = fields.status ?? null;
   const epochs = fields.epochs ?? null;
-  const bestEpoch = fields.bestEpoch ?? null;
-  const bestFitness = fields.bestFitness ?? null;
   const hasWeights = fields.hasWeights ?? null;
   const datasetRef =
     dataset &&
@@ -110,8 +113,7 @@ export async function modelsGet(
     summary:
       `Model '${pyField(slug)}' for owner '${resolvedOwner}' project '${resolved.project}': ` +
       `'${pyField(name)}' [${pyField(task)}] status=${pyField(status)}, ` +
-      `epochs=${pyField(epochs)}, bestEpoch=${pyField(bestEpoch)}, ` +
-      `bestFitness=${pyField(bestFitness)}, hasWeights=${pyField(hasWeights)}, ` +
+      `epochs=${pyField(epochs)}, hasWeights=${pyField(hasWeights)}, ` +
       `dataset=${datasetRef}.${costNote}`,
     data: {
       model: {
@@ -124,8 +126,6 @@ export async function modelsGet(
         task,
         status,
         epochs,
-        bestEpoch,
-        bestFitness,
         hasWeights,
         dataset,
         datasetId: fields.datasetId ?? null,

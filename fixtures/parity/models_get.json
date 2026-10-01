@@ -102,7 +102,7 @@
     }
   ],
   "expected": {
-    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': 'example-model-1' [detect] status=completed, epochs=100, bestEpoch=79, bestFitness=0.40382, hasWeights=true, dataset=example-owner/example-dataset-1. Compute cost 0.13 (rtx-pro-6000).",
+    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': 'example-model-1' [detect] status=completed, epochs=100, hasWeights=true, dataset=example-owner/example-dataset-1. Compute cost 0.13 (rtx-pro-6000).",
     "data": {
       "model": {
         "id": "000000000000000000000001",
@@ -114,8 +114,6 @@
         "task": "detect",
         "status": "completed",
         "epochs": 100,
-        "bestEpoch": 79,
-        "bestFitness": 0.40382,
         "hasWeights": true,
         "dataset": {
           "owner": "example-owner",

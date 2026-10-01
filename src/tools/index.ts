@@ -1012,7 +1012,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "List models in a project by slug, owner/slug, or project ul:// URI.",
+      "List models in a project by slug, owner/slug, or project ul:// URI. Model quality is not included; use model_metrics, which validates the platform's best-epoch fields.",
     inputSchema: {
       project: z
         .string()
@@ -1041,7 +1041,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Get details for one model by owner/project/model, ul://owner/project/model, or slug with a project.",
+      "Get details for one model by owner/project/model, ul://owner/project/model, or slug with a project. Model quality (best epoch and fitness) is not included; use model_metrics, which validates the platform's best-epoch fields.",
     inputSchema: {
       model: z
         .string()

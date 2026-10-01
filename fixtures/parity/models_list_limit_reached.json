@@ -54,8 +54,7 @@
         "visibility": "public",
         "status": "completed",
         "task": "depth",
-        "epochs": 25,
-        "bestFitness": null
+        "epochs": 25
       },
       {
         "id": "6a5fe8285bf2091ee3b86da8",
@@ -65,8 +64,7 @@
         "visibility": "public",
         "status": "completed",
         "task": "depth",
-        "epochs": 25,
-        "bestFitness": null
+        "epochs": 25
       }
     ]
   }
