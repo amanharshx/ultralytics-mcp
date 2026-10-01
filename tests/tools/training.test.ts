@@ -1260,6 +1260,70 @@ describe("trainingStart", () => {
       expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
     });
 
+    test.each([
+      "yolo26n-depth.pt",
+      "ul://ultralytics/yolo26/yolo26n-depth",
+    ])("trains %s as a YOLO26 depth checkpoint", async (model) => {
+      const calls: { path: string; body: unknown }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const path = new URL(String(url)).pathname;
+        calls.push({
+          path,
+          body: typeof init.body === "string" ? JSON.parse(init.body) : null,
+        });
+        if (path === CREATE_MODEL_PATH) {
+          return jsonResponse({
+            id: CREATED_MODEL_ID,
+            owner: OWNER,
+            project: PROJECT,
+            model: CREATED_SLUG,
+          });
+        }
+        return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
+      });
+
+      await trainingStart(client, {
+        model,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        epochs: 1,
+        confirmCost: true,
+      });
+
+      expect(calls).toMatchObject([
+        { path: CREATE_MODEL_PATH, body: { task: "depth" } },
+        {
+          path: START_PATH,
+          body: { trainArgs: { model: "yolo26n-depth.pt" } },
+        },
+      ]);
+    });
+
+    test("does not treat a non-YOLO26 -depth name as a checkpoint", async () => {
+      const { client, calls } = routeClient(() => jsonResponse({}, 404));
+
+      await expect(
+        trainingStart(client, {
+          model: "yolo11n-depth.pt",
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          epochs: 1,
+          confirmCost: true,
+        }),
+      ).rejects.toThrow();
+
+      expect(calls.map((call) => call.path)).toEqual([
+        `/api/models/${OWNER}/${PROJECT}/yolo11n-depth.pt`,
+      ]);
+    });
+
     test("sends the checkpoint suffix's inferred task to the create-model endpoint", async () => {
       const calls: { url: string; body: unknown }[] = [];
       const impl = (async (url: string | URL, init: RequestInit = {}) => {
