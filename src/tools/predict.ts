@@ -5,6 +5,28 @@ import { resolveModel } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
 import { type PredictParams, projectPredictResult } from "./shared.js";
 
+/** Standard or URL-safe base64 alphabet, padding only at the end. */
+const BASE64_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/;
+
+/** Decode standard or URL-safe base64, or return null when it is malformed.
+ *
+ * ASCII whitespace is ignored, so line-wrapped payloads decode as written.
+ * `Buffer.from` never rejects input — it skips unknown characters and drops a
+ * dangling one — so the bytes are re-encoded and compared against the input
+ * to reject anything that does not round-trip exactly.
+ */
+function decodeBase64(text: string): Buffer | null {
+  const compact = text.replace(/[\t\n\v\f\r ]/g, "");
+  if (!BASE64_PATTERN.test(compact)) return null;
+  if (compact.includes("=") && compact.length % 4 !== 0) return null;
+  const bytes = Buffer.from(compact, "base64");
+  const canonical = compact
+    .replace(/=+$/, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+  return bytes.toString("base64url") === canonical ? bytes : null;
+}
+
 /** Run inference from an image URL or base64 source. Local paths are not accepted.
  *
  * Resolves the model reference by pure string parsing (ids are not
@@ -13,16 +35,25 @@ import { type PredictParams, projectPredictResult } from "./shared.js";
  * metadata}`; each image carries `shape`, `speed`, and `results[]`, and the
  * metadata names the `task` and `classNames`. The response carries no model
  * identity of its own, so the resolved owner/project/model the prediction
- * was sent to is reported as the model used. A base64 `data:` URI is
- * normalized to its payload before posting; any other `data:` form or an
- * empty payload is rejected before any request. A model without weights fails
- * with `400 {"error":"Model has no trained weights"}` while an input the
- * endpoint rejects (oversized source, unreadable image) fails with its own
- * `400`, so the surfaced message tells a model problem from an input
- * problem. Zero detections are a normal `200` with empty `results`.
- * `conf`/`iou`/`imgsz` are optional and only sent when given, letting the
- * server apply its own default otherwise (verified live: identical
- * detections with and without the fields set to 0.25/0.7/640).
+ * was sent to is reported as the model used.
+ *
+ * A `source` containing `://` is posted as the `source` field and the server
+ * decides whether it can fetch it. Anything else must be base64 (raw or a
+ * base64 `data:` URI) and is decoded and uploaded as the multipart `file`
+ * part, because the endpoint caps `source` at 4,096 characters (~3 KB of
+ * image). The part is always named `image.jpg`: the server rejects a file
+ * part without a recognized extension (`blob`, `image`, `image.bin`) but
+ * reads the bytes themselves, so PNG/WebP/BMP/TIFF content uploads fine
+ * under that name (verified live). Malformed base64 and non-base64 `data:`
+ * URIs are rejected before any request.
+ *
+ * A model without weights fails with `400 {"error":"Model has no trained
+ * weights"}` while an input the endpoint rejects (unreadable image,
+ * unreachable URL) fails with its own `400`, so the surfaced message tells a
+ * model problem from an input problem. Zero detections are a normal `200`
+ * with empty `results`. `conf`/`iou`/`imgsz` are optional and only sent when
+ * given, letting the server apply its own default otherwise (verified live:
+ * identical detections with and without the fields set to 0.25/0.7/640).
  */
 export async function modelPredict(
   client: UltralyticsClient,
@@ -38,31 +69,49 @@ export async function modelPredict(
       "`source` is required: an image URL or base64-encoded image.",
     );
   }
-  // The endpoint accepts raw base64 but rejects the `data:` URI form, so a
-  // base64 data URI is normalized to its payload before posting. Any other
-  // `data:` form has no lossless reading and is rejected instead.
-  let normalizedSource = source.trim();
-  if (/^data:/i.test(normalizedSource)) {
-    const payload =
-      /^data:[^,]*;base64,(.*)$/is.exec(normalizedSource)?.[1]?.trim() ?? "";
-    if (!payload) {
+  const trimmed = source.trim();
+  let bytes: Buffer | null = null;
+  if (!trimmed.includes("://")) {
+    let payload = trimmed;
+    if (/^data:/i.test(trimmed)) {
+      payload = /^data:[^,]*;base64,(.*)$/is.exec(trimmed)?.[1]?.trim() ?? "";
+      if (!payload) {
+        throw new Error(
+          "`source` data: URIs must be base64 with a non-empty payload " +
+            "(`data:<mime>;base64,<payload>`); image URLs and raw base64 are also accepted.",
+        );
+      }
+    }
+    bytes = decodeBase64(payload);
+    if (!bytes) {
       throw new Error(
-        "`source` data: URIs must be base64 with a non-empty payload " +
-          "(`data:<mime>;base64,<payload>`); image URLs and raw base64 are also accepted.",
+        "`source` is neither an image URL nor valid base64 (standard or " +
+          "URL-safe, optional padding, ASCII whitespace ignored). Local file " +
+          "paths are not supported.",
       );
     }
-    normalizedSource = payload;
   }
 
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
-  const data: Record<string, unknown> = { source: normalizedSource };
+  const data: Record<string, unknown> = {};
+  if (!bytes) data.source = trimmed;
   if (conf !== undefined) data.conf = conf;
   if (iou !== undefined) data.iou = iou;
   if (imgsz !== undefined) data.imgsz = imgsz;
   const result = await client.postMultipart(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/predict`,
-    { data },
+    {
+      data,
+      files: bytes
+        ? {
+            file: {
+              blob: new Blob([new Uint8Array(bytes)]),
+              filename: "image.jpg",
+            },
+          }
+        : undefined,
+    },
   );
 
   const { images, metadata, detectionCount } = projectPredictResult(result);

@@ -382,7 +382,7 @@ Metadata: read-only, external/live
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
-| `source` | string | Yes | Image URL, raw base64-encoded image, or base64 data: URI (data:<mime>;base64,<payload>). Local file paths are not supported. |
+| `source` | string | Yes | Image URL, base64-encoded image (standard or URL-safe; optional padding; ASCII whitespace ignored), or base64 data: URI (data:<mime>;base64,<payload>). Base64 is uploaded as an image file, bypassing the API source field's 4,096-character limit; MCP client argument limits may still apply. Local file paths are not supported. |
 | `project` | string | No | Project ref required when model is given by slug. |
 | `conf` | number | No | Confidence threshold (0.01-1, server default applies if omitted). |
 | `iou` | number | No | IoU threshold used for NMS (0-0.95, server default applies if omitted). |

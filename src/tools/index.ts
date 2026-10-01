@@ -1483,7 +1483,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       source: z
         .string()
         .describe(
-          "Image URL, raw base64-encoded image, or base64 data: URI (data:<mime>;base64,<payload>). Local file paths are not supported.",
+          "Image URL, base64-encoded image (standard or URL-safe; optional padding; ASCII whitespace ignored), or base64 data: URI (data:<mime>;base64,<payload>). Base64 is uploaded as an image file, bypassing the API source field's 4,096-character limit; MCP client argument limits may still apply. Local file paths are not supported.",
         ),
       project: z
         .string()
