@@ -145,7 +145,7 @@ function renderSharedSections() {
     "- `dataset_upload_video` extracts frames from a local video file with `ffmpeg`.",
     "- `model_download` writes model weights to a local destination path.",
     "- `model_predict` reads a local image or video file from `file_path` to run inference.",
-    "- `deployment_predict` reads a local image file to run inference.",
+    "- `deployment_predict` reads a local image or video file to run inference.",
     "- Review local upload paths before approving tool calls; upload tools, `model_predict` with `file_path`, and `deployment_predict` read from the MCP client host.",
     "- Review `model_download.output_path` and `overwrite` before approving downloads.",
     "",
