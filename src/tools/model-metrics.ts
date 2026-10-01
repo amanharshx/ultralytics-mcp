@@ -24,14 +24,14 @@ interface BestEpochResolution {
 
 /** Where the model-level `metrics` field comes from, stated statically
  * because the API does not say. Verified live 2026-10-01: on every
- * Platform-trained model checked, `metrics` equals the post-training
+ * finished (completed or cancelled) Platform-trained model checked, `metrics` equals the post-training
  * evaluation record (the best checkpoint re-validated after training ends),
  * not the last training epoch; on the uploaded `pothole/yolo26s` it equals
  * the last recorded epoch. */
 const REPORTED_METRICS_NOTE =
   "The platform's model-level metrics, passed through verbatim; the API " +
-  "does not say which evaluation produced them. On Platform-trained runs " +
-  "observed live they match the post-training evaluation of the best " +
+  "does not say which evaluation produced them. On finished " +
+  "Platform-trained runs observed live they match the post-training evaluation of the best " +
   "checkpoint, not the last training epoch. On uploaded models they can " +
   "match the last recorded epoch.";
 

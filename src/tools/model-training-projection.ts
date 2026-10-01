@@ -59,7 +59,7 @@ export function projectModelTraining(
  * past the last epoch, or (older trainers) duplicating it. Callbacks can
  * also arrive out of epoch order or not at all. The API marks none of this,
  * so this note is static rather than detected from a record's keys. */
-export const RESULT_RECORDS_NOTE =
+const RESULT_RECORDS_NOTE =
   "Records are returned in API order. In observed Platform-trained " +
   "histories this follows timestamp order, but epoch values are not " +
   "guaranteed to be ordered, unique, or contiguous. A record may be a " +

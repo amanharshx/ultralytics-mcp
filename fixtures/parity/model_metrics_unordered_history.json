@@ -1845,7 +1845,7 @@
         "precision": 0.655157,
         "recall": 0.725099
       },
-      "reportedMetricsNote": "The platform's model-level metrics, passed through verbatim; the API does not say which evaluation produced them. On Platform-trained runs observed live they match the post-training evaluation of the best checkpoint, not the last training epoch. On uploaded models they can match the last recorded epoch.",
+      "reportedMetricsNote": "The platform's model-level metrics, passed through verbatim; the API does not say which evaluation produced them. On finished Platform-trained runs observed live they match the post-training evaluation of the best checkpoint, not the last training epoch. On uploaded models they can match the last recorded epoch.",
       "history": {
         "window": "last 20 of 99 record(s) in API order; reported epochs 80-100, 0 duplicate and 1 missing epoch number(s) in that range",
         "returnedRecords": 20,
