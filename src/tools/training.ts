@@ -101,12 +101,12 @@ const UNTRAINED_STATUSES = new Set(["pending", "untrained"]);
 interface ModelHistorySummary {
   hasHistory: boolean;
   status: string | null;
-  epochsRecorded: number;
+  resultRecordCount: number;
 }
 
 /** Decide, from the model record alone, whether restarting training would
  * destroy a recorded run. A model is treated as having history once it has
- * left the untrained states or already carries per-epoch results — both
+ * left the untrained states or already carries training results — both
  * signals the platform clears (status, epoch count, `trainResults`) the
  * moment a new job starts. This makes no network call beyond the model fetch
  * the caller already made, so the decision is free to check. */
@@ -119,7 +119,7 @@ function modelHistorySummary(data: unknown): ModelHistorySummary {
   const hasHistory =
     trainResults.length > 0 ||
     (status !== null && !UNTRAINED_STATUSES.has(status));
-  return { hasHistory, status, epochsRecorded: trainResults.length };
+  return { hasHistory, status, resultRecordCount: trainResults.length };
 }
 
 /** Read the database id off a model create response: flat `{id, ...}`. */
@@ -379,7 +379,7 @@ export async function trainingCancel(
  * response, and are surfaced verbatim rather than discarded. Training an
  * existing model that already has a recorded run (any status past
  * pending/untrained, or existing `trainResults`) replaces that run's
- * status, epoch count, and per-epoch metric history the moment the new job
+ * status, epoch count, and training result history the moment the new job
  * starts; the previously uploaded weights survive but the metric history
  * does not, and the API has no way to recover it. This is a separate
  * consent from spending money, so it needs its own `confirmHistoryLoss`
@@ -478,8 +478,8 @@ export async function trainingStart(
     if (history.hasHistory && !confirmHistoryLoss) {
       throw new Error(
         `Model '${resolvedModel.model}' already has a recorded run (status=${history.status}, ` +
-          `${history.epochsRecorded} recorded epoch(s)). Starting training again replaces this ` +
-          "model's status, epoch count, and per-epoch metric history, and that history cannot be " +
+          `${history.resultRecordCount} training result record(s)). Starting training again replaces ` +
+          "this model's status, epoch count, and training result history, and that history cannot be " +
           "recovered through the API; the previously uploaded weights survive. Set " +
           "confirm_history_loss=true to proceed. This is separate from confirm_cost.",
       );
