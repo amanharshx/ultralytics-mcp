@@ -141,6 +141,8 @@
       "lastReportedMetrics": {
         "epoch": 3,
         "metrics": {
+          "metrics/precision(B)": 0.07,
+          "metrics/recall(B)": 0.2,
           "metrics/mAP50(B)": 0.04556,
           "metrics/mAP50-95(B)": 0.02595
         }

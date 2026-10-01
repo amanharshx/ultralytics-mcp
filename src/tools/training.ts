@@ -15,12 +15,6 @@ import {
 } from "./model-training-projection.js";
 import { asRecord, pyField, validatePositiveInt } from "./shared.js";
 
-const KEY_METRICS = [
-  "metrics/mAP50(B)",
-  "metrics/mAP50-95(B)",
-  "metrics/mAP50(M)",
-  "metrics/mAP50-95(M)",
-];
 const RESERVED_TRAIN_ARG_KEYS = ["data", "model"] as const;
 const CHECKPOINT_TASK_SUFFIXES = [
   ["-seg", "segment"],
@@ -175,8 +169,8 @@ const REPORTED_PROGRESS_NOTE =
  * The job status is surfaced verbatim so a cancelled or failed run stays
  * distinguishable from a running one. The recorded compute cost and the
  * training error are surfaced when present. `lastReportedMetrics` is the
- * last `trainResults` record in API order with its reported epoch, filtered
- * to key metrics; it is not guaranteed to be the latest epoch.
+ * last `trainResults` record in API order with its reported epoch, keeping
+ * only its `metrics/*` entries; it is not guaranteed to be the latest epoch.
  * This tool answers "how is this training run going right now?" only:
  * model quality — the best epoch, the top-level `metrics` object, and
  * `trainArgs` — belongs to `model_metrics`, which validates the platform's
@@ -214,16 +208,13 @@ export async function trainingMonitor(
   } | null = null;
   if (trainResults.length > 0) {
     const lastRecord = asRecord(trainResults[trainResults.length - 1]);
-    const lastMetrics = asRecord(lastRecord.metrics);
-    const keyMetrics: Record<string, unknown> = {};
-    for (const key of KEY_METRICS) {
-      if (key in lastMetrics) {
-        keyMetrics[key] = lastMetrics[key];
-      }
-    }
     lastReportedMetrics = {
       epoch: lastRecord.epoch ?? null,
-      metrics: keyMetrics,
+      metrics: Object.fromEntries(
+        Object.entries(asRecord(lastRecord.metrics)).filter(([key]) =>
+          key.startsWith("metrics/"),
+        ),
+      ),
     };
   }
   const computeCost = projection.computeCost;
