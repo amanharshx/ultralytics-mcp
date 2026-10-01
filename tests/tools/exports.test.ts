@@ -410,6 +410,14 @@ describe("exportStatus", () => {
     expect(calls).toHaveLength(0);
   });
 
+  test("rejects an empty export id before any network call", async () => {
+    const { client, calls } = statusClient();
+    await expect(exportStatus(client, MODEL, "", PROJECT)).rejects.toThrow(
+      /`export_id` is required/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
   test("reports a queued export with no artifact yet", async () => {
     const { client } = statusClient({
       exportBody: {
@@ -649,6 +657,14 @@ describe("exportCancel", () => {
     const { client, calls } = sequenceClient([]);
     await expect(exportCancel(client, MODEL, EXPORT_ID)).rejects.toThrow(
       /project is required/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test("rejects an empty export id without reading or cancelling anything", async () => {
+    const { client, calls } = sequenceClient([]);
+    await expect(exportCancel(client, MODEL, "", PROJECT)).rejects.toThrow(
+      /`export_id` is required/,
     );
     expect(calls).toHaveLength(0);
   });

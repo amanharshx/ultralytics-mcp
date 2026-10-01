@@ -209,6 +209,22 @@ describe("deploymentGet", () => {
     ]);
   });
 
+  test.each([
+    "",
+    "   ",
+    "alice/",
+    "/",
+    "/alice",
+  ])("rejects the blank ref %j before any network call", async (ref) => {
+    const { client, calls } = routeClient(() =>
+      jsonResponse({ deployments: [] }),
+    );
+    await expect(deploymentGet(client, ref)).rejects.toThrow(
+      /Cannot parse deployment reference/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
   test("treats serviceUrl and deployedAt as absent-until-ready, not a crash", async () => {
     const { client } = routeClient((path) => {
       if (path === "/api/deployments/alice/road-detector") {
@@ -960,5 +976,13 @@ describe("deploymentStop", () => {
       "/api/account/summary",
       "/api/deployments/alice/road-detector",
     ]);
+  });
+
+  test("rejects a blank slug without sending any request", async () => {
+    const { client, calls } = routeClient(() => jsonResponse({}, 404));
+    await expect(deploymentStop(client, "alice/")).rejects.toThrow(
+      /Cannot parse deployment reference/,
+    );
+    expect(calls).toHaveLength(0);
   });
 });
