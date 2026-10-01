@@ -438,10 +438,10 @@ const TOOL_RUNNERS: Record<
     trainingStart(client, {
       model: args.model as string,
       project: args.project as string,
-      dataset: args.dataset as string | string[],
+      dataset: args.dataset as string,
       gpuType: args.gpu_type as string,
       trainArgs: args.train_args as Record<string, unknown> | undefined,
-      epochs: args.epochs as number | undefined,
+      epochs: args.epochs as number,
       imgsz: args.imgsz as number | undefined,
       batch: args.batch as number | undefined,
       name: args.name as string | undefined,
@@ -797,6 +797,7 @@ describe("parity fixtures", () => {
       project: fixture.args.project as string,
       dataset: fixture.args.dataset as string,
       gpuType: fixture.args.gpu_type as string,
+      epochs: fixture.args.epochs as number,
       confirmCost: fixture.args.confirm_cost as boolean,
     }).catch((e) => e as Error);
     expect(error).toBeInstanceOf(Error);
@@ -823,6 +824,7 @@ describe("parity fixtures", () => {
       project: fixture.args.project as string,
       dataset: fixture.args.dataset as string,
       gpuType: fixture.args.gpu_type as string,
+      epochs: fixture.args.epochs as number,
       confirmCost: fixture.args.confirm_cost as boolean,
     }).catch((e) => e as Error);
     expect(error).toBeInstanceOf(Error);

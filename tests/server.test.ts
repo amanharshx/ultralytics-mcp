@@ -197,6 +197,7 @@ test("server registers all available tools over the protocol", async () => {
     "project",
     "dataset",
     "gpu_type",
+    "epochs",
   ]);
   expect(trainingStart?.annotations).toMatchObject({
     readOnlyHint: false,
@@ -211,7 +212,11 @@ test("server registers all available tools over the protocol", async () => {
       description: expect.any(String),
     },
     dataset: {
+      type: "string",
       description: expect.any(String),
+    },
+    epochs: {
+      type: "integer",
     },
   });
 

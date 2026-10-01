@@ -28,27 +28,6 @@ const CHECKPOINT_TASK_SUFFIXES = [
 ] as const;
 const BASE_CHECKPOINT_RE =
   /^yolo(?:26|11|v8|v5)[nslmx](?:-(?:seg|sem|pose|obb|cls))?(?:\.pt)?$/i;
-/** Checkpoint/dataset task compatibility for an array-shaped `dataset`
- * input, at any length — including a single-element array, which still
- * sends `trainArgs.data` as `[uri]` rather than the bare string a
- * non-array `dataset` sends. Only the bare-string shape is enforced by the
- * server at POST /training/start itself (verified live: a classify
- * checkpoint against a detect dataset returns 400 "Dataset task
- * mismatch..."). Whether the server checks an array-shaped `data` the same
- * way — every entry, rather than, say, only the first, or only failing
- * partway through a sequential paid run — has not been verified live for
- * any array length. Per "verify, then delete," a guard whose server-side
- * enforcement can't be demonstrated stays; this one does, scoped to every
- * array input, so only the bare-string path can drop its own client-side
- * check. */
-const DATASET_TASK_COMPATIBILITY: Record<string, string[]> = {
-  detect: ["detect"],
-  segment: ["segment", "semantic"],
-  semantic: ["semantic"],
-  pose: ["pose"],
-  obb: ["obb"],
-  classify: ["classify"],
-};
 
 /** Format a percentage like Python's `str(round(x, 1))` (whole numbers keep `.0`). */
 function formatPercent(value: number): string {
@@ -156,30 +135,6 @@ function createdModelId(data: unknown): string {
  * the pure, shape-agnostic dataset resolver. */
 function formatDatasetUri(dataset: { owner: string; dataset: string }): string {
   return `ul://${dataset.owner}/datasets/${dataset.dataset}`;
-}
-
-function validateCheckpointCompatibility(
-  datasetTask: string | null,
-  checkpointTask: string,
-  datasetLabel: string,
-): void {
-  if (datasetTask === null) {
-    throw new Error(
-      `Dataset '${datasetLabel}' is missing a task; cannot select a base checkpoint.`,
-    );
-  }
-  const allowedTasks = DATASET_TASK_COMPATIBILITY[datasetTask];
-  if (!allowedTasks) {
-    throw new Error(
-      `Unsupported dataset task '${datasetTask}' for dataset '${datasetLabel}'.`,
-    );
-  }
-  if (!allowedTasks.includes(checkpointTask)) {
-    throw new Error(
-      `Checkpoint task '${checkpointTask}' is not compatible with dataset task ` +
-        `'${datasetTask}' for dataset '${datasetLabel}'.`,
-    );
-  }
 }
 
 interface TrainingMonitorOptions {
@@ -388,23 +343,17 @@ export async function trainingCancel(
  * (ids are not addressable on any of them) and fills a missing owner from the
  * account summary. `trainArgs.data` is built from the three-segment
  * `ul://owner/datasets/slug` URI the platform requires; a bare dataset id is
- * not accepted. `dataset` accepts either one ref or a list of refs for
- * sequential fine-tuning, matching the platform's own `trainArgs.data`
- * contract: a single ref becomes a single URI string, a list becomes a list
- * of URIs in the given order. Training from an existing model fetches it
- * through the live owner-scoped endpoint to read its database id — the start
- * endpoint takes an id by design while every other endpoint takes owner and
- * slug — and reuses its own stored base checkpoint for `trainArgs.model`
- * verbatim. Checkpoint mode creates a project model first from owner and
+ * not accepted; the platform takes exactly one dataset per run. `epochs` is
+ * required by the platform and checked before any network call, so omitting
+ * it cannot leave a checkpoint-mode model behind. Training from an existing
+ * model fetches it through the live owner-scoped endpoint to read its
+ * database id — the start endpoint takes an id by design while every other
+ * endpoint takes owner and slug — and reuses its own stored base checkpoint
+ * for `trainArgs.model` verbatim. Checkpoint mode creates a project model first from owner and
  * project slug (the platform assigns the new model's slug; it no longer
- * accepts a requested name). For a `dataset` list, the checkpoint's
- * inferred task is validated against every entry's task before that model
- * is created, so an incompatible list is refused up front with nothing
- * created — that check is not itself confirmed live for every array length
- * and stays client-side for that reason (see `DATASET_TASK_COMPATIBILITY`).
- * For a single, non-array `dataset`, there is no such pre-check: the
- * server enforces the same task match at `POST /training/start` itself
- * (confirmed live), which runs *after* the model above is already created.
+ * accepts a requested name). The checkpoint/dataset task match is enforced
+ * by the server at `POST /training/start` (confirmed live), which runs
+ * *after* the model above is already created.
  * A mismatch there still leaves that model behind — nothing deletes it
  * automatically, since no status code reliably proves the job never
  * started — so the thrown error names the model and the caller is expected
@@ -431,10 +380,10 @@ export async function trainingStart(
   options: {
     model: string;
     project: string;
-    dataset: string | string[];
+    dataset: string;
     gpuType: string;
     trainArgs?: Record<string, unknown>;
-    epochs?: number;
+    epochs: number;
     imgsz?: number;
     batch?: number;
     name?: string;
@@ -466,34 +415,24 @@ export async function trainingStart(
     throw new Error("`gpu_type` is required.");
   }
   validateTrainArgs(passthroughTrainArgs);
-  if (epochs !== undefined && epochs <= 0) {
-    throw new Error("`epochs` must be greater than 0.");
-  }
+  validatePositiveInt(epochs, "epochs");
   if (imgsz !== undefined && imgsz <= 0) {
     throw new Error("`imgsz` must be greater than 0.");
   }
   if (batch !== undefined && batch !== -1 && batch <= 0) {
     throw new Error("`batch` must be -1 for auto or greater than 0.");
   }
-  const datasetRefs = Array.isArray(dataset) ? dataset : [dataset];
-  if (datasetRefs.length === 0) {
-    throw new Error("`dataset` must include at least one dataset reference.");
-  }
 
   const resolvedProject = resolveProject(project);
-  const resolvedDatasets = datasetRefs.map((ref) => resolveDataset(ref));
+  const resolvedDataset = resolveDataset(dataset);
   const checkpoint = checkpointFromRef(model);
 
-  const datasetOwners: string[] = [];
-  for (const resolved of resolvedDatasets) {
-    datasetOwners.push(resolved.owner ?? (await client.getAccountOwner()));
-  }
-  const datasetUris = resolvedDatasets.map((resolved, i) =>
-    formatDatasetUri({ owner: datasetOwners[i], dataset: resolved.dataset }),
-  );
   const trainArgs: Record<string, unknown> = {
     ...passthroughTrainArgs,
-    data: Array.isArray(dataset) ? datasetUris : datasetUris[0],
+    data: formatDatasetUri({
+      owner: resolvedDataset.owner ?? (await client.getAccountOwner()),
+      dataset: resolvedDataset.dataset,
+    }),
   };
 
   // Set only when this call creates a fresh model from a base checkpoint.
@@ -537,41 +476,11 @@ export async function trainingStart(
     modelProjectDisplay = resolvedModel.project;
     modelSlugDisplay = resolvedModel.model;
   } else {
-    // A bare-string `data` (the caller passed a single, non-array dataset
-    // ref): checkpoint/dataset task compatibility is enforced by the server
-    // at POST /training/start itself, e.g. `{"error":"Dataset task
-    // mismatch. This dataset is \"detect\" but the selected model trains
-    // \"classify\". ..."}` (400, verified live). No client-side pre-check
-    // is needed for this case.
-    //
-    // An array-shaped `data` — which is what the request sends whenever the
-    // caller passed `dataset` as an array, INCLUDING a single-element one
-    // like `[ref]`: `trainArgs.data` becomes `[uri]`, not the bare string
-    // `uri` the case above verified. That shape has not itself been tested
-    // live (with a mismatch on any entry, first or later), so the
-    // pre-check below stays for every array input, regardless of length —
-    // see DATASET_TASK_COMPATIBILITY. The discriminator here is
-    // `Array.isArray(dataset)`, the caller's original input shape, not
-    // `resolvedDatasets.length`: both normalize to the same length-1 array
-    // internally, but only one of them changes what gets sent on the wire.
+    // Checkpoint/dataset task compatibility is enforced by the server at
+    // POST /training/start, e.g. `{"error":"Dataset task mismatch. This
+    // dataset is \"detect\" but the selected model trains \"classify\".
+    // ..."}` (400, verified live).
     const checkpointTask = inferCheckpointTask(checkpoint);
-    if (Array.isArray(dataset)) {
-      for (let i = 0; i < resolvedDatasets.length; i++) {
-        const datasetOwnerForCheck = datasetOwners[i];
-        const resolved = resolvedDatasets[i];
-        const datasetDetail = await client.get(
-          `/datasets/${encodeURIComponent(datasetOwnerForCheck)}/${encodeURIComponent(resolved.dataset)}`,
-        );
-        const datasetFields = asRecord(asRecord(datasetDetail).dataset);
-        const datasetTask =
-          typeof datasetFields.task === "string" ? datasetFields.task : null;
-        validateCheckpointCompatibility(
-          datasetTask,
-          checkpointTask,
-          `${datasetOwnerForCheck}/${resolved.dataset}`,
-        );
-      }
-    }
     const projectOwner =
       resolvedProject.owner ?? (await client.getAccountOwner());
     const created = await client.postJson("/models", {
@@ -601,9 +510,7 @@ export async function trainingStart(
     }
   }
 
-  if (epochs !== undefined) {
-    trainArgs.epochs = epochs;
-  }
+  trainArgs.epochs = epochs;
   if (imgsz !== undefined) {
     trainArgs.imgsz = imgsz;
   }

@@ -5,6 +5,7 @@
     "project": "example-owner/example-project-1",
     "dataset": "example-owner/example-dataset-1",
     "gpu_type": "l4",
+    "epochs": 1,
     "confirm_cost": true
   },
   "api": [

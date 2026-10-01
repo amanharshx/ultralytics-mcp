@@ -654,6 +654,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
       }),
     ).rejects.toThrow(/Set confirm_cost=true/);
   });
@@ -665,22 +666,37 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "  ",
+        epochs: 1,
         confirmCost: true,
       }),
     ).rejects.toThrow(/`gpu_type` is required/);
   });
 
-  test("validates positive epochs before any network call", async () => {
+  test("rejects missing epochs before creating a checkpoint-mode model", async () => {
+    await expect(
+      trainingStart(throwingClient(), {
+        model: "yolo26n.pt",
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        confirmCost: true,
+      } as Parameters<typeof trainingStart>[1]),
+    ).rejects.toThrow(/`epochs` must be a positive integer/);
+  });
+
+  test.each([
+    0, 1.5,
+  ])("rejects epochs=%s before any network call", async (epochs) => {
     await expect(
       trainingStart(throwingClient(), {
         model: MODEL_REF,
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
-        epochs: 0,
+        epochs,
         confirmCost: true,
       }),
-    ).rejects.toThrow(/`epochs` must be greater than 0/);
+    ).rejects.toThrow(/`epochs` must be a positive integer/);
   });
 
   test.each([
@@ -692,6 +708,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         batch,
         confirmCost: true,
       }),
@@ -724,6 +741,7 @@ describe("trainingStart", () => {
       project: PROJECT_REF,
       dataset: DATASET_REF,
       gpuType: "l4",
+      epochs: 1,
       batch: -1,
       confirmCost: true,
     });
@@ -739,6 +757,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         trainArgs: { [key]: "x" },
         confirmCost: true,
       }),
@@ -752,6 +771,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       }),
     ).rejects.toThrow(/not addressable/);
@@ -764,6 +784,7 @@ describe("trainingStart", () => {
         project: "b".repeat(24),
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       }),
     ).rejects.toThrow(/not addressable/);
@@ -776,6 +797,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: "c".repeat(24),
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       }),
     ).rejects.toThrow(/not addressable/);
@@ -883,6 +905,7 @@ describe("trainingStart", () => {
       project: `ul://${OWNER}/${PROJECT}`,
       dataset: `ul://${OWNER}/${DATASET}`,
       gpuType: "l4",
+      epochs: 1,
       confirmCost: true,
     });
 
@@ -914,6 +937,7 @@ describe("trainingStart", () => {
       project: PROJECT_REF,
       dataset: DATASET_URI,
       gpuType: "l4",
+      epochs: 1,
       confirmCost: true,
     });
 
@@ -951,6 +975,7 @@ describe("trainingStart", () => {
       project: PROJECT,
       dataset: DATASET,
       gpuType: "l4",
+      epochs: 1,
       confirmCost: true,
     });
 
@@ -975,6 +1000,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       }),
     ).rejects.toThrow(/no stored base checkpoint/);
@@ -994,6 +1020,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       }),
     ).rejects.toThrow(/Model not found/);
@@ -1146,6 +1173,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         name: "my-run",
         confirmCost: true,
       });
@@ -1185,6 +1213,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       });
     });
@@ -1212,6 +1241,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       });
 
@@ -1249,6 +1279,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       });
 
@@ -1272,6 +1303,7 @@ describe("trainingStart", () => {
           project: PROJECT_REF,
           dataset: DATASET_REF,
           gpuType: "l4",
+          epochs: 1,
           confirmCost: true,
         }),
       ).rejects.toThrow(/did not include an id/);
@@ -1312,6 +1344,7 @@ describe("trainingStart", () => {
           project: PROJECT_REF,
           dataset: DATASET_REF,
           gpuType: "l4",
+          epochs: 1,
           confirmCost: true,
         }),
       ).rejects.toThrow(
@@ -1359,6 +1392,7 @@ describe("trainingStart", () => {
           project: PROJECT_REF,
           dataset: DATASET_REF,
           gpuType: "l4",
+          epochs: 1,
           confirmCost: true,
         }),
       ).rejects.toThrow(
@@ -1393,6 +1427,7 @@ describe("trainingStart", () => {
           project: PROJECT_REF,
           dataset: DATASET_REF,
           gpuType: "l4",
+          epochs: 1,
           confirmCost: true,
         }),
       ).rejects.toThrow(/^HTTP 400.*Some other failure\.\s*\[/s);
@@ -1423,6 +1458,7 @@ describe("trainingStart", () => {
           project: PROJECT_REF,
           dataset: DATASET_REF,
           gpuType: "l4",
+          epochs: 1,
           confirmCost: true,
         }),
       ).rejects.toThrow(
@@ -1461,6 +1497,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
         confirmHistoryLoss: true,
       });
@@ -1499,6 +1536,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       });
       expect(result.summary).toContain("Started training");
@@ -1528,6 +1566,7 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       });
       expect(result.summary).toContain("Started training");
@@ -1554,6 +1593,7 @@ describe("trainingStart", () => {
           project: PROJECT_REF,
           dataset: DATASET_REF,
           gpuType: "l4",
+          epochs: 1,
           confirmCost: true,
         }),
       ).rejects.toThrow(/already has a recorded run/);
@@ -1584,204 +1624,10 @@ describe("trainingStart", () => {
         project: PROJECT_REF,
         dataset: DATASET_REF,
         gpuType: "l4",
+        epochs: 1,
         confirmCost: true,
       });
       expect(result.summary).toContain("Started training");
-    });
-  });
-
-  describe("multiple datasets", () => {
-    const DATASET_2 = "road-data-2";
-    const DATASET_2_REF = `${OWNER}/${DATASET_2}`;
-    const DATASET_2_URI = `ul://${OWNER}/datasets/${DATASET_2}`;
-    const DATASET_PATH = `/api/datasets/${OWNER}/${DATASET}`;
-    const DATASET_2_PATH = `/api/datasets/${OWNER}/${DATASET_2}`;
-
-    test("rejects an empty dataset list before any network call", async () => {
-      await expect(
-        trainingStart(throwingClient(), {
-          model: MODEL_REF,
-          project: PROJECT_REF,
-          dataset: [],
-          gpuType: "l4",
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(/`dataset` must include at least one/);
-    });
-
-    test("builds trainArgs.data as a list of URIs, in order, for an existing model", async () => {
-      const calls: { body: unknown }[] = [];
-      const impl = (async (url: string | URL, init: RequestInit = {}) => {
-        calls.push({
-          body: typeof init.body === "string" ? JSON.parse(init.body) : null,
-        });
-        const path = new URL(String(url)).pathname;
-        if (path === MODEL_PATH) {
-          return jsonResponse({
-            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
-          });
-        }
-        return jsonResponse(startResponse());
-      }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
-
-      await trainingStart(client, {
-        model: MODEL_REF,
-        project: PROJECT_REF,
-        dataset: [DATASET_REF, DATASET_2_REF],
-        gpuType: "l4",
-        confirmCost: true,
-      });
-
-      expect(calls[1]).toMatchObject({
-        body: { trainArgs: { data: [DATASET_URI, DATASET_2_URI] } },
-      });
-    });
-
-    test("checkpoint mode fetches and task-validates every dataset before creating the model", async () => {
-      const calls: { url: string; method: string; body: unknown }[] = [];
-      const impl = (async (url: string | URL, init: RequestInit = {}) => {
-        let body: unknown;
-        if (typeof init.body === "string") body = JSON.parse(init.body);
-        calls.push({
-          url: String(url),
-          method: (init.method ?? "GET").toUpperCase(),
-          body,
-        });
-        const path = new URL(String(url)).pathname;
-        if (path === DATASET_PATH || path === DATASET_2_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
-        if (path === CREATE_MODEL_PATH) {
-          return jsonResponse({
-            id: "m".repeat(24),
-            owner: OWNER,
-            project: PROJECT,
-            model: "exp-2",
-          });
-        }
-        if (path === START_PATH) {
-          return jsonResponse(startResponse({ modelId: "m".repeat(24) }));
-        }
-        return jsonResponse({}, 404);
-      }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
-
-      // This client-side check stays only for multi-dataset arrays: the
-      // server's task-mismatch enforcement is verified live for a single
-      // dataset, but not for an array with a mismatch on a later entry.
-      await trainingStart(client, {
-        model: "yolo26n.pt",
-        project: PROJECT_REF,
-        dataset: [DATASET_REF, DATASET_2_REF],
-        gpuType: "l4",
-        confirmCost: true,
-      });
-
-      expect(calls[0]?.url).toBe(`${ORIGIN}${DATASET_PATH}`);
-      expect(calls[1]?.url).toBe(`${ORIGIN}${DATASET_2_PATH}`);
-      expect(calls[3]).toMatchObject({
-        url: `${ORIGIN}${START_PATH}`,
-        body: {
-          trainArgs: {
-            data: [DATASET_URI, DATASET_2_URI],
-            model: "yolo26n.pt",
-          },
-        },
-      });
-    });
-
-    test("refuses when one dataset in the list is task-incompatible, naming it", async () => {
-      const { client, calls } = routeClient((path) => {
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
-        if (path === DATASET_2_PATH) {
-          return jsonResponse({ dataset: { task: "classify" } });
-        }
-        return jsonResponse({}, 404);
-      });
-
-      await expect(
-        trainingStart(client, {
-          model: "yolo26n.pt",
-          project: PROJECT_REF,
-          dataset: [DATASET_REF, DATASET_2_REF],
-          gpuType: "l4",
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(
-        new RegExp(
-          `not compatible.*${OWNER}/${DATASET_2}`.replace(/\//g, "\\/"),
-        ),
-      );
-
-      expect(calls).toHaveLength(2);
-      expect(calls[1]?.path).toBe(DATASET_2_PATH);
-    });
-
-    test("skips the array-only check for a bare-string dataset (the shape actually verified live)", async () => {
-      // Guards against silently re-widening the reinstated check back to
-      // the bare-string path, which the server already validates live.
-      const { client, calls } = routeClient((path) => {
-        if (path === CREATE_MODEL_PATH) {
-          return jsonResponse({
-            id: "m".repeat(24),
-            owner: OWNER,
-            project: PROJECT,
-            model: "exp-2",
-          });
-        }
-        return jsonResponse(startResponse({ modelId: "m".repeat(24) }));
-      });
-
-      await trainingStart(client, {
-        model: "yolo26n.pt",
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        confirmCost: true,
-      });
-
-      expect(calls.map((call) => call.path)).toEqual([
-        CREATE_MODEL_PATH,
-        START_PATH,
-      ]);
-    });
-
-    test("still runs the check for a single-element array, which sends an array-shaped trainArgs.data", async () => {
-      // A single-element array is not the bare-string shape verified live:
-      // `Array.isArray(dataset)` is true, so `trainArgs.data` becomes
-      // `[uri]`, the same array shape a longer list sends. The guard must
-      // key off that original shape, not `resolvedDatasets.length` (which
-      // is 1 for both a bare string and a single-element array).
-      const { client, calls } = routeClient((path) => {
-        if (path === DATASET_PATH) {
-          return jsonResponse({ dataset: { task: "detect" } });
-        }
-        return jsonResponse({}, 404);
-      });
-
-      await expect(
-        trainingStart(client, {
-          model: "yolo26n-cls.pt",
-          project: PROJECT_REF,
-          dataset: [DATASET_REF],
-          gpuType: "l4",
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(/not compatible/);
-
-      expect(calls).toHaveLength(1);
-      expect(calls[0]?.path).toBe(DATASET_PATH);
     });
   });
 });
