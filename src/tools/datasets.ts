@@ -371,10 +371,10 @@ export async function exploreDatasets(
     task: joinExploreTasks(options.task),
   });
   const items = listField(data, "datasets").map((dataset) => ({
-    id: dataset._id ?? null,
+    id: dataset.id ?? null,
     name: dataset.name ?? null,
-    slug: dataset.slug ?? null,
-    username: dataset.username ?? null,
+    slug: dataset.dataset ?? null,
+    username: dataset.owner ?? null,
     task: dataset.task ?? null,
     imageCount: dataset.imageCount ?? null,
     classCount: dataset.classCount ?? null,

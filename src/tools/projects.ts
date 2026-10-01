@@ -62,10 +62,10 @@ export async function exploreProjects(
     offset: options.offset,
   });
   const items = listField(data, "projects").map((project) => ({
-    id: project._id ?? null,
+    id: project.id ?? null,
     name: project.name ?? null,
-    slug: project.slug ?? null,
-    username: project.username ?? null,
+    slug: project.project ?? null,
+    username: project.owner ?? null,
     visibility: project.visibility ?? null,
     modelCount: project.modelCount ?? null,
     starCount: project.starCount ?? null,
