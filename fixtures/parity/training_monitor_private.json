@@ -90,7 +90,7 @@
     }
   ],
   "expected": {
-    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': training status=completed job=completed; epoch 2/100; ~101%",
+    "summary": "Model 'example-model-1' for owner 'example-owner' project 'example-project-1': training status=completed job=completed; reported ~101%; 2 result record(s)",
     "data": {
       "owner": "example-owner",
       "project": "example-project-1",
@@ -98,15 +98,18 @@
       "modelId": "000000000000000000000001",
       "status": "completed",
       "jobStatus": "completed",
-      "epochsDone": 2,
+      "resultRecordCount": 2,
       "totalEpochs": 100,
-      "progressPercentage": 101,
+      "reportedCurrentEpoch": null,
+      "reportedProgressPercentage": 101,
+      "progressNote": "reportedCurrentEpoch, reportedProgressPercentage, and etaMs are the training job's own counters, passed through verbatim. After a run ends reportedCurrentEpoch can count a post-training evaluation as an epoch, so it may be one higher than the epochs actually trained, with reportedProgressPercentage inflated to match; etaMs can stay nonzero. resultRecordCount counts trainResults records, not epochs.",
       "etaMs": 0,
-      "bestEpoch": 78,
-      "bestFitness": 0.38792,
-      "latestMetrics": {
-        "metrics/mAP50(B)": 0.01108,
-        "metrics/mAP50-95(B)": 0.00553
+      "lastReportedMetrics": {
+        "epoch": 1,
+        "metrics": {
+          "metrics/mAP50(B)": 0.01108,
+          "metrics/mAP50-95(B)": 0.00553
+        }
       },
       "computeCost": {
         "gpuType": "rtx-pro-6000",
@@ -116,7 +119,6 @@
         "durationMs": 139413
       },
       "trainingError": null,
-      "progressSource": "models/{owner}/{project}/{model}/training",
       "timing": {
         "etaMs": 0,
         "timePerEpochMs": 1322.851485148515,

@@ -28,10 +28,9 @@ function buildTrainResults(): Record<string, unknown>[] {
   }));
 }
 
-/** The live-observed relationship: top-level `metrics` uses cleaned key
- * names and is byte-identical to the *last* recorded epoch, never the best
- * one (verified live 2026-09-15 against `fish/exp-2`, `carparts/exp-2`,
- * `pothole/exp-2`, and `road-safety-101/exp-3`). */
+/** Top-level `metrics` uses cleaned key names and, on the live models
+ * checked, equals the *last* record's values (which on Platform-trained runs
+ * is the post-training evaluation, not a training epoch). */
 function finalMetricsFromLast(
   trainResults: Record<string, unknown>[],
 ): Record<string, unknown> {
@@ -67,7 +66,7 @@ function baseModelFields(): Record<string, unknown> {
 }
 
 describe("modelMetrics", () => {
-  test("default call returns best and final metrics labelled distinctly, best-epoch correct outside the default history window, trainArgs and history omitted", async () => {
+  test("default call returns the validated best epoch and the reported metrics labelled distinctly, best-epoch correct outside the default history window, trainArgs and history omitted", async () => {
     const { client, calls } = routeClient((path) => {
       if (path === MODEL_PATH) {
         return jsonResponse({ model: baseModelFields() });
@@ -88,16 +87,22 @@ describe("modelMetrics", () => {
       "metrics/mAP50-95(B)": 0.855,
     });
     expect(data.bestEpochNote).toBeNull();
-    expect(data.finalEpoch).toBe(24);
-    expect(data.finalEpochMetrics).toEqual(
+    expect(data.reportedMetrics).toEqual(
       finalMetricsFromLast(buildTrainResults()),
     );
-    // Best (epoch 2) and final (epoch 24) never collide: distinct labelled fields.
-    expect(data.bestEpochMetrics).not.toEqual(data.finalEpochMetrics);
+    expect(data.reportedMetricsNote).toContain("does not say which evaluation");
+    expect(data.resultRecordCount).toBe(25);
+    // The reported metrics are never paired with an epoch, and nothing
+    // counts records as epochs.
+    expect(data).not.toHaveProperty("finalEpoch");
+    expect(data).not.toHaveProperty("finalEpochMetrics");
+    expect(data).not.toHaveProperty("epochsDone");
     expect(data).not.toHaveProperty("trainArgs");
     expect(data).not.toHaveProperty("history");
-    expect(result.summary).toContain("best epoch 2");
-    expect(result.summary).toContain("final epoch 24");
+    expect(result.summary).toBe(
+      "Model 'exp-2' for owner 'alice' project 'fish': best epoch 2 " +
+        "(fitness 0.855); reported metrics available; 25 result record(s).",
+    );
     expect(calls.map((call) => call.path)).toEqual([MODEL_PATH]);
   });
 
@@ -146,7 +151,10 @@ describe("modelMetrics", () => {
     const truncatedHistory = (truncated.data as Record<string, unknown>)
       .history as { window: string; entries: unknown[] };
     expect(truncatedHistory.entries).toHaveLength(5);
-    expect(truncatedHistory.window).toBe("epochs 20-24 of 200 (25 recorded)");
+    expect(truncatedHistory.window).toBe(
+      "last 5 of 25 record(s) in API order; reported epochs 20-24, " +
+        "0 duplicate and 0 missing epoch number(s) in that range",
+    );
 
     const full = await modelMetrics(
       client,
@@ -161,7 +169,62 @@ describe("modelMetrics", () => {
     // The full curve is still labelled with its window -- the label is not
     // skipped just because the requested window covers every recorded epoch.
     expect(fullHistory.entries).toHaveLength(25);
-    expect(fullHistory.window).toBe("epochs 0-24 of 200 (25 recorded)");
+    expect(fullHistory.window).toBe(
+      "all 25 record(s) in API order; reported epochs 0-24, " +
+        "0 duplicate and 0 missing epoch number(s) in that range",
+    );
+  });
+
+  // Shape observed live on `road-safety-101/exp` (out-of-order callbacks,
+  // missing epochs) and on pre-v8.4.52 runs (a post-training record
+  // duplicating the last epoch number).
+  test("include_history labels the window from reported epoch values, not array positions, counting duplicates and gaps only inside that range", async () => {
+    const trainResults = [
+      { epoch: 5, metrics: {}, fitness: 0.1 },
+      { epoch: 9, metrics: {}, fitness: 0.1 },
+      { epoch: 6, metrics: {}, fitness: 0.1 },
+      { epoch: 9, metrics: {}, fitness: 0.1 },
+      { epoch: 7, metrics: {}, fitness: 0.1 },
+    ];
+    const { client } = routeClient((path) =>
+      path === MODEL_PATH
+        ? jsonResponse({
+            model: { ...baseModelFields(), bestEpoch: null, trainResults },
+          })
+        : jsonResponse({}, 404),
+    );
+
+    const result = await modelMetrics(
+      client,
+      `${OWNER}/${PROJECT}/${MODEL}`,
+      undefined,
+      { includeHistory: true, historyLastN: 4 },
+    );
+    const history = (result.data as Record<string, unknown>).history as Record<
+      string,
+      unknown
+    >;
+    // Last 4 in API order are 9, 6, 9, 7: first/last positions would claim
+    // "9-7"; the numeric range is 6-9, with 9 duplicated and 8 missing.
+    // Epoch 5 is outside the window, so it is neither counted nor a gap.
+    expect(history).toMatchObject({
+      window:
+        "last 4 of 5 record(s) in API order; reported epochs 6-9, " +
+        "1 duplicate and 1 missing epoch number(s) in that range",
+      returnedRecords: 4,
+      totalRecords: 5,
+      minEpoch: 6,
+      maxEpoch: 9,
+      duplicateEpochs: 1,
+      missingEpochs: 1,
+      entries: [
+        { epoch: 9, metrics: {} },
+        { epoch: 6, metrics: {} },
+        { epoch: 9, metrics: {} },
+        { epoch: 7, metrics: {} },
+      ],
+    });
+    expect(history.note).toContain("post-training evaluation");
   });
 
   test("rejects a non-positive history_last_n before making any request", async () => {
@@ -195,7 +258,7 @@ describe("modelMetrics", () => {
 
   // `pothole/yolo26s`, observed live: `bestEpoch: null`, `epochs: -1`, 70
   // `trainResults`, but top-level `metrics` still present.
-  test("survives bestEpoch: null without throwing, reporting bestEpochMetrics unavailable while finalEpochMetrics still comes through", async () => {
+  test("survives bestEpoch: null without throwing, reporting bestEpochMetrics unavailable while reportedMetrics still comes through", async () => {
     const trainResults = [
       { epoch: 1, metrics: { "metrics/mAP50(B)": 0.4462 } },
       { epoch: 70, metrics: { "metrics/mAP50(B)": 0.64598 } },
@@ -234,8 +297,8 @@ describe("modelMetrics", () => {
       "bestEpoch is not recorded for this model.",
     );
     expect(data.epochs).toBeNull();
-    expect(data.finalEpoch).toBe(70);
-    expect(data.finalEpochMetrics).toEqual({
+    expect(data.resultRecordCount).toBe(2);
+    expect(data.reportedMetrics).toEqual({
       mAP50: 0.64598,
       "mAP50-95": 0.47769,
       precision: 0.69674,
@@ -280,13 +343,90 @@ describe("modelMetrics", () => {
     expect(data.bestFitness).toBeNull();
     expect(data.bestEpochMetrics).toBeNull();
     expect(data.bestEpochNote).toBe(
-      "the model reports bestEpoch 99 (bestFitness 0.98007), but no entry " +
-        "among the 0 recorded epoch(s) (epochs: 1) matches epoch 99; not treated as fact.",
+      "the model reports bestEpoch 99 (bestFitness 0.98007), but none of " +
+        "the 0 result record(s) reports epoch 99; not treated as fact.",
     );
-    expect(data.finalEpoch).toBeNull();
-    expect(data.finalEpochMetrics).toBeNull();
-    expect(data.epochsDone).toBe(0);
+    expect(data.reportedMetrics).toBeNull();
+    expect(data.resultRecordCount).toBe(0);
     expect(result.summary).toContain("best epoch unavailable");
-    expect(result.summary).toContain("final epoch unavailable");
+    expect(result.summary).toContain("reported metrics unavailable");
+  });
+
+  test("keeps a reported bestFitness in the note when bestEpoch is null", async () => {
+    const { client } = routeClient((path) =>
+      path === MODEL_PATH
+        ? jsonResponse({
+            model: {
+              ...baseModelFields(),
+              bestEpoch: null,
+              bestFitness: 0.855,
+            },
+          })
+        : jsonResponse({}, 404),
+    );
+
+    const result = await modelMetrics(client, `${OWNER}/${PROJECT}/${MODEL}`);
+    const data = result.data as Record<string, unknown>;
+    expect(data.bestFitness).toBeNull();
+    expect(data.bestEpochNote).toBe(
+      "bestEpoch is not recorded for this model, but it reports " +
+        "bestFitness 0.855; not treated as fact.",
+    );
+  });
+
+  /** Serve the base model with the given best-epoch fields and records. */
+  function bestEpochClient(overrides: Record<string, unknown>) {
+    return routeClient((path) =>
+      path === MODEL_PATH
+        ? jsonResponse({ model: { ...baseModelFields(), ...overrides } })
+        : jsonResponse({}, 404),
+    ).client;
+  }
+
+  // Ultralytics before v8.4.48 reported the last epoch as bestEpoch; if that
+  // run's duplicate post-training record never arrived, exactly one record
+  // matches, and only the fitness check catches it.
+  test("rejects a uniquely matched bestEpoch whose record fitness differs from bestFitness, keeping both reported values in the note", async () => {
+    const client = bestEpochClient({
+      bestEpoch: 99,
+      bestFitness: 0.35435,
+      trainResults: [
+        { epoch: 66, metrics: {}, fitness: 0.35435 },
+        { epoch: 99, metrics: {}, fitness: 0.34833 },
+      ],
+    });
+
+    const result = await modelMetrics(client, `${OWNER}/${PROJECT}/${MODEL}`);
+    const data = result.data as Record<string, unknown>;
+    expect(data.bestEpoch).toBeNull();
+    expect(data.bestFitness).toBeNull();
+    expect(data.bestEpochMetrics).toBeNull();
+    expect(data.bestEpochNote).toBe(
+      "the model reports bestEpoch 99 (bestFitness 0.35435), but the result " +
+        "record for epoch 99 reports fitness 0.34833; not treated as fact.",
+    );
+    expect(result.summary).toContain("best epoch unavailable");
+  });
+
+  test("requires exact fitness equality: no tolerance, and a missing bestFitness never matches", async () => {
+    const nearMiss = await modelMetrics(
+      bestEpochClient({
+        bestEpoch: 1,
+        bestFitness: 0.5,
+        trainResults: [{ epoch: 1, metrics: {}, fitness: 0.500001 }],
+      }),
+      `${OWNER}/${PROJECT}/${MODEL}`,
+    );
+    expect((nearMiss.data as Record<string, unknown>).bestEpoch).toBeNull();
+
+    const noFitness = await modelMetrics(
+      bestEpochClient({
+        bestEpoch: 1,
+        bestFitness: null,
+        trainResults: [{ epoch: 1, metrics: {} }],
+      }),
+      `${OWNER}/${PROJECT}/${MODEL}`,
+    );
+    expect((noFitness.data as Record<string, unknown>).bestEpoch).toBeNull();
   });
 });

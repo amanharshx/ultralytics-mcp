@@ -188,7 +188,7 @@ describe.skipIf(!apiKey)(
               // a null one; its status names the same untrained state as the
               // model record.
               expect(monitoredData.jobStatus).toBe("untrained");
-              expect(monitoredData.epochsDone).toBe(0);
+              expect(monitoredData.resultRecordCount).toBe(0);
 
               // The published contract disagrees with the platform twice over
               // (REST docs claim 409, the OpenAPI spec claims a `warning`
