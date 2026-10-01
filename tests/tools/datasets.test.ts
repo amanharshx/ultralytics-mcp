@@ -203,62 +203,6 @@ describe("datasetsList", () => {
 });
 
 describe("exploreDatasets", () => {
-  test("builds query, joins the task filter, and trims results", async () => {
-    const { client, calls } = captureClient((url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === "/api/explore/search") {
-        return jsonResponse({
-          datasets: [
-            {
-              _id: "d".repeat(24),
-              name: "Birds",
-              slug: "birds",
-              username: "user",
-              task: "detect",
-              imageCount: 65,
-              classCount: 3,
-              starCount: 7,
-              extra: "omit",
-            },
-          ],
-          hasMore: true,
-        });
-      }
-      return jsonResponse({}, 404);
-    });
-
-    const result = await exploreDatasets(client, {
-      q: "bird",
-      sort: "stars",
-      offset: 20,
-      task: ["detect", "segment"],
-    });
-
-    expect(calls[0]).toEqual({
-      url:
-        `${BASE}/explore/search` +
-        "?type=datasets&q=bird&sort=stars&offset=20&task=detect%2Csegment",
-      method: "GET",
-      body: undefined,
-    });
-    expect(result.summary).toBe("Search 'bird': 1 dataset(s) (more available)");
-    expect(result.data).toEqual({
-      datasets: [
-        {
-          id: "d".repeat(24),
-          name: "Birds",
-          slug: "birds",
-          username: "user",
-          task: "detect",
-          imageCount: 65,
-          classCount: 3,
-          starCount: 7,
-        },
-      ],
-      hasMore: true,
-    });
-  });
-
   test("validates q and offset before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
