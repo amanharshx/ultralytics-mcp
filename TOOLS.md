@@ -574,6 +574,7 @@ Metadata: state-changing, non-idempotent, external/live
 | `project` | string | No | Project ref required when model is given by slug. |
 | `gpu_type` | string | No | GPU type required for TensorRT engine exports. |
 | `imgsz` | number | No | Image size for export. |
+| `quantize` | union | No | Export precision. Server-validated; for example 16 or "fp16" for FP16, 8 or "int8" for INT8. Omit to let the exporter choose. |
 | `dynamic` | boolean | No | Dynamic input shapes. |
 | `confirm_cost` | boolean | No | Must be true to allow a credit-costing export job. |
 

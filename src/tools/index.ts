@@ -1700,6 +1700,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .optional()
         .describe("GPU type required for TensorRT engine exports."),
       imgsz: z.number().optional().describe("Image size for export."),
+      quantize: z
+        .union([z.number(), z.string()])
+        .optional()
+        .describe(
+          'Export precision. Server-validated; for example 16 or "fp16" for FP16, 8 or "int8" for INT8. Omit to let the exporter choose.',
+        ),
       dynamic: z.boolean().optional().describe("Dynamic input shapes."),
       confirm_cost: z
         .boolean()
@@ -1732,6 +1738,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         project,
         gpu_type,
         imgsz,
+        quantize,
         dynamic,
         confirm_cost,
       }) =>
@@ -1740,6 +1747,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
             project: project as string | undefined,
             gpuType: gpu_type as string | undefined,
             imgsz: imgsz as number | undefined,
+            quantize: quantize as number | string | undefined,
             dynamic: dynamic as boolean | undefined,
             confirmCost: confirm_cost as boolean | undefined,
           }),
