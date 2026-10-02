@@ -131,12 +131,15 @@ export async function modelPredict(
     { data, files: file ? { file } : undefined },
   );
 
-  const { images, metadata, detectionCount } = projectPredictResult(result);
+  const { images, metadata, detectionCount, depthMapCount } =
+    projectPredictResult(result);
   return {
     summary:
       `Model '${resolved.model}' for owner '${resolvedOwner}' ` +
       `project '${resolved.project}': ${images.length} image(s), ` +
-      `${detectionCount} detection(s).`,
+      (depthMapCount > 0
+        ? `${depthMapCount} depth map(s).`
+        : `${detectionCount} detection(s).`),
     data: {
       owner: resolvedOwner,
       project: resolved.project,

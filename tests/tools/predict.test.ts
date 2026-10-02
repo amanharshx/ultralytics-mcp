@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -312,6 +312,32 @@ describe("modelPredict", () => {
       model: "exp",
       metadata: { task: "segment", classNames: ["trunk", "wheel"] },
     });
+  });
+
+  test("reports depth maps, not detections, for a depth model", async () => {
+    // Live capture: POST /api/models/{owner}/{project}/{model}/predict on a
+    // yolo26n-depth model with bus.jpg -> 200 with empty `results` and a
+    // per-image `depth` PNG.
+    const captured = JSON.parse(
+      await readFile(
+        new URL(
+          "../../fixtures/model_predict_depth_response.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const { client } = predictClient({ predictBody: captured });
+
+    const result = await modelPredict(client, "alice/road/exp", {
+      source: "https://x/y.jpg",
+    });
+
+    expect(result.summary).toBe(
+      "Model 'exp' for owner 'alice' project 'road': 1 image(s), 1 depth map(s).",
+    );
+    expect(result.data).toHaveProperty("images.0.results", []);
+    expect(result.data).toHaveProperty("images", captured.images);
   });
 
   // Live capture: POST /api/models/{owner}/{project}/{model}/predict on a
