@@ -284,7 +284,7 @@ test("tool calls reject undeclared arguments before reaching the API", async () 
     arguments: { ...args, half: true },
   });
   expect(rejected.isError).toBe(true);
-  expect(JSON.stringify(rejected.content)).toMatch(/unrecognized_keys.*half/s);
+  expect(JSON.stringify(rejected.content)).toMatch(/Unrecognized key.*half/s);
   expect(posted).toEqual([]);
 
   const accepted = await mcp.callTool({
