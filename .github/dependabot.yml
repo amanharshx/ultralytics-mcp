@@ -16,8 +16,11 @@ updates:
     schedule:
       interval: weekly
     groups:
+      biome:
+        patterns: ["@biomejs/*"]
       npm-minor-patch:
         patterns: ["*"]
+        exclude-patterns: ["@biomejs/*"]
         update-types: [minor, patch]
     labels: [dependencies]
     commit-message:
