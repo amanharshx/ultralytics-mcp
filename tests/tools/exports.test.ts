@@ -749,23 +749,22 @@ describe("exportCancel", () => {
     expect(result.data).toMatchObject({ owner: OWNER, action: "cancelled" });
   });
 
-  test.each([
-    "completed",
-    "failed",
-    "cancelled",
-  ])("refuses a %s export without sending the cancellation", async (status) => {
-    const { client, calls } = sequenceClient([
-      () => jsonResponse(exportStatusBody(status)),
-    ]);
+  test.each(["completed", "failed", "cancelled"])(
+    "refuses a %s export without sending the cancellation",
+    async (status) => {
+      const { client, calls } = sequenceClient([
+        () => jsonResponse(exportStatusBody(status)),
+      ]);
 
-    await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
-      new RegExp(
-        `has status '${status}' and is not active.*only cancels queued, starting, or running exports`,
-        "s",
-      ),
-    );
-    expect(calls).toEqual([{ method: "GET", path: EXPORT_PATH }]);
-  });
+      await expect(exportCancel(client, REF, EXPORT_ID)).rejects.toThrow(
+        new RegExp(
+          `has status '${status}' and is not active.*only cancels queued, starting, or running exports`,
+          "s",
+        ),
+      );
+      expect(calls).toEqual([{ method: "GET", path: EXPORT_PATH }]);
+    },
+  );
 
   test("refuses an unrecognized status without sending the cancellation", async () => {
     const { client, calls } = sequenceClient([

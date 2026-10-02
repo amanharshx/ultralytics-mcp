@@ -150,18 +150,19 @@ describe.skipIf(!apiKey)("model_metrics live smoke", () => {
     expect(data.reportedMetrics).toBeNull();
   }, 30_000);
 
-  test.each([
-    "pothole/exp-2",
-    "eggs-and-bowls/exp-2",
-  ])("rejects the legacy last-epoch bestEpoch on %s instead of stating it as fact", async (ref) => {
-    const client = recordingClient(apiKey as string, []);
-    const owner = await client.getAccountOwner();
+  test.each(["pothole/exp-2", "eggs-and-bowls/exp-2"])(
+    "rejects the legacy last-epoch bestEpoch on %s instead of stating it as fact",
+    async (ref) => {
+      const client = recordingClient(apiKey as string, []);
+      const owner = await client.getAccountOwner();
 
-    const result = await modelMetrics(client, `${owner}/${ref}`);
-    const data = result.data as Record<string, unknown>;
-    expect(data.bestEpoch).toBeNull();
-    expect(data.bestFitness).toBeNull();
-    expect(data.bestEpochMetrics).toBeNull();
-    expect(data.bestEpochNote).toContain("2 result records report epoch 99");
-  }, 30_000);
+      const result = await modelMetrics(client, `${owner}/${ref}`);
+      const data = result.data as Record<string, unknown>;
+      expect(data.bestEpoch).toBeNull();
+      expect(data.bestFitness).toBeNull();
+      expect(data.bestEpochMetrics).toBeNull();
+      expect(data.bestEpochNote).toContain("2 result records report epoch 99");
+    },
+    30_000,
+  );
 });

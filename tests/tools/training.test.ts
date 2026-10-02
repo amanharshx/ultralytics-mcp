@@ -590,18 +590,19 @@ describe("trainingMonitor", () => {
     expect(result.data).not.toHaveProperty("metricsHistory");
   });
 
-  test.each([
-    0, -1, 2.5,
-  ])("rejects invalid historyLastN=%s", async (historyLastN) => {
-    const { client, calls } = monitorClient({
-      modelBody: { model: completedModel, isOwner: true },
-      jobBody: { job: completedJob },
-    });
-    await expect(
-      trainingMonitor(client, REF, undefined, { historyLastN }),
-    ).rejects.toThrow(/history_last_n/);
-    expect(calls).toHaveLength(0);
-  });
+  test.each([0, -1, 2.5])(
+    "rejects invalid historyLastN=%s",
+    async (historyLastN) => {
+      const { client, calls } = monitorClient({
+        modelBody: { model: completedModel, isOwner: true },
+        jobBody: { job: completedJob },
+      });
+      await expect(
+        trainingMonitor(client, REF, undefined, { historyLastN }),
+      ).rejects.toThrow(/history_last_n/);
+      expect(calls).toHaveLength(0);
+    },
+  );
 
   test("unknown epoch total renders as ? and no progress is derived", async () => {
     const { client } = monitorClient({
@@ -744,36 +745,38 @@ describe("trainingStart", () => {
     ).rejects.toThrow(/`epochs` must be a positive integer/);
   });
 
-  test.each([
-    0, 1.5,
-  ])("rejects epochs=%s before any network call", async (epochs) => {
-    await expect(
-      trainingStart(throwingClient(), {
-        model: MODEL_REF,
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        epochs,
-        confirmCost: true,
-      }),
-    ).rejects.toThrow(/`epochs` must be a positive integer/);
-  });
+  test.each([0, 1.5])(
+    "rejects epochs=%s before any network call",
+    async (epochs) => {
+      await expect(
+        trainingStart(throwingClient(), {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          epochs,
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/`epochs` must be a positive integer/);
+    },
+  );
 
-  test.each([
-    0, -2,
-  ])("rejects invalid batch=%s before any network call", async (batch) => {
-    await expect(
-      trainingStart(throwingClient(), {
-        model: MODEL_REF,
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        epochs: 1,
-        batch,
-        confirmCost: true,
-      }),
-    ).rejects.toThrow(/batch/);
-  });
+  test.each([0, -2])(
+    "rejects invalid batch=%s before any network call",
+    async (batch) => {
+      await expect(
+        trainingStart(throwingClient(), {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          epochs: 1,
+          batch,
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/batch/);
+    },
+  );
 
   test("allows batch=-1 for auto-batch", async () => {
     const impl = (async (url: string | URL, init: RequestInit = {}) => {
@@ -807,22 +810,22 @@ describe("trainingStart", () => {
     });
   });
 
-  test.each([
-    "data",
-    "model",
-  ])("rejects reserved train_args key %s before any network call", async (key) => {
-    await expect(
-      trainingStart(throwingClient(), {
-        model: MODEL_REF,
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        epochs: 1,
-        trainArgs: { [key]: "x" },
-        confirmCost: true,
-      }),
-    ).rejects.toThrow(/reserved/);
-  });
+  test.each(["data", "model"])(
+    "rejects reserved train_args key %s before any network call",
+    async (key) => {
+      await expect(
+        trainingStart(throwingClient(), {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          epochs: 1,
+          trainArgs: { [key]: "x" },
+          confirmCost: true,
+        }),
+      ).rejects.toThrow(/reserved/);
+    },
+  );
 
   test("rejects a bare model id without any network call", async () => {
     await expect(
@@ -1308,50 +1311,50 @@ describe("trainingStart", () => {
       expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
     });
 
-    test.each([
-      "yolo26n-depth.pt",
-      "ul://ultralytics/yolo26/yolo26n-depth",
-    ])("trains %s as a YOLO26 depth checkpoint", async (model) => {
-      const calls: { path: string; body: unknown }[] = [];
-      const impl = (async (url: string | URL, init: RequestInit = {}) => {
-        const path = new URL(String(url)).pathname;
-        calls.push({
-          path,
-          body: typeof init.body === "string" ? JSON.parse(init.body) : null,
-        });
-        if (path === CREATE_MODEL_PATH) {
-          return jsonResponse({
-            id: CREATED_MODEL_ID,
-            owner: OWNER,
-            project: PROJECT,
-            model: CREATED_SLUG,
+    test.each(["yolo26n-depth.pt", "ul://ultralytics/yolo26/yolo26n-depth"])(
+      "trains %s as a YOLO26 depth checkpoint",
+      async (model) => {
+        const calls: { path: string; body: unknown }[] = [];
+        const impl = (async (url: string | URL, init: RequestInit = {}) => {
+          const path = new URL(String(url)).pathname;
+          calls.push({
+            path,
+            body: typeof init.body === "string" ? JSON.parse(init.body) : null,
           });
-        }
-        return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
-      }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
+          if (path === CREATE_MODEL_PATH) {
+            return jsonResponse({
+              id: CREATED_MODEL_ID,
+              owner: OWNER,
+              project: PROJECT,
+              model: CREATED_SLUG,
+            });
+          }
+          return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
+        }) as unknown as typeof fetch;
+        const client = new UltralyticsClient({
+          apiKey: KEY,
+          baseUrl: BASE,
+          fetchImpl: impl,
+        });
 
-      await trainingStart(client, {
-        model,
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        epochs: 1,
-        confirmCost: true,
-      });
+        await trainingStart(client, {
+          model,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          epochs: 1,
+          confirmCost: true,
+        });
 
-      expect(calls).toMatchObject([
-        { path: CREATE_MODEL_PATH, body: { task: "depth" } },
-        {
-          path: START_PATH,
-          body: { trainArgs: { model: "yolo26n-depth.pt" } },
-        },
-      ]);
-    });
+        expect(calls).toMatchObject([
+          { path: CREATE_MODEL_PATH, body: { task: "depth" } },
+          {
+            path: START_PATH,
+            body: { trainArgs: { model: "yolo26n-depth.pt" } },
+          },
+        ]);
+      },
+    );
 
     test("does not treat a non-YOLO26 -depth name as a checkpoint", async () => {
       const { client, calls } = routeClient(() => jsonResponse({}, 404));
@@ -1628,43 +1631,43 @@ describe("trainingStart", () => {
       expect(result.summary).toContain("Started training");
     });
 
-    test.each([
-      "pending",
-      "untrained",
-    ])("requires no extra confirmation for a %s model", async (status) => {
-      const impl = (async (url: string | URL) => {
-        const path = new URL(String(url)).pathname;
-        if (path === MODEL_PATH) {
-          return jsonResponse({
-            model: {
-              id: MODEL_DB_ID,
-              status,
-              trainArgs: { model: "yolo26n.pt" },
-              trainResults: [],
-            },
-          });
-        }
-        if (path === START_PATH) {
-          return jsonResponse(startResponse());
-        }
-        return jsonResponse({}, 404);
-      }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
+    test.each(["pending", "untrained"])(
+      "requires no extra confirmation for a %s model",
+      async (status) => {
+        const impl = (async (url: string | URL) => {
+          const path = new URL(String(url)).pathname;
+          if (path === MODEL_PATH) {
+            return jsonResponse({
+              model: {
+                id: MODEL_DB_ID,
+                status,
+                trainArgs: { model: "yolo26n.pt" },
+                trainResults: [],
+              },
+            });
+          }
+          if (path === START_PATH) {
+            return jsonResponse(startResponse());
+          }
+          return jsonResponse({}, 404);
+        }) as unknown as typeof fetch;
+        const client = new UltralyticsClient({
+          apiKey: KEY,
+          baseUrl: BASE,
+          fetchImpl: impl,
+        });
 
-      const result = await trainingStart(client, {
-        model: MODEL_REF,
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        epochs: 1,
-        confirmCost: true,
-      });
-      expect(result.summary).toContain("Started training");
-    });
+        const result = await trainingStart(client, {
+          model: MODEL_REF,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          epochs: 1,
+          confirmCost: true,
+        });
+        expect(result.summary).toContain("Started training");
+      },
+    );
 
     test("requires no extra confirmation when status is absent and no trainResults exist", async () => {
       const impl = (async (url: string | URL) => {
