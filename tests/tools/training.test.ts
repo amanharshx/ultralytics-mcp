@@ -454,7 +454,7 @@ describe("trainingMonitor", () => {
     expect(error.statusCode).toBe(429);
   });
 
-  test("last reported metrics carry their reported epoch, stay filtered to key metrics, and timing is always present, with no flag", async () => {
+  test("last reported metrics carry their reported epoch, keep only metrics/* entries, and timing is always present, with no flag", async () => {
     const { client } = monitorClient({
       modelBody: {
         model: {
@@ -501,9 +501,57 @@ describe("trainingMonitor", () => {
         elapsedMs: 1008800,
       },
     });
+    expect(result.data).toHaveProperty("lastReportedMetrics.metrics", {
+      "metrics/mAP50(B)": 0.58282,
+      "metrics/mAP50-95(M)": 0.48394,
+    });
     expect(result.data).not.toHaveProperty("instanceStatus");
     expect(result.data).not.toHaveProperty("metrics");
     expect(result.data).not.toHaveProperty("trainArgs");
+  });
+
+  test("last reported metrics keep a depth run's metrics, which carry no mAP", async () => {
+    // Last record captured live from a 1-epoch yolo26n-depth run.
+    const { client } = monitorClient({
+      modelBody: {
+        model: {
+          ...completedModel,
+          epochs: 1,
+          trainResults: [
+            {
+              epoch: 1,
+              metrics: {
+                "train/dlog_loss": 0.29642,
+                "train/dgrad_loss": 0.01984,
+                "metrics/delta1": 0.888116,
+                "metrics/delta2": 0.99954,
+                "metrics/delta3": 1,
+                "metrics/abs_rel": 0.093942,
+                "metrics/rmse": 0.21009,
+                "metrics/silog": 11.256332,
+                lr: 0.0001,
+              },
+              fitness: 0.88803,
+              timestamp: "2026-10-01T15:21:28.638Z",
+            },
+          ],
+        },
+        isOwner: true,
+      },
+    });
+
+    const result = await trainingMonitor(client, REF);
+    expect(result.data).toHaveProperty("lastReportedMetrics", {
+      epoch: 1,
+      metrics: {
+        "metrics/delta1": 0.888116,
+        "metrics/delta2": 0.99954,
+        "metrics/delta3": 1,
+        "metrics/abs_rel": 0.093942,
+        "metrics/rmse": 0.21009,
+        "metrics/silog": 11.256332,
+      },
+    });
   });
 
   test("include_history returns recent records verbatim with their window label", async () => {
