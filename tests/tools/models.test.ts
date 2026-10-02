@@ -447,16 +447,18 @@ describe("modelsDelete", () => {
   });
 
   // Live capture: DELETE /api/models/{owner}/{project}/{bad-model} -> 404 {"error":"Model not found"}
-  test.each([
-    "alice/road/missing",
-    "ghost/road/exp",
-  ])("surfaces the API message for %s", async (ref) => {
-    const { client } = routeClient((path) => {
-      if (path === `/api/models/${ref}`) {
-        return jsonResponse({ error: "Model not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
-    await expect(modelsDelete(client, ref)).rejects.toThrow(/Model not found/);
-  });
+  test.each(["alice/road/missing", "ghost/road/exp"])(
+    "surfaces the API message for %s",
+    async (ref) => {
+      const { client } = routeClient((path) => {
+        if (path === `/api/models/${ref}`) {
+          return jsonResponse({ error: "Model not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      });
+      await expect(modelsDelete(client, ref)).rejects.toThrow(
+        /Model not found/,
+      );
+    },
+  );
 });

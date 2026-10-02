@@ -95,13 +95,16 @@ describe("modelPredict", () => {
     ["neither input", {}],
     ["a blank source", { source: "  " }],
     ["both inputs", { source: "https://x/y.jpg", filePath: "/tmp/y.jpg" }],
-  ])("requires exactly one input, rejecting %s before any request", async (_label, input) => {
-    const { client, calls } = predictClient();
-    await expect(modelPredict(client, "alice/road/exp", input)).rejects.toThrow(
-      /exactly one of `source`.*or `file_path`/,
-    );
-    expect(calls).toHaveLength(0);
-  });
+  ])(
+    "requires exactly one input, rejecting %s before any request",
+    async (_label, input) => {
+      const { client, calls } = predictClient();
+      await expect(
+        modelPredict(client, "alice/road/exp", input),
+      ).rejects.toThrow(/exactly one of `source`.*or `file_path`/);
+      expect(calls).toHaveLength(0);
+    },
+  );
 
   // Live capture: the endpoint caps `source` at 4,096 characters, so base64
   // is decoded and uploaded as the `file` part instead. A file part named

@@ -594,40 +594,43 @@ describe("datasetImagesList", () => {
     });
   });
 
-  test.each([
-    "alice/missing",
-    "ghost/cars",
-  ])("surfaces the API message for %s", async (ref) => {
-    const { client } = routeClient((path) => {
-      if (path === `/api/datasets/${ref}/images`) {
-        return jsonResponse({ error: "Dataset not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
-    await expect(datasetImagesList(client, { dataset: ref })).rejects.toThrow(
-      /Dataset not found/,
-    );
-  });
+  test.each(["alice/missing", "ghost/cars"])(
+    "surfaces the API message for %s",
+    async (ref) => {
+      const { client } = routeClient((path) => {
+        if (path === `/api/datasets/${ref}/images`) {
+          return jsonResponse({ error: "Dataset not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      });
+      await expect(datasetImagesList(client, { dataset: ref })).rejects.toThrow(
+        /Dataset not found/,
+      );
+    },
+  );
 
   test.each([
     [{ limit: 0 }, "Too small: expected number to be >=1"],
     [{ limit: 5001 }, "Too big: expected number to be <=5000"],
     [{ offset: -1 }, "Too small: expected number to be >=0"],
-  ])("passes out-of-range %j through to the server rather than rejecting it locally", async (bounds, message) => {
-    // Live captures: GET /datasets/{owner}/{dataset}/images with each value
-    // returns 400 carrying the server's own bound message.
-    const { client, calls } = routeClient((path) =>
-      path === "/api/datasets/alice/cars/images"
-        ? jsonResponse({ error: message }, 400)
-        : jsonResponse({}, 404),
-    );
+  ])(
+    "passes out-of-range %j through to the server rather than rejecting it locally",
+    async (bounds, message) => {
+      // Live captures: GET /datasets/{owner}/{dataset}/images with each value
+      // returns 400 carrying the server's own bound message.
+      const { client, calls } = routeClient((path) =>
+        path === "/api/datasets/alice/cars/images"
+          ? jsonResponse({ error: message }, 400)
+          : jsonResponse({}, 404),
+      );
 
-    await expect(
-      datasetImagesList(client, { dataset: "alice/cars", ...bounds }),
-    ).rejects.toThrow(message);
-    const [key, value] = Object.entries(bounds)[0];
-    expect(calls[0].params.get(key)).toBe(String(value));
-  });
+      await expect(
+        datasetImagesList(client, { dataset: "alice/cars", ...bounds }),
+      ).rejects.toThrow(message);
+      const [key, value] = Object.entries(bounds)[0];
+      expect(calls[0].params.get(key)).toBe(String(value));
+    },
+  );
 
   test("passes an unrecognized split through to the server rather than rejecting it locally", async () => {
     // No local split allowlist: the server rejects an unrecognized split
@@ -994,18 +997,18 @@ describe("datasetExport", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test.each([
-    "alice/missing",
-    "ghost/cars",
-  ])("surfaces the API message for %s", async (ref) => {
-    const { client } = clientForExportError(
-      `/api/datasets/${ref}/export`,
-      "Dataset not found",
-    );
-    await expect(datasetExport(client, { dataset: ref })).rejects.toThrow(
-      /Dataset not found/,
-    );
-  });
+  test.each(["alice/missing", "ghost/cars"])(
+    "surfaces the API message for %s",
+    async (ref) => {
+      const { client } = clientForExportError(
+        `/api/datasets/${ref}/export`,
+        "Dataset not found",
+      );
+      await expect(datasetExport(client, { dataset: ref })).rejects.toThrow(
+        /Dataset not found/,
+      );
+    },
+  );
 
   test("surfaces the API message for a version that does not exist", async () => {
     const { client } = clientForExportError(
@@ -1393,34 +1396,34 @@ describe("datasetVersionCreate", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test.each([
-    "alice/missing",
-    "ghost/cars",
-  ])("surfaces the API message for %s", async (ref) => {
-    const calls: { path: string; method: string }[] = [];
-    const impl = (async (url: string | URL, init: RequestInit = {}) => {
-      const parsed = new URL(String(url));
-      calls.push({
-        path: parsed.pathname,
-        method: (init.method ?? "GET").toUpperCase(),
+  test.each(["alice/missing", "ghost/cars"])(
+    "surfaces the API message for %s",
+    async (ref) => {
+      const calls: { path: string; method: string }[] = [];
+      const impl = (async (url: string | URL, init: RequestInit = {}) => {
+        const parsed = new URL(String(url));
+        calls.push({
+          path: parsed.pathname,
+          method: (init.method ?? "GET").toUpperCase(),
+        });
+        if (
+          parsed.pathname === `/api/datasets/${ref}/export` &&
+          (init.method ?? "GET").toUpperCase() === "POST"
+        ) {
+          return jsonResponse({ error: "Dataset not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      }) as unknown as typeof fetch;
+      const client = new UltralyticsClient({
+        apiKey: KEY,
+        baseUrl: BASE,
+        fetchImpl: impl,
       });
-      if (
-        parsed.pathname === `/api/datasets/${ref}/export` &&
-        (init.method ?? "GET").toUpperCase() === "POST"
-      ) {
-        return jsonResponse({ error: "Dataset not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    }) as unknown as typeof fetch;
-    const client = new UltralyticsClient({
-      apiKey: KEY,
-      baseUrl: BASE,
-      fetchImpl: impl,
-    });
-    await expect(
-      datasetVersionCreate(client, { dataset: ref }),
-    ).rejects.toThrow(/Dataset not found/);
-  });
+      await expect(
+        datasetVersionCreate(client, { dataset: ref }),
+      ).rejects.toThrow(/Dataset not found/);
+    },
+  );
 
   test("surfaces the API message when the dataset is not ready", async () => {
     const { client } = clientForVersionCreate(
@@ -2865,20 +2868,20 @@ describe("datasetsDelete", () => {
 
   // Observed live: the delete path answers `Dataset not found` even for an
   // unknown owner. The tool surfaces the API message verbatim either way.
-  test.each([
-    "alice/missing",
-    "ghost/cars",
-  ])("surfaces the API message for %s", async (ref) => {
-    const { client } = routeClient((path) => {
-      if (path === `/api/datasets/${ref}`) {
-        return jsonResponse({ error: "Dataset not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
-    await expect(datasetsDelete(client, ref)).rejects.toThrow(
-      /Dataset not found/,
-    );
-  });
+  test.each(["alice/missing", "ghost/cars"])(
+    "surfaces the API message for %s",
+    async (ref) => {
+      const { client } = routeClient((path) => {
+        if (path === `/api/datasets/${ref}`) {
+          return jsonResponse({ error: "Dataset not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      });
+      await expect(datasetsDelete(client, ref)).rejects.toThrow(
+        /Dataset not found/,
+      );
+    },
+  );
 });
 
 describe("datasetsIngest", () => {
@@ -3205,25 +3208,25 @@ describe("datasetsIngest", () => {
     ).rejects.toThrow(/Invalid input/);
   });
 
-  test.each([
-    "alice/missing",
-    "ghost/cars",
-  ])("surfaces the API message for %s", async (ref) => {
-    const [owner, slug] = ref.split("/");
-    const { client } = captureClient((url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === `/api/datasets/${owner}/${slug}/ingest`) {
-        return jsonResponse({ error: "Dataset not found" }, 404);
-      }
-      return jsonResponse({}, 404);
-    });
-    await expect(
-      datasetsIngest(client, {
-        dataset: ref,
-        sourceUrl: "https://example.com/dataset.zip",
-      }),
-    ).rejects.toThrow(/Dataset not found/);
-  });
+  test.each(["alice/missing", "ghost/cars"])(
+    "surfaces the API message for %s",
+    async (ref) => {
+      const [owner, slug] = ref.split("/");
+      const { client } = captureClient((url) => {
+        const parsed = new URL(url);
+        if (parsed.pathname === `/api/datasets/${owner}/${slug}/ingest`) {
+          return jsonResponse({ error: "Dataset not found" }, 404);
+        }
+        return jsonResponse({}, 404);
+      });
+      await expect(
+        datasetsIngest(client, {
+          dataset: ref,
+          sourceUrl: "https://example.com/dataset.zip",
+        }),
+      ).rejects.toThrow(/Dataset not found/);
+    },
+  );
 });
 
 describe("datasetUploadFile", () => {
