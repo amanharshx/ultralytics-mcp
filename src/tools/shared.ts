@@ -27,6 +27,7 @@ export interface ProjectedPrediction {
   images: Record<string, unknown>[];
   metadata: Record<string, unknown> | null;
   detectionCount: number;
+  depthMapCount: number;
 }
 
 /** Project a predict endpoint's raw `{images[], metadata}` response.
@@ -34,7 +35,8 @@ export interface ProjectedPrediction {
  * Shared by `model_predict` and `deployment_predict`: both endpoints return
  * this same shape, and both pass `images`/`metadata` through verbatim
  * (never re-keyed, so undocumented fields survive) while summing detections
- * across images for the summary line.
+ * across images for the summary line. `depthMapCount` counts images that
+ * carry a `depth` map; only `model_predict` reports it so far.
  */
 export function projectPredictResult(result: unknown): ProjectedPrediction {
   const images = listField(result, "images");
@@ -51,7 +53,10 @@ export function projectPredictResult(result: unknown): ProjectedPrediction {
         : 0),
     0,
   );
-  return { images, metadata, detectionCount };
+  const depthMapCount = images.filter(
+    (image) => asRecord(image).depth !== undefined,
+  ).length;
+  return { images, metadata, detectionCount, depthMapCount };
 }
 
 /** Validate a positive-integer tool parameter, naming it in the error.
