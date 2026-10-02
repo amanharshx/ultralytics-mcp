@@ -17,7 +17,7 @@ Auto-generated reference for Ultralytics Platform MCP tools.
 - `dataset_upload_video` extracts frames from a local video file with `ffmpeg`.
 - `model_download` writes model weights to a local destination path.
 - `model_predict` reads a local image or video file from `file_path` to run inference.
-- `deployment_predict` reads a local image file to run inference.
+- `deployment_predict` reads a local image or video file to run inference.
 - Review local upload paths before approving tool calls; upload tools, `model_predict` with `file_path`, and `deployment_predict` read from the MCP client host.
 - Review `model_download.output_path` and `overwrite` before approving downloads.
 
@@ -662,14 +662,14 @@ Metadata: read-only
 
 ### deployment_predict
 
-Run inference through a deployment's own serving endpoint on a local image file, by owner/deployment or a bare slug (owner defaults to the account owner). Returns images/metadata verbatim, including undocumented metadata fields. No per-request cost is documented for this endpoint; costs follow the deployment's own resource configuration. A cold start on a scaled-to-zero deployment may respond slowly or with a 503 — check deployment_health rather than retrying blindly.
+Run inference through a deployment's own serving endpoint on a local image or video file, by owner/deployment or a bare slug (owner defaults to the account owner). Returns images/metadata verbatim, including undocumented metadata fields. No per-request cost is documented for this endpoint; costs follow the deployment's own resource configuration. A cold start on a scaled-to-zero deployment may respond slowly or with a 503 — check deployment_health rather than retrying blindly.
 
 Metadata: read-only, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `deployment` | string | Yes | Deployment ref by owner/deployment or a bare slug. |
-| `imagePath` | string | Yes | Local path to an image file (.jpg, .jpeg, .png, .webp, .bmp, .tif, .tiff). |
+| `imagePath` | string | Yes | Local path to an image or video file, uploaded as-is. The server decides which formats it accepts. |
 | `conf` | number | No | Confidence threshold (0.01-1, server default applies if omitted). |
 | `iou` | number | No | IoU threshold (0-0.95, server default applies if omitted). |
 | `imgsz` | number | No | Inference image size (32-1280, server default applies if omitted). |

@@ -869,13 +869,31 @@ describe("deploymentPredict", () => {
     ).rejects.toThrow(/does not exist/);
   });
 
-  test("rejects an unsupported image file type", async () => {
-    const { client } = routeClient(() => jsonResponse({}, 404));
-    const badPath = join(tmpDir, "notes.txt");
-    await writeFile(badPath, "not an image");
-    await expect(
-      deploymentPredict(client, "alice/road-detector", { imagePath: badPath }),
-    ).rejects.toThrow(/Unsupported image file type/);
+  // Live capture: an MP4 sent as application/octet-stream predicts on a
+  // deployment, so the file goes up under its own name with an empty Blob type
+  // and no local format allowlist.
+  test("forwards any file extension unchanged, leaving formats to the server", async () => {
+    const forms: FormData[] = [];
+    const fetchImpl = (async (_url: string | URL, init: RequestInit = {}) => {
+      forms.push(init.body as FormData);
+      return jsonResponse({ images: [], metadata: null });
+    }) as unknown as typeof fetch;
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl,
+    });
+    const clipPath = join(tmpDir, "clip.mp4");
+    await writeFile(clipPath, "fake-mp4-bytes");
+
+    await deploymentPredict(client, "alice/road-detector", {
+      imagePath: clipPath,
+    });
+
+    const file = forms[0].get("file") as File;
+    expect(file.name).toBe("clip.mp4");
+    expect(file.type).toBe("");
+    expect(await file.text()).toBe("fake-mp4-bytes");
   });
 
   test("surfaces a 413 with the server's message rather than swallowing it", async () => {

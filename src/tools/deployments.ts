@@ -1,7 +1,7 @@
 /** Deployment tools: reads, the bounded-cost `predict` verb, and the `stop` off-switch. */
 
 import { readFile, stat } from "node:fs/promises";
-import { basename, extname } from "node:path";
+import { basename } from "node:path";
 import type { UltralyticsClient } from "../client.js";
 import { ResolutionError } from "../resolve.js";
 import type { NormalizedToolResult } from "../tool-result.js";
@@ -11,16 +11,6 @@ import {
   type PredictParams,
   projectPredictResult,
 } from "./shared.js";
-
-const IMAGE_CONTENT_TYPES: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-  ".tif": "image/tiff",
-  ".tiff": "image/tiff",
-};
 
 /** Split a deployment ref into an optional owner and a bare deployment slug.
  *
@@ -298,9 +288,13 @@ export async function deploymentMetrics(
 
 /** Run inference against one deployment by `owner/deployment` or a bare slug.
  *
- * Posts a local image file straight through as `multipart/form-data`; the
- * endpoint's `file` branch is the only one used here (URL and base64 inputs
- * belong to `model_predict`'s `source`). `images`
+ * Posts a local image or video file straight through as `multipart/form-data`
+ * under its own basename, with no content type of its own; the endpoint's
+ * `file` branch is the only one used here (URL and base64 inputs belong to
+ * `model_predict`'s `source`). Which formats are accepted is the server's
+ * rule (verified live: a typeless JPG and MP4 both predict, with the MP4
+ * returning one image entry per frame, while unreadable bytes get the
+ * server's own 400). `images`
  * and `metadata` are returned verbatim, including metadata's undocumented
  * fields (`functionTimeAlive`, `functionTimeCall`, `task`, `version`) — none
  * of them are projected away. `conf`/`iou`/`imgsz` are optional and only
@@ -321,27 +315,18 @@ export async function deploymentPredict(
   const imagePath = options.imagePath?.trim();
   if (!imagePath) {
     throw new Error(
-      "`imagePath` is required: a local image file to run inference on.",
+      "`imagePath` is required: a local image or video file to run inference on.",
     );
   }
   const info = await stat(imagePath).catch(() => null);
   if (info === null) {
-    throw new Error(`Image file does not exist: ${imagePath}`);
+    throw new Error(`File does not exist: ${imagePath}`);
   }
   if (!info.isFile()) {
-    throw new Error(`Image path is not a file: ${imagePath}`);
+    throw new Error(`Path is not a file: ${imagePath}`);
   }
   const filename = basename(imagePath);
-  const contentType = IMAGE_CONTENT_TYPES[extname(filename).toLowerCase()];
-  if (!contentType) {
-    throw new Error(
-      `Unsupported image file type for '${filename}'. Expected one of: ${Object.keys(
-        IMAGE_CONTENT_TYPES,
-      ).join(", ")}.`,
-    );
-  }
-  const bytes = await readFile(imagePath);
-  const blob = new Blob([bytes], { type: contentType });
+  const blob = new Blob([await readFile(imagePath)]);
 
   const { owner: resolvedOwner, slug } = await resolveDeploymentRef(
     client,

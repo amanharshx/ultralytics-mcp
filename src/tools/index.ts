@@ -1245,7 +1245,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "read",
     stateChanging: false,
     description:
-      "Run inference through a deployment's own serving endpoint on a local image file, by owner/deployment or a bare slug (owner defaults to the account owner). Returns images/metadata verbatim, including undocumented metadata fields. No per-request cost is documented for this endpoint; costs follow the deployment's own resource configuration. A cold start on a scaled-to-zero deployment may respond slowly or with a 503 — check deployment_health rather than retrying blindly.",
+      "Run inference through a deployment's own serving endpoint on a local image or video file, by owner/deployment or a bare slug (owner defaults to the account owner). Returns images/metadata verbatim, including undocumented metadata fields. No per-request cost is documented for this endpoint; costs follow the deployment's own resource configuration. A cold start on a scaled-to-zero deployment may respond slowly or with a 503 — check deployment_health rather than retrying blindly.",
     inputSchema: {
       deployment: z
         .string()
@@ -1253,7 +1253,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       imagePath: z
         .string()
         .describe(
-          "Local path to an image file (.jpg, .jpeg, .png, .webp, .bmp, .tif, .tiff).",
+          "Local path to an image or video file, uploaded as-is. The server decides which formats it accepts.",
         ),
       conf: z
         .number()
