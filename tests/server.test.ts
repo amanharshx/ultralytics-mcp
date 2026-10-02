@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, expect, test } from "vitest";
 
+import type { UltralyticsClient } from "../src/client.js";
 import { createServer, SERVER_VERSION } from "../src/server.js";
 import {
   registerReadTools,
@@ -22,7 +23,7 @@ afterEach(async () => {
   }
 });
 
-async function listTools(server: McpServer) {
+async function connect(server: McpServer) {
   const client = new Client({ name: "test-client", version: "0.0.0" });
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
@@ -34,8 +35,11 @@ async function listTools(server: McpServer) {
 
   await server.connect(serverTransport);
   await client.connect(clientTransport);
+  return client;
+}
 
-  const { tools } = await client.listTools();
+async function listTools(server: McpServer) {
+  const { tools } = await (await connect(server)).listTools();
   return tools;
 }
 
@@ -86,6 +90,10 @@ test("server registers all available tools over the protocol", async () => {
   const tools = await listTools(server);
   const names = tools.map((tool) => tool.name).sort();
   expect(names).toEqual([...TOOL_NAMES].sort());
+  const lenient = tools.filter(
+    (tool) => tool.inputSchema.additionalProperties !== false,
+  );
+  expect(lenient.map((tool) => tool.name)).toEqual([]);
 
   const projectsGet = tools.find((tool) => tool.name === "projects_get");
   expect(projectsGet?.inputSchema?.type).toBe("object");
@@ -258,4 +266,31 @@ test("server registers all available tools over the protocol", async () => {
     (tool) => tool.name === "auto_annotate_stop",
   );
   expect(autoAnnotateStop?.inputSchema?.required).toEqual(["dataset"]);
+});
+
+test("tool calls reject undeclared arguments before reaching the API", async () => {
+  const posted: unknown[] = [];
+  const client = {
+    postJson: async (_path: string, body: unknown) => {
+      posted.push(body);
+      return { id: "0".repeat(24), format: "onnx", status: "queued" };
+    },
+  } as unknown as UltralyticsClient;
+  const mcp = await connect(createServer(() => client));
+  const args = { model: "alice/road/exp", format: "onnx", confirm_cost: true };
+
+  const rejected = await mcp.callTool({
+    name: "export_create",
+    arguments: { ...args, half: true },
+  });
+  expect(rejected.isError).toBe(true);
+  expect(JSON.stringify(rejected.content)).toMatch(/unrecognized_keys.*half/s);
+  expect(posted).toEqual([]);
+
+  const accepted = await mcp.callTool({
+    name: "export_create",
+    arguments: args,
+  });
+  expect(accepted.isError).toBeFalsy();
+  expect(posted).toEqual([{ format: "onnx" }]);
 });

@@ -475,7 +475,6 @@ const TOOL_RUNNERS: Record<
       project: args.project as string | undefined,
       gpuType: args.gpu_type as string | undefined,
       imgsz: args.imgsz as number | undefined,
-      half: args.half as boolean | undefined,
       dynamic: args.dynamic as boolean | undefined,
       confirmCost: args.confirm_cost as boolean | undefined,
     }),
