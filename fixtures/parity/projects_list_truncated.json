@@ -47,7 +47,7 @@
               "license": "AGPL-3.0",
               "iconColor": "red",
               "iconLetter": "26",
-              "iconImage": "https://cdn.ul.run/eu/users/user_38BClQ6JUxGqFjffFWUROzyWDIf/projects/69674042917248ce44d80242/icon.webp?Expires=1790832600&KeyName=key-v1&Signature=REDACTED",
+              "iconImage": "https://cdn.example.com/project-icon.webp",
               "modelCount": 35,
               "modelNames": [
                 "yolo26x-depth",
