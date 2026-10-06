@@ -246,7 +246,7 @@ describe("exploreDatasets", () => {
     // itself (verified live: `?task=notarealtask` on `/explore/search`
     // returns 400 `"Invalid task filter"`), and it accepts values the old
     // client-side allowlist used to exclude, e.g. `depth` (verified live:
-    // `?task=depth` returns 200 with an empty result set).
+    // `?task=depth` returns 200).
     const { client, calls } = captureClient((url) => {
       const parsed = new URL(url);
       if (parsed.pathname === "/api/explore/search") {

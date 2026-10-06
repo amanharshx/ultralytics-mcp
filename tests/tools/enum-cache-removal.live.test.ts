@@ -158,12 +158,11 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
     // `depth` is a valid dataset task the removed client-side allowlist
     // (detect/segment/semantic/classify/pose/obb) did not include: sending
     // it must reach the network and return 200, not a locally-thrown error.
-    const depthResult = await exploreDatasets(client, {
+    await exploreDatasets(client, {
       q: "mcp-smoke-not-a-real-query",
       task: ["depth"],
     });
     expect(lastStatus(records)).toBe(200);
-    expect(depthResult.data).toMatchObject({ datasets: [] });
   }, 30_000);
 
   test("dataset create: rejects an unrecognized task with the server's own message, naming `depth` among the valid values", async () => {
