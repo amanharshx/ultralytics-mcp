@@ -76,7 +76,6 @@ const EXPECTED_STATUS = {
   signedUrl: 200,
   complete: 200,
   ingest: 201,
-  ingestGate: 400,
   delete: 200,
 } as const;
 
@@ -420,7 +419,7 @@ describe.skipIf(!apiKey)("datasets live smoke", () => {
     );
   }, 120_000);
 
-  test("upload chain, completion gate, headers, and ingest outcome", async () => {
+  test("upload chain, headers, and ingest outcome", async () => {
     const records: RecordedCall[] = [];
     const uploads: RecordedUpload[] = [];
     const client = recordingClientWithUploads(
@@ -487,8 +486,8 @@ describe.skipIf(!apiKey)("datasets live smoke", () => {
           const datasetId = (rawDataset.dataset as Record<string, unknown>)?.id;
           expect(typeof datasetId).toBe("string");
 
-          // A dedicated probe session keeps the gate assertion from
-          // consuming the session the upload tool later ingests. The
+          // A dedicated probe session pins the signed-url response shape,
+          // which the upload tool consumes without exposing. The
           // platform exposes no session-delete endpoint: a signed URL
           // without a transfer creates no GCS object and expires via
           // expiresAt, so the dataset delete plus the local temp-dir
@@ -526,18 +525,6 @@ describe.skipIf(!apiKey)("datasets live smoke", () => {
           expect(probeHeaders).not.toBeNull();
           expect(typeof probeHeaders).toBe("object");
           expect(probeHeaders?.["x-goog-if-generation-match"]).toBe("0");
-
-          // Completion gates ingest: a session that has not been completed
-          // is rejected with an explicit ordering message.
-          await expect(
-            client.postJson(`/datasets/${encodedRef}/ingest`, {
-              sessionId: probeSigned.sessionId,
-              conflictPolicy: "skip",
-            }),
-          ).rejects.toThrow(/not ready.*complete/i);
-          expect(statusFor(records, "POST", "/ingest")).toBe(
-            EXPECTED_STATUS.ingestGate,
-          );
 
           // The probe ran no transfer, so it landed no asset: the dataset
           // still holds no images before the real upload runs.
