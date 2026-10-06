@@ -2,15 +2,18 @@
  *
  * The projects and datasets suites are separate cases over this one harness:
  * a recording client that pins each call's HTTP status, a disposable-slug
- * helper, and a cleanup wrapper that deletes whatever the body created even
- * when an assertion fails. Live-only: every suite using this harness skips
- * silently without `ULTRALYTICS_API_KEY` and stays out of `npm test` via the
- * `*.live.test.ts` exclusion.
+ * helper, a cleanup wrapper that deletes whatever the body created even
+ * when an assertion fails, and sweeps for what a killed run left behind.
+ * Live-only: every suite using this harness skips silently without
+ * `ULTRALYTICS_API_KEY` and stays out of `npm test` via the `*.live.test.ts`
+ * exclusion.
  */
 
 import { UltralyticsClient } from "../../src/client.js";
+import { getApiBase } from "../../src/config.js";
 import { UltralyticsApiError } from "../../src/errors.js";
 import type { NormalizedToolResult } from "../../src/tool-result.js";
+import { listField } from "../../src/tools/shared.js";
 
 export interface RecordedCall {
   method: string;
@@ -110,11 +113,29 @@ export function assertDeleted(
   }
 }
 
-/** A workspace-unique slug that is obviously disposable. */
+/** A workspace-unique slug that is obviously disposable. `isStaleDisposable`
+ * parses this format, so change both together. */
 export function disposableSlug(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+}
+
+/** Older than any live test runs, so a parallel suite's resource is never
+ * mistaken for a leftover. */
+const STALE_DISPOSABLE_MS = 30 * 60_000;
+
+/** Whether `slug` is a `zz-mcp-` disposable that outlived its run.
+ *
+ * Age comes from the base-36 timestamp `disposableSlug` embeds, so no
+ * server timestamp field is relied on. Only the `zz-mcp-` prefix qualifies:
+ * it is the one every billable or clone-based disposable shares.
+ */
+function isStaleDisposable(slug: string, now = Date.now()): boolean {
+  const match = /^zz-mcp-.+-([0-9a-z]{8,})-[0-9a-z]+$/.exec(slug);
+  return (
+    match !== null && now - Number.parseInt(match[1], 36) > STALE_DISPOSABLE_MS
+  );
 }
 
 /** Run `body` after marking the resource created; delete it on failure.
@@ -160,5 +181,86 @@ export async function withDisposableCleanup(
   }
   if (bodyError !== undefined) {
     throw bodyError;
+  }
+}
+
+/** Permanently purge a trashed dataset. Not a shipped tool, so the raw
+ * endpoint is called directly for test cleanup. */
+export async function purgeDatasetFromTrash(
+  key: string,
+  id: string,
+): Promise<void> {
+  const response = await fetch(`${getApiBase()}/trash`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ id, type: "dataset" }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `trash purge failed for dataset '${id}': ${response.status} ${await response.text()}`,
+    );
+  }
+}
+
+/** Delete, ignoring a 404 from a concurrent sweep that got there first.
+ * Returns whether this call did the delete. */
+async function deleteUnlessGone(
+  client: UltralyticsClient,
+  path: string,
+): Promise<boolean> {
+  try {
+    await client.delete(path);
+    return true;
+  } catch (error) {
+    if (error instanceof UltralyticsApiError && error.statusCode === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/** Delete stale `zz-mcp-` deployments.
+ *
+ * `withDisposableCleanup` cannot run when the process is killed mid-test, and
+ * a leaked deployment holds a slot of the plan's deployment quota, failing
+ * every later create. Run in `beforeAll`: `afterAll` dies with the process.
+ */
+export async function sweepStaleDeployments(
+  client: UltralyticsClient,
+): Promise<void> {
+  const owner = encodeURIComponent(await client.getAccountOwner());
+  const deployments = listField(
+    await client.get(`/deployments/${owner}`),
+    "deployments",
+  );
+  for (const { deployment } of deployments) {
+    if (isStaleDisposable(String(deployment))) {
+      await deleteUnlessGone(client, `/deployments/${owner}/${deployment}`);
+    }
+  }
+}
+
+/** Delete and purge stale `zz-mcp-` datasets, for the same reason as
+ * `sweepStaleDeployments`. */
+export async function sweepStaleDatasets(
+  client: UltralyticsClient,
+  key: string,
+): Promise<void> {
+  const owner = encodeURIComponent(await client.getAccountOwner());
+  const datasets = listField(
+    await client.get(`/datasets/${owner}`),
+    "datasets",
+  );
+  for (const { dataset, id } of datasets) {
+    if (
+      isStaleDisposable(String(dataset)) &&
+      (await deleteUnlessGone(client, `/datasets/${owner}/${dataset}`))
+    ) {
+      await purgeDatasetFromTrash(key, String(id));
+    }
   }
 }

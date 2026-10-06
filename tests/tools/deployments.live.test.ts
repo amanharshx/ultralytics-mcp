@@ -24,7 +24,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test } from "vitest";
 import { getApiBase } from "../../src/config.js";
 import { UltralyticsApiError } from "../../src/errors.js";
 import {
@@ -41,6 +41,7 @@ import {
   lastStatus,
   type RecordedCall,
   recordingClient,
+  sweepStaleDeployments,
   withDisposableCleanup,
 } from "./live-harness.js";
 
@@ -50,6 +51,12 @@ import {
 const SAMPLE_IMAGE_URL = "https://ultralytics.com/images/bus.jpg";
 
 const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
+
+beforeAll(async () => {
+  if (apiKey) {
+    await sweepStaleDeployments(recordingClient(apiKey, []));
+  }
+}, 60_000);
 
 const EXPECTED_STATUS = {
   accountSummary: 200,
