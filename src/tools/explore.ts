@@ -36,18 +36,15 @@ export async function exploreSearch(
     task?: string;
   } = {},
 ): Promise<Record<string, unknown>> {
-  const sort = options.sort ?? "newest";
-  const offset = options.offset ?? 0;
-  validateExploreQuery(q, offset);
-
-  const params: Record<string, unknown> = {
-    type,
-    q: q.trim(),
-    sort,
-    offset,
-  };
-  if (options.task !== undefined) {
-    params.task = options.task;
-  }
-  return asRecord(await client.get("/explore/search", params));
+  validateExploreQuery(q, options.offset);
+  // Unset `sort`/`offset` are omitted so the server applies its own defaults.
+  return asRecord(
+    await client.get("/explore/search", {
+      type,
+      q: q.trim(),
+      sort: options.sort,
+      offset: options.offset,
+      task: options.task,
+    }),
+  );
 }

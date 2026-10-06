@@ -258,7 +258,7 @@ describe("exploreDatasets", () => {
     await exploreDatasets(client, { q: "bird", task: ["depth"] });
 
     expect(calls[0]?.url).toBe(
-      `${BASE}/explore/search?type=datasets&q=bird&sort=newest&offset=0&task=depth`,
+      `${BASE}/explore/search?type=datasets&q=bird&task=depth`,
     );
   });
 });
