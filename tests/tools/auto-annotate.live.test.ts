@@ -30,7 +30,7 @@
  * fixture `auto_annotate_status_active.json`.
  */
 
-import { describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test } from "vitest";
 
 import { getApiBase } from "../../src/config.js";
 import { autoAnnotateStatus } from "../../src/tools/auto-annotate.js";
@@ -38,34 +38,23 @@ import { datasetsDelete } from "../../src/tools/datasets.js";
 import {
   disposableSlug,
   lastStatus,
+  purgeDatasetFromTrash,
   type RecordedCall,
   recordingClient,
+  sweepStaleDatasets,
 } from "./live-harness.js";
 
 const apiKey = process.env.ULTRALYTICS_API_KEY?.trim();
 
+beforeAll(async () => {
+  if (apiKey) {
+    await sweepStaleDatasets(recordingClient(apiKey, []), apiKey);
+  }
+}, 60_000);
+
 const SOURCE_OWNER = "momox";
 const SOURCE_DATASET = "coco8";
 const MODEL_ID = "ul://support-doe/pothole/exp-2";
-
-/** Permanently purge a trashed dataset. Not a shipped tool, so the raw
- * endpoint is called directly for test cleanup. */
-async function purgeDatasetFromTrash(key: string, id: string): Promise<void> {
-  const response = await fetch(`${getApiBase()}/trash`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ id, type: "dataset" }),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `trash purge failed for dataset '${id}': ${response.status} ${await response.text()}`,
-    );
-  }
-}
 
 async function creditsCents(key: string): Promise<number> {
   const response = await fetch(`${getApiBase()}/account/summary`, {
