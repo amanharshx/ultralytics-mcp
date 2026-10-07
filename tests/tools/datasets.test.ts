@@ -203,7 +203,7 @@ describe("datasetsList", () => {
 });
 
 describe("exploreDatasets", () => {
-  test("validates q and offset before network", async () => {
+  test("validates q before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -215,9 +215,19 @@ describe("exploreDatasets", () => {
     await expect(exploreDatasets(client, { q: "" })).rejects.toThrow(
       /q is required/,
     );
+  });
+
+  test("passes a negative offset through to the server rather than rejecting it locally", async () => {
+    // Verified live: `?offset=-1` on `/explore/search` returns 400
+    // `Too small: expected number to be >=0`, surfaced verbatim.
+    const { client, calls } = captureClient(() =>
+      jsonResponse({ error: "Too small: expected number to be >=0" }, 400),
+    );
+
     await expect(
       exploreDatasets(client, { q: "bird", offset: -1 }),
-    ).rejects.toThrow(/offset/);
+    ).rejects.toThrow("Too small: expected number to be >=0");
+    expect(new URL(calls[0]?.url ?? "").searchParams.get("offset")).toBe("-1");
   });
 
   test("passes an unrecognized sort through to the server rather than rejecting it locally", async () => {
