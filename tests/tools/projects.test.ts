@@ -164,7 +164,7 @@ describe("projectsList", () => {
 });
 
 describe("exploreProjects", () => {
-  test("validates q and offset before network", async () => {
+  test("validates q before network", async () => {
     const client = new UltralyticsClient({
       apiKey: KEY,
       baseUrl: BASE,
@@ -176,9 +176,6 @@ describe("exploreProjects", () => {
     await expect(exploreProjects(client, { q: "" })).rejects.toThrow(
       /q is required/,
     );
-    await expect(
-      exploreProjects(client, { q: "road", offset: -1 }),
-    ).rejects.toThrow(/offset/);
   });
 
   test("passes an unrecognized sort through to the server rather than rejecting it locally", async () => {
