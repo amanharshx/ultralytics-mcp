@@ -350,7 +350,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe(
-          "Sort order for results. Server-validated; for example stars or newest. `stars` currently returns fewer matches than the other sorts, not just a reordering.",
+          "Sort order for results. Server-validated; for example stars or newest.",
         ),
       offset: z.number().int().optional().describe("Results to skip."),
       task: z
