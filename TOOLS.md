@@ -121,14 +121,14 @@ Metadata: read-only
 
 ### explore_datasets
 
-Search public datasets on Ultralytics Explore.
+Search public datasets on Ultralytics Explore. Matching is currently loose: results need not contain the search term, so even an unrelated query returns datasets.
 
 Metadata: read-only, external/live
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `q` | string | Yes | Search term. |
-| `sort` | string | No | Sort order for results. Server-validated; for example stars or newest. |
+| `sort` | string | No | Sort order for results. Server-validated; for example stars or newest. `stars` currently returns fewer matches than the other sorts, not just a reordering. |
 | `offset` | number | No | Results to skip. |
 | `task` | array<string> | No | Dataset task filters. Server-validated; for example detect or segment. |
 

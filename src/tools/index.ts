@@ -342,14 +342,15 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: "explore_datasets",
     registrationGroup: "read",
     stateChanging: false,
-    description: "Search public datasets on Ultralytics Explore.",
+    description:
+      "Search public datasets on Ultralytics Explore. Matching is currently loose: results need not contain the search term, so even an unrelated query returns datasets.",
     inputSchema: {
       q: z.string().describe("Search term."),
       sort: z
         .string()
         .optional()
         .describe(
-          "Sort order for results. Server-validated; for example stars or newest.",
+          "Sort order for results. Server-validated; for example stars or newest. `stars` currently returns fewer matches than the other sorts, not just a reordering.",
         ),
       offset: z.number().int().optional().describe("Results to skip."),
       task: z
