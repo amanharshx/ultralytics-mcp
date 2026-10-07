@@ -128,7 +128,7 @@ Metadata: read-only, external/live
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `q` | string | Yes | Search term. |
-| `sort` | string | No | Sort order for results. Server-validated; for example stars or newest. `stars` currently returns fewer matches than the other sorts, not just a reordering. |
+| `sort` | string | No | Sort order for results. Server-validated; for example stars or newest. |
 | `offset` | number | No | Results to skip. |
 | `task` | array<string> | No | Dataset task filters. Server-validated; for example detect or segment. |
 
