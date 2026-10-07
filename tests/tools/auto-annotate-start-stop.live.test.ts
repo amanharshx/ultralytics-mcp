@@ -22,7 +22,7 @@
  *
  * Covers, unconditionally:
  * - `start` refusing on a fully-labelled dataset with `includeAnnotated`
- *   left unset (409 "No images left to annotate", surfaced verbatim).
+ *   left unset (409).
  * - `stop` refusing fail-closed on a never-run dataset without issuing the
  *   `DELETE`.
  * - `start` succeeding once `classMapping` bridges the taxonomy mismatch.
@@ -41,9 +41,9 @@
  * The spec documents a `422 Dataset has no classes` start failure that the
  * epic's own probes never observed live. This suite makes its own attempt:
  * a freshly created, empty (zero-image, zero-class) dataset. Live result:
- * `409 {"error":"Dataset must be ready to auto-annotate"}` — a third,
- * previously undocumented refusal, not the spec's `422`. It is asserted
- * verbatim below since it reproduced identically across separate runs.
+ * a `409`, not the spec's `422`. Only the status is asserted: the platform
+ * has reworded both refusals in this suite, and verbatim passthrough is
+ * pinned offline by `auto_annotate_start_refused.json`.
  * Getting an empty dataset "ready" while still having no classes (to
  * possibly reach the documented `422`) would need an image upload this
  * ticket has no other reason to exercise, so that narrower shape is left
@@ -53,6 +53,7 @@
 
 import { beforeAll, describe, expect, test } from "vitest";
 
+import type { UltralyticsClient } from "../../src/client.js";
 import { getApiBase } from "../../src/config.js";
 import { UltralyticsApiError } from "../../src/errors.js";
 import {
@@ -95,6 +96,23 @@ async function creditsCents(key: string): Promise<number> {
   return credits;
 }
 
+/** Poll until the dataset has no active run. A run still winding down
+ * collides with the next start, and its dataset cannot be purged from
+ * trash (500 "Failed to delete item"). */
+async function waitForNoActiveRun(
+  client: UltralyticsClient,
+  ref: string,
+): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const status = await autoAnnotateStatus(client, ref);
+    if ((status.data as Record<string, unknown>).activeJob === null) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
 describe.skipIf(!apiKey)("auto_annotate start/stop live smoke", () => {
   test("start refuses on a fully-labelled dataset, stop refuses fail-closed, then start+stop an active run end to end", async () => {
     const key = apiKey as string;
@@ -127,9 +145,6 @@ describe.skipIf(!apiKey)("auto_annotate start/stop live smoke", () => {
         refusedNoImages = true;
         expect(error).toBeInstanceOf(UltralyticsApiError);
         expect((error as UltralyticsApiError).statusCode).toBe(409);
-        expect(String((error as Error).message)).toContain(
-          "No images left to annotate",
-        );
       }
       expect(refusedNoImages).toBe(true);
       captures.noImagesError = (
@@ -172,18 +187,9 @@ describe.skipIf(!apiKey)("auto_annotate start/stop live smoke", () => {
           if (!/no active auto-annotation run/.test(String(error))) {
             throw error;
           }
-          // Raced: the run finished before the stop call landed. Let the
-          // run settle to a terminal state before retrying so the next
-          // start does not collide with an in-flight one, then try again.
-          const deadline = Date.now() + 30_000;
-          while (Date.now() < deadline) {
-            const status = await autoAnnotateStatus(client, ref);
-            const data = status.data as Record<string, unknown>;
-            if (data.activeJob === null) {
-              break;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
+          // Raced: the run finished before the stop call landed. Let it
+          // settle before retrying, then try again.
+          await waitForNoActiveRun(client, ref);
         }
       }
       if (!cancelled) {
@@ -196,6 +202,7 @@ describe.skipIf(!apiKey)("auto_annotate start/stop live smoke", () => {
       expect(typeof cancelled.jobId).toBe("string");
     } finally {
       if (datasetId) {
+        await waitForNoActiveRun(client, ref);
         const deleted = await datasetsDelete(client, ref);
         const deletedData = deleted.data as Record<string, unknown>;
         expect(deletedData.success).toBe(true);
@@ -214,7 +221,7 @@ describe.skipIf(!apiKey)("auto_annotate start/stop live smoke", () => {
     );
   }, 180_000);
 
-  test("start on a freshly created, empty dataset surfaces the platform's actual refusal verbatim", async () => {
+  test("start on a freshly created, empty dataset is refused with 409", async () => {
     const key = apiKey as string;
     const client = recordingClient(key, []);
     const owner = await client.getAccountOwner();
@@ -243,9 +250,6 @@ describe.skipIf(!apiKey)("auto_annotate start/stop live smoke", () => {
       }
       expect(error).toBeInstanceOf(UltralyticsApiError);
       expect((error as UltralyticsApiError).statusCode).toBe(409);
-      expect((error as UltralyticsApiError).apiMessage).toBe(
-        "Dataset must be ready to auto-annotate",
-      );
     } finally {
       if (datasetId) {
         const deleted = await datasetsDelete(client, ref);
