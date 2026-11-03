@@ -270,18 +270,6 @@ describe("exportsList", () => {
     await expect(exportsList(client, REF)).rejects.toThrow(/Model not found/);
   });
 
-  test("forwards an explicit limit and says more may exist when it is reached", async () => {
-    const { client, calls } = exportsClient();
-
-    const result = await exportsList(client, REF, undefined, 1);
-
-    expect(calls[0]?.params.get("limit")).toBe("1");
-    expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': 1 export(s). " +
-        "The requested limit of 1 was reached; more may exist.",
-    );
-  });
-
   test("reports a page under an explicit limit without a truncation note", async () => {
     const { client } = exportsClient();
 

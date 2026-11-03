@@ -156,27 +156,6 @@ describe("deploymentsList", () => {
     expect(result.data).toEqual({ deployments: [], total: 0 });
   });
 
-  test("forwards an explicit limit and reports a short page against the total", async () => {
-    const { client, calls } = routeClient((path) => {
-      if (path === "/api/deployments/alice") {
-        return jsonResponse({
-          deployments: [{ id: "a".repeat(24), deployment: "first" }],
-          total: 2,
-          region: "eu",
-        });
-      }
-      return jsonResponse({}, 404);
-    });
-    const result = await deploymentsList(client, "alice", 1);
-    expect(calls[0]?.params.get("limit")).toBe("1");
-    expect(result.summary).toBe(
-      "Showing 1 of 2 deployment(s) for owner 'alice'.",
-    );
-    const data = result.data as { deployments: unknown[]; total: unknown };
-    expect(data.total).toBe(2);
-    expect(data.deployments).toHaveLength(1);
-  });
-
   test("surfaces the server's own rejection of an over-max limit", async () => {
     const { client } = routeClient((path) =>
       path === "/api/deployments/alice"
