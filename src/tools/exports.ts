@@ -31,16 +31,24 @@ function exportFields(data: unknown): Record<string, unknown> {
  * download URL is deliberately omitted. A model with no exports reports an
  * empty list. The timestamps and artifact presence tell a finished export
  * from a running or failed one without a second call.
+ *
+ * `limit` is forwarded only when given, so the server applies its own
+ * default. The response carries no total and the endpoint ignores every
+ * paging parameter but `limit`, so the summary never states a total: a
+ * non-empty list is never presented as complete unless an explicit limit
+ * was not reached.
  */
 export async function exportsList(
   client: UltralyticsClient,
   model: string,
   project?: string,
+  limit?: number,
 ): Promise<NormalizedToolResult> {
   const resolved = resolveModel(model, project);
   const resolvedOwner = resolved.owner ?? (await client.getAccountOwner());
   const data = await client.get(
     `/models/${encodeURIComponent(resolvedOwner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}/exports`,
+    { limit },
   );
   const items = listField(data, "exports").map((entry) => {
     const file = asRecord(entry.file);
@@ -59,12 +67,16 @@ export async function exportsList(
       args,
     };
   });
-  return {
-    summary:
-      `Model '${resolved.model}' for owner '${resolvedOwner}' ` +
-      `project '${resolved.project}': ${items.length} export(s).`,
-    data: items,
-  };
+  let summary =
+    `Model '${resolved.model}' for owner '${resolvedOwner}' ` +
+    `project '${resolved.project}': ${items.length} export(s).`;
+  if (items.length > 0 && limit === undefined) {
+    summary +=
+      " The API may have truncated this list; pass limit to request more.";
+  } else if (limit !== undefined && items.length >= limit) {
+    summary += ` The requested limit of ${limit} was reached; more may exist.`;
+  }
+  return { summary, data: items };
 }
 
 /** Get status for one export job.

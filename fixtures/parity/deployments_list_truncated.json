@@ -1,0 +1,73 @@
+{
+  "tool": "deployments_list",
+  "args": {
+    "owner": "example-owner",
+    "limit": 1
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/deployments/example-owner",
+      "query": {
+        "limit": "1"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "deployments": [
+            {
+              "id": "6ae9c6d91c42f3c1bb257ff6",
+              "owner": "example-owner",
+              "project": "pothole",
+              "model": "yolo26s",
+              "task": "detect",
+              "deployment": "zz-mcp-trunc-b-mw0m1yx4",
+              "name": "zz mcp list truncation delete me",
+              "status": "deploying",
+              "region": "europe-west1",
+              "resources": {
+                "cpu": 1,
+                "memoryGi": 2,
+                "minInstances": 0,
+                "maxInstances": 1
+              },
+              "apiKeyId": "00000000-0000-0000-0000-000000000000",
+              "cameraApplying": false,
+              "createdAt": "2026-11-03T11:34:49.797Z",
+              "updatedAt": "2026-11-03T11:34:50.986Z"
+            }
+          ],
+          "total": 2,
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Showing 1 of 2 deployment(s) for owner 'example-owner'.",
+    "data": {
+      "deployments": [
+        {
+          "id": "6ae9c6d91c42f3c1bb257ff6",
+          "owner": "example-owner",
+          "deployment": "zz-mcp-trunc-b-mw0m1yx4",
+          "name": "zz mcp list truncation delete me",
+          "status": "deploying",
+          "region": "europe-west1",
+          "resources": {
+            "cpu": 1,
+            "memoryGi": 2,
+            "minInstances": 0,
+            "maxInstances": 1
+          },
+          "createdAt": "2026-11-03T11:34:49.797Z",
+          "updatedAt": "2026-11-03T11:34:50.986Z",
+          "project": "pothole",
+          "model": "yolo26s",
+          "task": "detect"
+        }
+      ],
+      "total": 2
+    }
+  }
+}

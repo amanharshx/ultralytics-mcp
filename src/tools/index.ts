@@ -1123,13 +1123,23 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("Workspace owner; defaults to the account owner."),
+      limit: z
+        .number()
+        .optional()
+        .describe(
+          "Maximum deployments to return. Omit for the server default (currently 20); the API currently accepts up to 100.",
+        ),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
-      async ({ owner }) =>
+      async ({ owner, limit }) =>
         toMcpTextResult(
-          await deploymentsList(getClient(), owner as string | undefined),
+          await deploymentsList(
+            getClient(),
+            owner as string | undefined,
+            limit as number | undefined,
+          ),
         ),
   }),
   tool({
@@ -1633,16 +1643,23 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
         .string()
         .optional()
         .describe("Project ref required when model is given by slug."),
+      limit: z
+        .number()
+        .optional()
+        .describe(
+          "Maximum exports to return. Omit for the server default (currently 20); the API currently accepts up to 100 and cannot page past that.",
+        ),
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     createHandler:
       (getClient) =>
-      async ({ model, project }) =>
+      async ({ model, project, limit }) =>
         toMcpTextResult(
           await exportsList(
             getClient(),
             model as string,
             project as string | undefined,
+            limit as number | undefined,
           ),
         ),
   }),
