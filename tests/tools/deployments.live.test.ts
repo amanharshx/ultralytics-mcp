@@ -171,6 +171,83 @@ describe.skipIf(!apiKey)("deployments_list live smoke", () => {
   }, 60_000);
 });
 
+describe.skipIf(!apiKey)("deployments_list limit live smoke", () => {
+  test(
+    "reports a page shorter than total as partial, and surfaces an over-max limit's own rejection",
+    async () => {
+      const records: RecordedCall[] = [];
+      const client = recordingClient(apiKey as string, records);
+      const owner = await client.getAccountOwner();
+
+      const creditsBefore = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+
+      const slugs = [
+        disposableSlug("zz-mcp-list-limit-a"),
+        disposableSlug("zz-mcp-list-limit-b"),
+      ];
+      const deleteAll = async () => {
+        for (const slug of slugs) {
+          await client.delete(`/deployments/${owner}/${slug}`);
+        }
+      };
+
+      await withDisposableCleanup(
+        "deployment",
+        slugs.join(","),
+        deleteAll,
+        async () => {
+          for (const slug of slugs) {
+            await client.postJson(`/deployments/${owner}`, {
+              project: "pothole",
+              model: "yolo26s",
+              deployment: slug,
+              name: "zz mcp list limit delete me",
+              region: "europe-west1",
+            });
+            expect(lastStatus(records)).toBe(EXPECTED_STATUS.create);
+          }
+
+          const page = await deploymentsList(client, owner, 1);
+          expect(lastStatus(records)).toBe(EXPECTED_STATUS.list);
+          expect(page.data).toHaveLength(1);
+          const { total } = (await client.get(`/deployments/${owner}`, {
+            limit: 1,
+          })) as { total: number };
+          expect(total).toBeGreaterThanOrEqual(2);
+          expect(page.summary).toBe(
+            `Showing 1 of ${total} deployment(s) for owner '${owner}'.`,
+          );
+
+          await expect(deploymentsList(client, owner, 101)).rejects.toThrow(
+            "limit: Too big: expected number to be <=100",
+          );
+
+          // A deployment still provisioning cannot be deleted (502), so wait
+          // for ready first, as every other suite here does.
+          for (const slug of slugs) {
+            await pollUntilReady(client, `${owner}/${slug}`, 5 * 60_000);
+          }
+          await deleteAll();
+        },
+      );
+
+      const creditsAfter = (
+        (await client.get("/account/summary")) as Record<string, unknown>
+      ).creditsCents as number;
+      expect(creditsAfter).toBe(creditsBefore);
+
+      const listAfter = await deploymentsList(client, owner);
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
+      expect(
+        remaining.some((item) => slugs.includes(String(item.deployment))),
+      ).toBe(false);
+    },
+    8 * 60_000,
+  );
+});
+
 /** Deployments have no trash and no restore. `withDisposableCleanup` runs its
  * `cleanup` argument only as a safety net when `body` throws; the happy path
  * must delete the resource itself as its last step, exactly as the

@@ -263,7 +263,11 @@ const TOOL_RUNNERS: Record<
   auto_annotate_stop: (client, args) =>
     autoAnnotateStop(client, args.dataset as string),
   deployments_list: (client, args) =>
-    deploymentsList(client, args.owner as string | undefined),
+    deploymentsList(
+      client,
+      args.owner as string | undefined,
+      args.limit as number | undefined,
+    ),
   deployment_get: (client, args) =>
     deploymentGet(client, args.deployment as string),
   deployment_health: (client, args) =>
@@ -462,6 +466,7 @@ const TOOL_RUNNERS: Record<
       client,
       args.model as string,
       args.project as string | undefined,
+      args.limit as number | undefined,
     ),
   export_status: (client, args) =>
     exportStatus(
@@ -564,6 +569,7 @@ describe("parity fixtures", () => {
         "projects_list.json",
         "projects_list_truncated.json",
         "deployments_list.json",
+        "deployments_list_truncated.json",
         "deployment_get_deploying.json",
         "deployment_get_ready.json",
         "deployment_health.json",
@@ -587,6 +593,7 @@ describe("parity fixtures", () => {
         "training_start_history_warning.json",
         "exports_list.json",
         "exports_list_empty.json",
+        "exports_list_truncated.json",
         "export_status.json",
         "export_create.json",
         "export_cancel.json",

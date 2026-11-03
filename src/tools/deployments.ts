@@ -65,19 +65,27 @@ async function resolveDeploymentRef(
  * Projects each deployment to the fields the spec guarantees present
  * (`Deployment.required` plus `project`/`model`/`task`, observed always
  * present). `serviceUrl` and `deployedAt` are absent until a deployment is
- * `ready`, and `metered`/`statusMessage`/`apiKeyId` were never observed at
- * all; none of the five are projected here so this list never guarantees
- * fields the platform does not.
+ * `ready`, `metered`/`statusMessage` were never observed at all, and
+ * `apiKeyId` is returned but identifies a credential; none of the five are
+ * projected here so this list never guarantees fields the platform does not.
+ *
+ * `limit` is forwarded only when given, so the server applies its own
+ * default. The response's `total` counts every deployment, so a page
+ * shorter than it is labelled as partial rather than presented as the whole
+ * workspace.
  */
 export async function deploymentsList(
   client: UltralyticsClient,
   owner?: string,
+  limit?: number,
 ): Promise<NormalizedToolResult> {
   const explicitOwner = owner?.trim() || undefined;
   const resolvedOwner = explicitOwner ?? (await client.getAccountOwner());
   const data = await client.get(
     `/deployments/${encodeURIComponent(resolvedOwner)}`,
+    { limit },
   );
+  const total = asRecord(data).total;
   const items = listField(data, "deployments").map((deployment) => ({
     id: deployment.id ?? null,
     owner: deployment.owner ?? null,
@@ -92,10 +100,11 @@ export async function deploymentsList(
     model: deployment.model ?? null,
     task: deployment.task ?? null,
   }));
-  return {
-    summary: `${items.length} deployment(s) for owner '${resolvedOwner}'.`,
-    data: items,
-  };
+  const summary =
+    typeof total === "number" && total > items.length
+      ? `Showing ${items.length} of ${total} deployment(s) for owner '${resolvedOwner}'.`
+      : `${items.length} deployment(s) for owner '${resolvedOwner}'.`;
+  return { summary, data: items };
 }
 
 /** Read one deployment by `owner/deployment` or a bare slug.

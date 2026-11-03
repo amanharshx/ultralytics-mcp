@@ -1,0 +1,93 @@
+{
+  "tool": "exports_list",
+  "args": {
+    "model": "ultralytics/yolo26/yolo26n",
+    "limit": 2
+  },
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/models/ultralytics/yolo26/yolo26n/exports",
+      "query": {
+        "limit": "2"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "exports": [
+            {
+              "id": "6a8ebadcc3008a9c07f5f8bc",
+              "status": "completed",
+              "format": "openvino",
+              "args": {
+                "dynamic": true,
+                "quantize": 16
+              },
+              "file": {
+                "size": 4530276,
+                "downloadUrl": "https://storage.googleapis.com/alpha-ultralytics-eu/users/user_38BClQ6JUxGqFjffFWUROzyWDIf/models/696741ee97b2c1b662ad39d9/exports/yolo26n_07f5f8bc.openvino.zip",
+                "downloadFilename": "yolo26n.zip"
+              },
+              "startedAt": "2026-08-26T10:07:24.448Z",
+              "completedAt": "2026-08-26T10:07:26.835Z",
+              "createdAt": "2026-08-26T10:07:24.284Z",
+              "updatedAt": "2026-08-26T10:07:26.835Z"
+            },
+            {
+              "id": "6a8c10d995c328303ac4fb25",
+              "status": "completed",
+              "format": "openvino",
+              "args": {
+                "dynamic": true
+              },
+              "file": {
+                "size": 8638261,
+                "downloadUrl": "https://storage.googleapis.com/alpha-ultralytics-eu/users/user_38BClQ6JUxGqFjffFWUROzyWDIf/models/696741ee97b2c1b662ad39d9/exports/yolo26n_3ac4fb25.openvino.zip",
+                "downloadFilename": "yolo26n.zip"
+              },
+              "startedAt": "2026-08-24T09:37:29.230Z",
+              "completedAt": "2026-08-24T09:37:31.475Z",
+              "createdAt": "2026-08-24T09:37:29.067Z",
+              "updatedAt": "2026-08-24T09:37:31.475Z"
+            }
+          ],
+          "region": "eu"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Model 'yolo26n' for owner 'ultralytics' project 'yolo26': 2 export(s). The requested limit of 2 was reached; more may exist.",
+    "data": [
+      {
+        "id": "6a8ebadcc3008a9c07f5f8bc",
+        "format": "openvino",
+        "status": "completed",
+        "createdAt": "2026-08-26T10:07:24.284Z",
+        "startedAt": "2026-08-26T10:07:24.448Z",
+        "completedAt": "2026-08-26T10:07:26.835Z",
+        "updatedAt": "2026-08-26T10:07:26.835Z",
+        "fileSize": 4530276,
+        "downloadFilename": "yolo26n.zip",
+        "args": {
+          "dynamic": true,
+          "quantize": 16
+        }
+      },
+      {
+        "id": "6a8c10d995c328303ac4fb25",
+        "format": "openvino",
+        "status": "completed",
+        "createdAt": "2026-08-24T09:37:29.067Z",
+        "startedAt": "2026-08-24T09:37:29.230Z",
+        "completedAt": "2026-08-24T09:37:31.475Z",
+        "updatedAt": "2026-08-24T09:37:31.475Z",
+        "fileSize": 8638261,
+        "downloadFilename": "yolo26n.zip",
+        "args": {
+          "dynamic": true
+        }
+      }
+    ]
+  }
+}

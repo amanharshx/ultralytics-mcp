@@ -548,6 +548,7 @@ Metadata: read-only
 | --- | --- | --- | --- |
 | `model` | string | Yes | Model ref by owner/project/model, ul:// URI, or slug (requires project). |
 | `project` | string | No | Project ref required when model is given by slug. |
+| `limit` | number | No | Maximum exports to return. Omit for the server default (currently 20); the API currently accepts up to 100 and cannot page past that. |
 
 ### export_status
 
@@ -615,6 +616,7 @@ Metadata: read-only
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `owner` | string | No | Workspace owner; defaults to the account owner. |
+| `limit` | number | No | Maximum deployments to return. Omit for the server default (currently 20); the API currently accepts up to 100. |
 
 ### deployment_get
 

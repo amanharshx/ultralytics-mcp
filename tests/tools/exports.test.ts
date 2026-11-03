@@ -162,8 +162,10 @@ describe("exportsList", () => {
     const result = await exportsList(client, REF);
 
     expect(calls.map((call) => call.path)).toEqual([EXPORTS_PATH]);
+    expect(calls[0]?.params.has("limit")).toBe(false);
     expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': 1 export(s).",
+      "Model 'exp' for owner 'alice' project 'road': 1 export(s). " +
+        "The API may have truncated this list; pass limit to request more.",
     );
     expect(result.data).toEqual([curatedCompleted]);
   });
@@ -187,7 +189,8 @@ describe("exportsList", () => {
       EXPORTS_PATH,
     ]);
     expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': 1 export(s).",
+      "Model 'exp' for owner 'alice' project 'road': 1 export(s). " +
+        "The API may have truncated this list; pass limit to request more.",
     );
   });
 
@@ -241,7 +244,8 @@ describe("exportsList", () => {
 
     expect(calls.map((call) => call.path)).toEqual([EXPORTS_PATH]);
     expect(result.summary).toBe(
-      "Model 'exp' for owner 'alice' project 'road': 2 export(s).",
+      "Model 'exp' for owner 'alice' project 'road': 2 export(s). " +
+        "The API may have truncated this list; pass limit to request more.",
     );
     const items = result.data as Record<string, unknown>[];
     expect(items[0]).toMatchObject({
@@ -264,6 +268,26 @@ describe("exportsList", () => {
       exportsStatus: 404,
     });
     await expect(exportsList(client, REF)).rejects.toThrow(/Model not found/);
+  });
+
+  test("reports a page under an explicit limit without a truncation note", async () => {
+    const { client } = exportsClient();
+
+    const result = await exportsList(client, REF, undefined, 100);
+
+    expect(result.summary).toBe(
+      "Model 'exp' for owner 'alice' project 'road': 1 export(s).",
+    );
+  });
+
+  test("surfaces the server's own rejection of an over-max limit", async () => {
+    const { client } = exportsClient({
+      exportsBody: { error: "limit: Too big: expected number to be <=100" },
+      exportsStatus: 400,
+    });
+    await expect(exportsList(client, REF, undefined, 101)).rejects.toThrow(
+      "limit: Too big: expected number to be <=100",
+    );
   });
 });
 

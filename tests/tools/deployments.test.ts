@@ -152,6 +152,20 @@ describe("deploymentsList", () => {
     expect(result.summary).toBe("0 deployment(s) for owner 'alice'.");
     expect(result.data).toEqual([]);
   });
+
+  test("surfaces the server's own rejection of an over-max limit", async () => {
+    const { client } = routeClient((path) =>
+      path === "/api/deployments/alice"
+        ? jsonResponse(
+            { error: "limit: Too big: expected number to be <=100" },
+            400,
+          )
+        : jsonResponse({}, 404),
+    );
+    await expect(deploymentsList(client, "alice", 101)).rejects.toThrow(
+      "limit: Too big: expected number to be <=100",
+    );
+  });
 });
 
 describe("deploymentGet", () => {
