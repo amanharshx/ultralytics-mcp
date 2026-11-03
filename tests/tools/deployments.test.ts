@@ -74,39 +74,36 @@ describe("deploymentsList", () => {
 
     const result = await deploymentsList(client);
     expect(result.summary).toBe("2 deployment(s) for owner 'alice'.");
-    expect(result.data).toEqual({
-      total: 2,
-      deployments: [
-        {
-          id: "a".repeat(24),
-          owner: "alice",
-          deployment: "road-detector",
-          name: "Road detector",
-          status: "ready",
-          region: "eu",
-          resources: { cpu: 1, memoryGi: 2, minInstances: 0, maxInstances: 1 },
-          createdAt: "2026-01-01T00:00:00Z",
-          updatedAt: "2026-01-02T00:00:00Z",
-          project: "alice/road",
-          model: "alice/road/exp",
-          task: "detect",
-        },
-        {
-          id: "b".repeat(24),
-          owner: "alice",
-          deployment: "bare",
-          name: "Bare",
-          status: "deploying",
-          region: "eu",
-          resources: { cpu: 1, memoryGi: 2, minInstances: 0, maxInstances: 1 },
-          createdAt: "2026-01-03T00:00:00Z",
-          updatedAt: "2026-01-03T00:00:00Z",
-          project: "alice/road",
-          model: "alice/road/exp2",
-          task: "detect",
-        },
-      ],
-    });
+    expect(result.data).toEqual([
+      {
+        id: "a".repeat(24),
+        owner: "alice",
+        deployment: "road-detector",
+        name: "Road detector",
+        status: "ready",
+        region: "eu",
+        resources: { cpu: 1, memoryGi: 2, minInstances: 0, maxInstances: 1 },
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-02T00:00:00Z",
+        project: "alice/road",
+        model: "alice/road/exp",
+        task: "detect",
+      },
+      {
+        id: "b".repeat(24),
+        owner: "alice",
+        deployment: "bare",
+        name: "Bare",
+        status: "deploying",
+        region: "eu",
+        resources: { cpu: 1, memoryGi: 2, minInstances: 0, maxInstances: 1 },
+        createdAt: "2026-01-03T00:00:00Z",
+        updatedAt: "2026-01-03T00:00:00Z",
+        project: "alice/road",
+        model: "alice/road/exp2",
+        task: "detect",
+      },
+    ]);
     expect(calls.map((call) => call.path)).toEqual([
       "/api/account/summary",
       "/api/deployments/alice",
@@ -122,7 +119,7 @@ describe("deploymentsList", () => {
     });
     const result = await deploymentsList(client, "bob");
     expect(result.summary).toBe("0 deployment(s) for owner 'bob'.");
-    expect(result.data).toEqual({ deployments: [], total: 0 });
+    expect(result.data).toEqual([]);
     expect(calls.map((call) => call.path)).toEqual(["/api/deployments/bob"]);
   });
 
@@ -153,7 +150,7 @@ describe("deploymentsList", () => {
     });
     const result = await deploymentsList(client, "alice");
     expect(result.summary).toBe("0 deployment(s) for owner 'alice'.");
-    expect(result.data).toEqual({ deployments: [], total: 0 });
+    expect(result.data).toEqual([]);
   });
 
   test("surfaces the server's own rejection of an over-max limit", async () => {

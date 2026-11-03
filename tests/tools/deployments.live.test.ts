@@ -145,12 +145,8 @@ describe.skipIf(!apiKey)("deployments_list live smoke", () => {
     const defaulted = await deploymentsList(client);
     expect(lastStatus(records)).toBe(EXPECTED_STATUS.list);
     expect(defaulted.summary).toContain(owner);
-    const { deployments: items, total } = defaulted.data as {
-      deployments: Array<Record<string, unknown>>;
-      total: number;
-    };
-    expect(Array.isArray(items)).toBe(true);
-    expect(total).toBe(items.length);
+    expect(Array.isArray(defaulted.data)).toBe(true);
+    const items = defaulted.data as Array<Record<string, unknown>>;
     expect(defaulted.summary).toBe(
       `${items.length} deployment(s) for owner '${owner}'.`,
     );
@@ -215,11 +211,10 @@ describe.skipIf(!apiKey)("deployments_list limit live smoke", () => {
 
           const page = await deploymentsList(client, owner, 1);
           expect(lastStatus(records)).toBe(EXPECTED_STATUS.list);
-          const { deployments, total } = page.data as {
-            deployments: unknown[];
-            total: number;
-          };
-          expect(deployments).toHaveLength(1);
+          expect(page.data).toHaveLength(1);
+          const { total } = (await client.get(`/deployments/${owner}`, {
+            limit: 1,
+          })) as { total: number };
           expect(total).toBeGreaterThanOrEqual(2);
           expect(page.summary).toBe(
             `Showing 1 of ${total} deployment(s) for owner '${owner}'.`,
@@ -244,9 +239,7 @@ describe.skipIf(!apiKey)("deployments_list limit live smoke", () => {
       expect(creditsAfter).toBe(creditsBefore);
 
       const listAfter = await deploymentsList(client, owner);
-      const remaining = (
-        listAfter.data as { deployments: Array<Record<string, unknown>> }
-      ).deployments;
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
       expect(
         remaining.some((item) => slugs.includes(String(item.deployment))),
       ).toBe(false);
@@ -321,9 +314,7 @@ describe.skipIf(!apiKey)("deployment_get live smoke", () => {
       expect(creditsAfter).toBe(creditsBefore);
 
       const listAfter = await deploymentsList(client, owner);
-      const remaining = (
-        listAfter.data as { deployments: Array<Record<string, unknown>> }
-      ).deployments;
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     6 * 60_000,
@@ -391,9 +382,7 @@ describe.skipIf(!apiKey)("deployment_health live smoke", () => {
       expect(creditsAfter).toBe(creditsBefore);
 
       const listAfter = await deploymentsList(client, owner);
-      const remaining = (
-        listAfter.data as { deployments: Array<Record<string, unknown>> }
-      ).deployments;
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     8 * 60_000,
@@ -489,9 +478,7 @@ describe.skipIf(!apiKey)("deployment_logs live smoke", () => {
       expect(creditsAfter).toBe(creditsBefore);
 
       const listAfter = await deploymentsList(client, owner);
-      const remaining = (
-        listAfter.data as { deployments: Array<Record<string, unknown>> }
-      ).deployments;
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     8 * 60_000,
@@ -573,9 +560,7 @@ describe.skipIf(!apiKey)("deployment_metrics live smoke", () => {
       expect(creditsAfter).toBe(creditsBefore);
 
       const listAfter = await deploymentsList(client, owner);
-      const remaining = (
-        listAfter.data as { deployments: Array<Record<string, unknown>> }
-      ).deployments;
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     8 * 60_000,
@@ -700,9 +685,7 @@ describe.skipIf(!apiKey)("deployment_predict live smoke", () => {
       expect(creditsAfter).toBe(creditsBefore);
 
       const listAfter = await deploymentsList(client, owner);
-      const remaining = (
-        listAfter.data as { deployments: Array<Record<string, unknown>> }
-      ).deployments;
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     10 * 60_000,
@@ -777,9 +760,7 @@ describe.skipIf(!apiKey)("deployment_stop live smoke", () => {
       expect(creditsAfter).toBe(creditsBefore);
 
       const listAfter = await deploymentsList(client, owner);
-      const remaining = (
-        listAfter.data as { deployments: Array<Record<string, unknown>> }
-      ).deployments;
+      const remaining = listAfter.data as Array<Record<string, unknown>>;
       expect(remaining.some((item) => item.deployment === slug)).toBe(false);
     },
     8 * 60_000,

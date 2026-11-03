@@ -37,9 +37,6 @@
   ],
   "expected": {
     "summary": "0 deployment(s) for owner 'example-owner'.",
-    "data": {
-      "deployments": [],
-      "total": 0
-    }
+    "data": []
   }
 }
