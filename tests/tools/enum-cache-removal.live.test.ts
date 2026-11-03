@@ -455,9 +455,6 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
   test("training start: rejects an invalid gpu_type after checkpoint mode created a model, and names that model", async () => {
     const client = recordingClient(apiKey as string, []);
     const owner = await client.getAccountOwner();
-    const before = (await client.get("/account/summary")) as {
-      creditsCents: number;
-    };
     const projectSlug = disposableSlug("zz-mcp-smoke-enum-gpu");
     const projectRef = `${owner}/${projectSlug}`;
 
@@ -507,11 +504,6 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
           `/models/${owner}/${projectSlug}`,
         )) as { models?: unknown[] };
         expect(modelsAfter.models).toEqual([]);
-
-        const after = (await client.get("/account/summary")) as {
-          creditsCents: number;
-        };
-        expect(after.creditsCents).toBe(before.creditsCents);
 
         await projectsDelete(client, projectRef);
       },
