@@ -101,53 +101,39 @@ function createdModelId(data: unknown): string {
   return id;
 }
 
-type ModelRoute =
-  | { mode: "checkpoint"; checkpoint: string; task: string }
-  | {
-      mode: "existing";
-      owner: string;
-      project: string;
-      model: string;
-      data: unknown;
-    };
-
-/** Decide between checkpoint mode and retraining an existing model by the
- * ref's shape and ownership, never by a list of model families: the server
- * is the authority on which checkpoints exist and rejects an unknown one at
- * POST /training/start. A `.pt` name is a checkpoint, passed through
- * verbatim; its task is a best guess from the suffix, and a wrong guess is
- * rejected server-side as a task mismatch. A model another account owns
- * cannot be retrained by this caller, so it is a base too: its `ul://` URI
- * (the form the platform UI sends) is passed through and its task is read
- * from the model itself, so the history-loss gate never sees it. Anything
- * else is the caller's own model to retrain. */
-async function routeModelRef(
+/** Decide checkpoint mode by the ref's shape and owner, never by a list of
+ * model families: the server is the authority on which checkpoints exist
+ * and rejects an unknown one at POST /training/start. A `.pt` name is a
+ * checkpoint, passed through verbatim; its task is a best guess from the
+ * suffix, and a wrong guess is rejected server-side as a task mismatch. A
+ * model another account owns cannot be retrained by this caller, so it is a
+ * base too: its `ul://` URI (the form the platform UI sends) is passed
+ * through and its task is read from the model itself, so the history-loss
+ * gate never sees it. Returns null for the caller's own model to retrain. */
+async function checkpointFromRef(
   client: UltralyticsClient,
   model: string,
   project: string,
-): Promise<ModelRoute> {
+): Promise<{ model: string; task: string } | null> {
   const trimmed = model.trim();
   if (trimmed.toLowerCase().endsWith(".pt")) {
-    return {
-      mode: "checkpoint",
-      checkpoint: trimmed,
-      task: inferCheckpointTask(trimmed),
-    };
+    return { model: trimmed, task: inferCheckpointTask(trimmed) };
   }
-  const resolved = resolveModel(model, project);
-  const accountOwner = await client.getAccountOwner();
-  const owner = resolved.owner ?? accountOwner;
+  const {
+    owner,
+    project: modelProject,
+    model: slug,
+  } = resolveModel(model, project);
+  if (owner === null || owner === (await client.getAccountOwner())) {
+    return null;
+  }
   const data = await client.get(
-    `/models/${encodeURIComponent(owner)}/${encodeURIComponent(resolved.project)}/${encodeURIComponent(resolved.model)}`,
+    `/models/${encodeURIComponent(owner)}/${encodeURIComponent(modelProject)}/${encodeURIComponent(slug)}`,
   );
-  if (owner !== accountOwner) {
-    return {
-      mode: "checkpoint",
-      checkpoint: `ul://${owner}/${resolved.project}/${resolved.model}`,
-      task: modelTask(data),
-    };
-  }
-  return { mode: "existing", ...resolved, owner, data };
+  return {
+    model: `ul://${owner}/${modelProject}/${slug}`,
+    task: modelTask(data),
+  };
 }
 
 /** Build the three-segment `ul://owner/datasets/slug` URI training's `data`
@@ -379,8 +365,9 @@ export async function trainingCancel(
  * database id — the start endpoint takes an id by design while every other
  * endpoint takes owner and slug — and reuses its own stored base checkpoint
  * for `trainArgs.model` verbatim. Which mode applies is decided by
- * {@link routeModelRef} from the ref's shape and owner alone. Checkpoint
- * mode creates a project model first from owner and project slug (the platform assigns the new model's slug; it no longer
+ * {@link checkpointFromRef} from the ref's shape and owner alone.
+ * Checkpoint mode creates a project model first from owner and
+ * project slug (the platform assigns the new model's slug; it no longer
  * accepts a requested name). It cannot be created later: `POST
  * /training/start` requires a `modelId`. So every rejection there — a
  * missing or not-ready dataset, an invalid `gpuType`, a checkpoint/dataset
@@ -457,6 +444,7 @@ export async function trainingStart(
 
   const resolvedProject = resolveProject(project);
   const resolvedDataset = resolveDataset(dataset);
+  const checkpoint = await checkpointFromRef(client, model, project);
 
   const trainArgs: Record<string, unknown> = {
     ...passthroughTrainArgs,
@@ -465,8 +453,6 @@ export async function trainingStart(
       dataset: resolvedDataset.dataset,
     }),
   };
-
-  const route = await routeModelRef(client, model, project);
 
   // Set only when this call creates a fresh model from a base checkpoint.
   // On a POST /training/start failure this tool never deletes that model —
@@ -481,18 +467,23 @@ export async function trainingStart(
   let modelOwnerDisplay: string;
   let modelProjectDisplay: string;
   let modelSlugDisplay: string;
-  if (route.mode === "existing") {
-    modelId = modelDatabaseId(route.data);
-    const trainModel = storedTrainModel(route.data);
+  if (checkpoint === null) {
+    const resolvedModel = resolveModel(model, project);
+    const modelOwner = resolvedModel.owner ?? (await client.getAccountOwner());
+    const modelData = await client.get(
+      `/models/${encodeURIComponent(modelOwner)}/${encodeURIComponent(resolvedModel.project)}/${encodeURIComponent(resolvedModel.model)}`,
+    );
+    modelId = modelDatabaseId(modelData);
+    const trainModel = storedTrainModel(modelData);
     if (trainModel === null) {
       throw new Error(
         "Resolved model has no stored base checkpoint; pass a base checkpoint like `yolo26x.pt` instead.",
       );
     }
-    const history = modelHistorySummary(route.data);
+    const history = modelHistorySummary(modelData);
     if (history.hasHistory && !confirmHistoryLoss) {
       throw new Error(
-        `Model '${route.model}' already has a recorded run (status=${history.status}, ` +
+        `Model '${resolvedModel.model}' already has a recorded run (status=${history.status}, ` +
           `${history.resultRecordCount} training result record(s)). Starting training again replaces ` +
           "this model's status, epoch count, and training result history, and that history cannot be " +
           "recovered through the API; the previously uploaded weights survive. Set " +
@@ -500,9 +491,9 @@ export async function trainingStart(
       );
     }
     trainArgs.model = trainModel;
-    modelOwnerDisplay = route.owner;
-    modelProjectDisplay = route.project;
-    modelSlugDisplay = route.model;
+    modelOwnerDisplay = modelOwner;
+    modelProjectDisplay = resolvedModel.project;
+    modelSlugDisplay = resolvedModel.model;
   } else {
     // Checkpoint/dataset task compatibility is enforced by the server at
     // POST /training/start, e.g. `{"error":"Dataset task mismatch. This
@@ -513,11 +504,11 @@ export async function trainingStart(
     const created = await client.postJson("/models", {
       owner: projectOwner,
       project: resolvedProject.project,
-      task: route.task,
+      task: checkpoint.task,
     });
     const createdFields = asRecord(created);
     modelId = createdModelId(created);
-    trainArgs.model = route.checkpoint;
+    trainArgs.model = checkpoint.model;
     modelOwnerDisplay =
       typeof createdFields.owner === "string"
         ? createdFields.owner

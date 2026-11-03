@@ -1271,11 +1271,15 @@ describe("trainingStart", () => {
       expect(calls[0]?.body).not.toHaveProperty("name");
     });
 
-    const FOREIGN_MODEL_PATH = "/api/models/ultralytics/yolov5/yolov5nu";
+    /** Other accounts' models, each a completed run with history, so any
+     * history-loss gate would fire on them. */
+    const FOREIGN_MODELS: Record<string, { task: string }> = {
+      "/api/models/ultralytics/yolov5/yolov5nu": { task: "detect" },
+      "/api/models/bob/parts/parts-seg": { task: "segment" },
+    };
 
     /** A client for checkpoint-mode routing: answers the account owner,
-     * Ultralytics' public model detail (a completed run with history, so
-     * any history-loss gate would fire on it), create-model, and start. */
+     * the foreign model details above, create-model, and start. */
     function routingClient() {
       const calls: { path: string; method: string; body: unknown }[] = [];
       const impl = (async (url: string | URL, init: RequestInit = {}) => {
@@ -1288,21 +1292,16 @@ describe("trainingStart", () => {
         if (path === ACCOUNT_PATH) {
           return jsonResponse({ username: OWNER });
         }
-        if (path === FOREIGN_MODEL_PATH) {
+        const foreign = FOREIGN_MODELS[path];
+        if (foreign) {
           return jsonResponse({
             model: {
               id: "u".repeat(24),
-              owner: "ultralytics",
-              project: "yolov5",
-              model: "yolov5nu",
-              task: "detect",
+              task: foreign.task,
               status: "completed",
-              trainArgs: { model: "yolov5n.yaml" },
+              trainResults: [{ epoch: 0 }],
             },
           });
-        }
-        if (path === ACCOUNT_PATH) {
-          return jsonResponse({ username: OWNER });
         }
         if (path === MODEL_PATH) {
           return jsonResponse({
@@ -1333,11 +1332,21 @@ describe("trainingStart", () => {
     }
 
     test.each([
-      "ul://ultralytics/yolov5/yolov5nu",
-      "ultralytics/yolov5/yolov5nu",
+      {
+        model: "ul://ultralytics/yolov5/yolov5nu",
+        path: "/api/models/ultralytics/yolov5/yolov5nu",
+        task: "detect",
+        checkpoint: "ul://ultralytics/yolov5/yolov5nu",
+      },
+      {
+        model: "bob/parts/parts-seg",
+        path: "/api/models/bob/parts/parts-seg",
+        task: "segment",
+        checkpoint: "ul://bob/parts/parts-seg",
+      },
     ])(
-      "trains another account's model %s as a base checkpoint, never asking for confirm_history_loss",
-      async (model) => {
+      "trains another account's model $model as a base checkpoint, never asking for confirm_history_loss",
+      async ({ model, path, task, checkpoint }) => {
         const { client, calls } = routingClient();
 
         await trainingStart(client, {
@@ -1349,52 +1358,25 @@ describe("trainingStart", () => {
           confirmCost: true,
         });
 
-        // The task is read live from the referenced model, and the ul://
+        // The task is read live from the referenced model, and its ul://
         // URI is passed through as the checkpoint, the form the UI sends.
         expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
           `GET ${ACCOUNT_PATH}`,
-          `GET ${FOREIGN_MODEL_PATH}`,
+          `GET ${path}`,
           `POST ${CREATE_MODEL_PATH}`,
           `POST ${START_PATH}`,
         ]);
         expect(calls[2]?.body).toEqual({
           owner: OWNER,
           project: PROJECT,
-          task: "detect",
+          task,
         });
         expect(calls[3]?.body).toMatchObject({
           modelId: CREATED_MODEL_ID,
-          trainArgs: { model: "ul://ultralytics/yolov5/yolov5nu" },
+          trainArgs: { model: checkpoint },
         });
       },
     );
-
-    test("throws clearly when another account's model detail has no task, before creating a model", async () => {
-      const { client, calls } = routeClient((path) => {
-        if (path === ACCOUNT_PATH) {
-          return jsonResponse({ username: OWNER });
-        }
-        if (path === FOREIGN_MODEL_PATH) {
-          return jsonResponse({ model: { id: "u".repeat(24) } });
-        }
-        return jsonResponse({}, 404);
-      });
-
-      await expect(
-        trainingStart(client, {
-          model: "ul://ultralytics/yolov5/yolov5nu",
-          project: PROJECT_REF,
-          dataset: DATASET_REF,
-          gpuType: "l4",
-          epochs: 1,
-          confirmCost: true,
-        }),
-      ).rejects.toThrow(/did not include a task/);
-      expect(calls.map((call) => call.path)).toEqual([
-        ACCOUNT_PATH,
-        FOREIGN_MODEL_PATH,
-      ]);
-    });
 
     test("does not treat a user-owned ul:// model as a checkpoint", async () => {
       const { client, calls } = routingClient();
