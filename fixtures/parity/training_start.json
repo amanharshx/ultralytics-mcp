@@ -11,6 +11,26 @@
   "api": [
     {
       "method": "GET",
+      "path": "/api/account/summary",
+      "response": {
+        "status": 200,
+        "json": {
+          "username": "example-owner",
+          "name": "Example User",
+          "accountType": "personal",
+          "creditsCents": 1619,
+          "plan": "free",
+          "counts": {
+            "projects": 23,
+            "datasets": 32,
+            "models": 38
+          },
+          "teams": []
+        }
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/models/example-owner/example-project-1/example-model-1",
       "response": {
         "status": 200,

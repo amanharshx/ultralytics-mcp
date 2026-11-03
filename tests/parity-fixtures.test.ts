@@ -592,6 +592,7 @@ describe("parity fixtures", () => {
         "training_start_no_checkpoint.json",
         "training_start_history_warning.json",
         "training_start_rejected_leftover.json",
+        "training_start_foreign_checkpoint.json",
         "exports_list.json",
         "exports_list_empty.json",
         "exports_list_truncated.json",
