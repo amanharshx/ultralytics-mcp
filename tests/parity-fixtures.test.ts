@@ -591,6 +591,7 @@ describe("parity fixtures", () => {
         "training_start_checkpoint.json",
         "training_start_no_checkpoint.json",
         "training_start_history_warning.json",
+        "training_start_rejected_leftover.json",
         "exports_list.json",
         "exports_list_empty.json",
         "exports_list_truncated.json",
@@ -634,6 +635,7 @@ describe("parity fixtures", () => {
       fixtureFile === "export_cancel_refused.json" ||
       fixtureFile === "training_start_no_checkpoint.json" ||
       fixtureFile === "training_start_history_warning.json" ||
+      fixtureFile === "training_start_rejected_leftover.json" ||
       fixtureFile === "deployment_stop_already_stopped.json" ||
       fixtureFile === "auto_annotate_start_refused.json" ||
       fixtureFile === "auto_annotate_stop_refused.json" ||
@@ -848,6 +850,38 @@ describe("parity fixtures", () => {
     }).catch((e) => e as Error);
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe(fixture.expectedError?.message);
+  });
+
+  test("parity output: training_start_rejected_leftover.json", async () => {
+    // Live capture: checkpoint mode creates a model with POST /api/models,
+    // then POST /api/training/start rejects an unknown gpuType -> 400. The
+    // rejection is not a task mismatch, yet the created model still stays
+    // behind: the server's message is surfaced verbatim and the error names
+    // that model, with no DELETE sent.
+    const raw = readFileSync(
+      join(fixtureDir, "training_start_rejected_leftover.json"),
+      "utf8",
+    );
+    const fixture = fixtureSchema.parse(JSON.parse(raw));
+    const client = new UltralyticsClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      fetchImpl: replayFetch(fixture.api),
+    });
+    const error = await trainingStart(client, {
+      model: fixture.args.model as string,
+      project: fixture.args.project as string,
+      dataset: fixture.args.dataset as string,
+      gpuType: fixture.args.gpu_type as string,
+      epochs: fixture.args.epochs as number,
+      confirmCost: fixture.args.confirm_cost as boolean,
+    }).catch((e) => e as UltralyticsApiError);
+    expect(error).toBeInstanceOf(UltralyticsApiError);
+    expect(error.statusCode).toBe(fixture.expectedError?.status);
+    expect(error.apiMessage).toBe(fixture.expectedError?.message);
+    expect(error.message).toContain(
+      "Model 'example-owner/example-project-1/exp' was created for this run and was not deleted",
+    );
   });
 
   test("parity output: model_download_signed_url.json", async () => {

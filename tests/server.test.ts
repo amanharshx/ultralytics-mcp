@@ -227,6 +227,15 @@ test("server registers all available tools over the protocol", async () => {
       type: "integer",
     },
   });
+  // Every start rejection leaves the checkpoint-mode model behind, not only
+  // a task mismatch; GPU unavailability is the one that is no caller error.
+  expect(trainingStart?.description).toMatch(
+    /any rejection when training starts/,
+  );
+  expect(trainingStart?.description).toMatch(/503 GPU_UNAVAILABLE/);
+  expect(trainingStart?.description).not.toMatch(
+    /a mismatch there still leaves that model behind/,
+  );
 
   const trainingCancel = tools.find((tool) => tool.name === "training_cancel");
   expect(trainingCancel?.inputSchema?.required).toEqual(["model"]);

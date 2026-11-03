@@ -355,10 +355,12 @@ export async function trainingCancel(
  * endpoint takes owner and slug — and reuses its own stored base checkpoint
  * for `trainArgs.model` verbatim. Checkpoint mode creates a project model first from owner and
  * project slug (the platform assigns the new model's slug; it no longer
- * accepts a requested name). The checkpoint/dataset task match is enforced
- * by the server at `POST /training/start` (confirmed live), which runs
+ * accepts a requested name). It cannot be created later: `POST
+ * /training/start` requires a `modelId`. So every rejection there — a
+ * missing or not-ready dataset, an invalid `gpuType`, a checkpoint/dataset
+ * task mismatch, or a 503 `GPU_UNAVAILABLE` (all observed live) — arrives
  * *after* the model above is already created.
- * A mismatch there still leaves that model behind — nothing deletes it
+ * Any of them leaves that model behind — nothing deletes it
  * automatically, since no status code reliably proves the job never
  * started — so the thrown error names the model and the caller is expected
  * to review and remove it (`models_delete`) if it turns out to be
@@ -534,12 +536,14 @@ export async function trainingStart(
     });
   } catch (error) {
     if (createdModelRef !== null && error instanceof Error) {
-      // No status code is treated as proof the model was never trained: a
-      // 4xx covers several distinct rejections (config, auth, credits,
-      // access, not-found, conflict, rate limit) and only one of
-      // them — a dataset task mismatch — has actually been observed live,
-      // so generalizing "4xx means safe to delete" would itself be an
-      // unverified rule cached locally. This tool never deletes the model
+      // No status code is treated as proof the model was never trained.
+      // Rejections observed live here are not one class: 400 for a
+      // missing dataset, a not-ready dataset, an invalid gpuType, and a
+      // dataset task mismatch, and 503 `GPU_UNAVAILABLE` when the
+      // requested GPU is out of stock. Other 4xx causes (auth, credits,
+      // access, conflict, rate limit) remain unobserved, so generalizing
+      // "4xx means safe to delete" would itself be an unverified rule
+      // cached locally. This tool never deletes the model
       // it created; it only names it, on every failure, so the caller can
       // decide (`models_delete` if it's confirmed unwanted).
       const ref = `${createdModelRef.owner}/${createdModelRef.project}/${createdModelRef.model}`;
