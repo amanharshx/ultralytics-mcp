@@ -27,7 +27,9 @@
  * `ULTRALYTICS_SMOKE_DATASET_REF=owner/slug` and skips without it, so this
  * suite never selects or mutates an arbitrary dataset. The referenced
  * project/model are created fresh and deleted; the dataset itself is only
- * read. Training is expected to be rejected before billing. If the
+ * read. The invalid-`gpuType` case needs no dataset: it points at one that
+ * does not exist and still must name the model checkpoint mode created.
+ * Training is expected to be rejected before billing. If the
  * platform ever accepts it instead, an unexpected `202`/`200` does not fall
  * through to a later assertion — `expectRejectionOrStopIt` calls
  * `trainingCancel` (or the raw cancel endpoint) on that exact response
@@ -113,14 +115,14 @@ async function expectRejectionOrStopIt<T>(
     await onUnexpectedSuccess(result);
   } catch (stopError) {
     throw new Error(
-      "expected the call to reject the task mismatch, but it started " +
+      "expected the call to be rejected, but it started " +
         "successfully, AND the attempt to stop the job also failed " +
         `(check it by hand): ${String(stopError)}. ` +
         `Original success response: ${JSON.stringify(result)}`,
     );
   }
   throw new Error(
-    "expected the call to reject the task mismatch, but it started " +
+    "expected the call to be rejected, but it started " +
       `successfully (the job was stopped): ${JSON.stringify(result)}`,
   );
 }
@@ -444,6 +446,64 @@ describe.skipIf(!apiKey)("enum cache removal live smoke", () => {
           creditsCents: number;
         };
         expect(after.creditsCents).toBe(before.creditsCents);
+
+        await projectsDelete(client, projectRef);
+      },
+    );
+  }, 60_000);
+
+  test("training start: rejects an invalid gpu_type after checkpoint mode created a model, and names that model", async () => {
+    const client = recordingClient(apiKey as string, []);
+    const owner = await client.getAccountOwner();
+    const projectSlug = disposableSlug("zz-mcp-smoke-enum-gpu");
+    const projectRef = `${owner}/${projectSlug}`;
+
+    await withDisposableCleanup(
+      "project",
+      projectRef,
+      async () => {
+        await projectsDelete(client, projectRef);
+      },
+      async () => {
+        await projectsCreate(client, {
+          name: "zz MCP smoke enum gpu (disposable)",
+          project: projectSlug,
+        });
+
+        const gpuError = await expectRejectionOrStopIt(
+          trainingStart(client, {
+            model: "yolo26n.pt",
+            project: projectRef,
+            dataset: `${owner}/zz-no-such-dataset`,
+            gpuType: "zz-not-a-gpu",
+            epochs: 1,
+            confirmCost: true,
+          }),
+          async (result) => {
+            const data = (
+              result as {
+                data: { owner: string; project: string; model: string };
+              }
+            ).data;
+            await trainingCancel(
+              client,
+              `${data.owner}/${data.project}/${data.model}`,
+            );
+          },
+        );
+        expect(gpuError.statusCode).toBe(400);
+        expect(gpuError.apiMessage).toMatch(/^gpuType: /);
+
+        const namedModel = gpuError.message.match(
+          /Model '([^']+)' was created for this run and was not deleted/,
+        );
+        expect(namedModel).not.toBeNull();
+        await modelsDelete(client, (namedModel as RegExpMatchArray)[1]);
+
+        const modelsAfter = (await client.get(
+          `/models/${owner}/${projectSlug}`,
+        )) as { models?: unknown[] };
+        expect(modelsAfter.models).toEqual([]);
 
         await projectsDelete(client, projectRef);
       },

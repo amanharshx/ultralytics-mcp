@@ -1,0 +1,56 @@
+{
+  "tool": "training_start",
+  "args": {
+    "model": "yolo26n.pt",
+    "project": "example-owner/example-project-1",
+    "dataset": "example-owner/zz-no-such-dataset",
+    "gpu_type": "zz-not-a-gpu",
+    "epochs": 1,
+    "confirm_cost": true
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/models",
+      "json": {
+        "owner": "example-owner",
+        "project": "example-project-1",
+        "task": "detect"
+      },
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "ffffffffffffffffffffffff",
+          "owner": "example-owner",
+          "project": "example-project-1",
+          "model": "exp",
+          "name": "exp",
+          "region": "eu"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/training/start",
+      "json": {
+        "modelId": "ffffffffffffffffffffffff",
+        "gpuType": "zz-not-a-gpu",
+        "trainArgs": {
+          "data": "ul://example-owner/datasets/zz-no-such-dataset",
+          "model": "yolo26n.pt",
+          "epochs": 1
+        }
+      },
+      "response": {
+        "status": 400,
+        "json": {
+          "error": "gpuType: Invalid option: expected one of \"rtx-2000-ada\"|\"rtx-a4500\"|\"rtx-a5000\"|\"rtx-4000-ada\"|\"l4\"|\"a40\"|\"rtx-3090\"|\"rtx-a6000\"|\"rtx-pro-4000\"|\"rtx-pro-4500\"|\"rtx-4090\"|\"rtx-6000-ada\"|\"l40s\"|\"rtx-pro-5000\"|\"rtx-5090\"|\"l40\"|\"a100-80gb-pcie\"|\"a100-80gb-sxm\"|\"rtx-pro-6000\"|\"h100-pcie\"|\"h100-nvl\"|\"h100-sxm\"|\"h200-nvl\"|\"h200-sxm\"|\"b200\"|\"b300\""
+        }
+      }
+    }
+  ],
+  "expectedError": {
+    "status": 400,
+    "message": "gpuType: Invalid option: expected one of \"rtx-2000-ada\"|\"rtx-a4500\"|\"rtx-a5000\"|\"rtx-4000-ada\"|\"l4\"|\"a40\"|\"rtx-3090\"|\"rtx-a6000\"|\"rtx-pro-4000\"|\"rtx-pro-4500\"|\"rtx-4090\"|\"rtx-6000-ada\"|\"l40s\"|\"rtx-pro-5000\"|\"rtx-5090\"|\"l40\"|\"a100-80gb-pcie\"|\"a100-80gb-sxm\"|\"rtx-pro-6000\"|\"h100-pcie\"|\"h100-nvl\"|\"h100-sxm\"|\"h200-nvl\"|\"h200-sxm\"|\"b200\"|\"b300\""
+  }
+}

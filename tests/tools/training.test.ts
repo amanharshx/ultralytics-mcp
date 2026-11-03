@@ -1461,9 +1461,9 @@ describe("trainingStart", () => {
         fetchImpl: impl,
       });
 
-      // A 4xx is not treated as proof the model was never trained (a 4xx
-      // covers several distinct rejections, and only the task-mismatch case
-      // has actually been observed live): this tool never auto-deletes the
+      // A 4xx is not treated as proof the model was never trained (the
+      // rejections observed live span 400s and a 503, and other 4xx causes
+      // remain unobserved): this tool never auto-deletes the
       // model it created, on any failure, and always names it instead.
       await expect(
         trainingStart(client, {
