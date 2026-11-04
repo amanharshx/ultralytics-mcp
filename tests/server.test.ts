@@ -152,6 +152,15 @@ test("server registers all available tools over the protocol", async () => {
     (tool) => tool.name === "dataset_version_create",
   );
   expect(datasetVersionCreate?.inputSchema?.required).toEqual(["dataset"]);
+  // On reuse a passed description replaces the existing version's note.
+  expect(datasetVersionCreate?.description).toMatch(
+    /replaces the existing version's note/,
+  );
+  expect(
+    datasetVersionCreate?.inputSchema?.properties?.description,
+  ).toMatchObject({
+    description: expect.stringMatching(/replaces that version's note/),
+  });
 
   const datasetIngest = tools.find((tool) => tool.name === "dataset_ingest");
   expect(datasetIngest?.inputSchema?.required).toEqual([
@@ -275,6 +284,10 @@ test("server registers all available tools over the protocol", async () => {
     (tool) => tool.name === "auto_annotate_stop",
   );
   expect(autoAnnotateStop?.inputSchema?.required).toEqual(["dataset"]);
+  // A terminal run always reads activeJob: null, so the tool refuses before
+  // the server could dismiss it: neither outcome is reachable to promise.
+  expect(autoAnnotateStop?.description).not.toMatch(/dismiss/i);
+  expect(autoAnnotateStop?.description).not.toMatch(/\bnone\b/);
 });
 
 test("tool calls reject undeclared arguments before reaching the API", async () => {

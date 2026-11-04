@@ -675,7 +675,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Stop or dismiss a dataset's auto-annotation run by slug, owner/slug, or a ul://owner/datasets/slug URI. Reads status first and refuses without calling the endpoint when no run is active, since there is nothing to stop. When a run is active it sends the request and surfaces the server's own action verbatim rather than inferring it: cancelled for an active run stopped mid-flight, dismissed for a terminal run's summary being cleared, or none if nothing acted on. Ships ungated, consistent with training_cancel and export_cancel: an off-switch is never gated. An undismissed terminal run does not block the next start, so this never strands anything; dismissal moves no money.",
+      "Stop a dataset's active auto-annotation run by slug, owner/slug, or a ul://owner/datasets/slug URI. Reads status first and refuses without calling the endpoint when no run is active, including when the last run has already finished, since there is nothing to stop. When a run is active it sends the request and surfaces the server's own action verbatim rather than inferring it, for example cancelled for a run stopped mid-flight. Ships ungated, consistent with training_cancel and export_cancel: an off-switch is never gated. A finished run left in place does not block the next start, so this never strands anything.",
     inputSchema: {
       dataset: z
         .string()
@@ -699,7 +699,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     registrationGroup: "write",
     stateChanging: true,
     description:
-      "Create a frozen dataset version snapshot by slug, owner/slug, or a ul://owner/datasets/slug URI. If the dataset is unchanged since the previous snapshot the existing version is returned instead of a new one.",
+      "Create a frozen dataset version snapshot by slug, owner/slug, or a ul://owner/datasets/slug URI. If the dataset is unchanged since the previous snapshot the existing version is returned instead of a new one, and a passed description then replaces the existing version's note; omit description to leave that note untouched.",
     inputSchema: {
       dataset: z
         .string()
@@ -709,7 +709,9 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       description: z
         .string()
         .optional()
-        .describe("Optional note describing this snapshot."),
+        .describe(
+          "Optional note describing this snapshot. If the existing version is reused, it replaces that version's note.",
+        ),
     },
     annotations: {
       readOnlyHint: false,

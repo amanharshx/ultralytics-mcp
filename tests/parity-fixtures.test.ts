@@ -549,6 +549,7 @@ describe("parity fixtures", () => {
         "explore_datasets.json",
         "explore_projects.json",
         "dataset_version_create.json",
+        "dataset_version_create_reused_description.json",
         "dataset_version_restore.json",
         "dataset_version_restore_invalid_version.json",
         "dataset_upload_file.json",
