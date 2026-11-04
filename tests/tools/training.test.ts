@@ -680,6 +680,7 @@ describe("trainingStart", () => {
   const MODEL_PATH = `/api/models/${OWNER}/${PROJECT}/${MODEL}`;
   const CREATE_MODEL_PATH = "/api/models";
   const START_PATH = "/api/training/start";
+  const ACCOUNT_PATH = "/api/account/summary";
   const MODEL_DB_ID = "d".repeat(24);
   const ORIGIN = "https://platform.ultralytics.com";
 
@@ -781,6 +782,9 @@ describe("trainingStart", () => {
   test("allows batch=-1 for auto-batch", async () => {
     const impl = (async (url: string | URL, init: RequestInit = {}) => {
       const path = new URL(String(url)).pathname;
+      if (path === ACCOUNT_PATH) {
+        return jsonResponse({ username: OWNER });
+      }
       if (path === MODEL_PATH) {
         return jsonResponse({
           model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
@@ -877,6 +881,9 @@ describe("trainingStart", () => {
         body,
       });
       const path = new URL(String(url)).pathname;
+      if (path === ACCOUNT_PATH) {
+        return jsonResponse({ username: OWNER });
+      }
       if (path === MODEL_PATH) {
         return jsonResponse({
           model: {
@@ -907,6 +914,7 @@ describe("trainingStart", () => {
     });
 
     expect(calls).toMatchObject([
+      { url: `${ORIGIN}${ACCOUNT_PATH}`, method: "GET" },
       { url: `${ORIGIN}${MODEL_PATH}`, method: "GET" },
       {
         url: `${ORIGIN}${START_PATH}`,
@@ -942,11 +950,14 @@ describe("trainingStart", () => {
     });
   });
 
-  test("accepts a ul:// model URI and a ul:// dataset URI without network for resolution", async () => {
+  test("accepts a ul:// model URI and a ul:// dataset URI, looking up only the account owner to check ownership", async () => {
     const calls: { path: string }[] = [];
     const impl = (async (url: string | URL) => {
       const path = new URL(String(url)).pathname;
       calls.push({ path });
+      if (path === ACCOUNT_PATH) {
+        return jsonResponse({ username: OWNER });
+      }
       if (path === MODEL_PATH) {
         return jsonResponse({
           model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
@@ -972,7 +983,11 @@ describe("trainingStart", () => {
       confirmCost: true,
     });
 
-    expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
+    expect(calls.map((call) => call.path)).toEqual([
+      ACCOUNT_PATH,
+      MODEL_PATH,
+      START_PATH,
+    ]);
   });
 
   test("round-trips a canonical ul://owner/datasets/slug dataset URI into data", async () => {
@@ -982,6 +997,9 @@ describe("trainingStart", () => {
         body: typeof init.body === "string" ? JSON.parse(init.body) : null,
       });
       const path = new URL(String(url)).pathname;
+      if (path === ACCOUNT_PATH) {
+        return jsonResponse({ username: OWNER });
+      }
       if (path === MODEL_PATH) {
         return jsonResponse({
           model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
@@ -1004,7 +1022,7 @@ describe("trainingStart", () => {
       confirmCost: true,
     });
 
-    expect(calls[1]).toMatchObject({
+    expect(calls[2]).toMatchObject({
       body: { trainArgs: { data: DATASET_URI } },
     });
   });
@@ -1051,6 +1069,9 @@ describe("trainingStart", () => {
 
   test("errors clearly when an existing model has no stored base checkpoint", async () => {
     const { client } = routeClient((path) => {
+      if (path === ACCOUNT_PATH) {
+        return jsonResponse({ username: OWNER });
+      }
       if (path === MODEL_PATH) {
         return jsonResponse({ model: { id: MODEL_DB_ID, trainArgs: {} } });
       }
@@ -1071,6 +1092,9 @@ describe("trainingStart", () => {
 
   test("surfaces the API message for a model that does not exist", async () => {
     const { client } = routeClient((path) => {
+      if (path === ACCOUNT_PATH) {
+        return jsonResponse({ username: OWNER });
+      }
       if (path === MODEL_PATH) {
         return jsonResponse({ error: "Model not found" }, 404);
       }
@@ -1096,6 +1120,9 @@ describe("trainingStart", () => {
         body: typeof init.body === "string" ? JSON.parse(init.body) : null,
       });
       const path = new URL(String(url)).pathname;
+      if (path === ACCOUNT_PATH) {
+        return jsonResponse({ username: OWNER });
+      }
       if (path === MODEL_PATH) {
         return jsonResponse({
           model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
@@ -1119,7 +1146,7 @@ describe("trainingStart", () => {
       confirmCost: true,
     });
 
-    expect(calls[1]).toMatchObject({
+    expect(calls[2]).toMatchObject({
       body: {
         trainArgs: {
           model: "yolo26n.pt",
@@ -1244,11 +1271,43 @@ describe("trainingStart", () => {
       expect(calls[0]?.body).not.toHaveProperty("name");
     });
 
-    test("routes official ultralytics ul:// refs through checkpoint mode", async () => {
+    /** Other accounts' models, each a completed run with history, so any
+     * history-loss gate would fire on them. */
+    const FOREIGN_MODELS: Record<string, { task: string }> = {
+      "/api/models/ultralytics/yolov5/yolov5nu": { task: "detect" },
+      "/api/models/bob/parts/parts-seg": { task: "segment" },
+    };
+
+    /** A client for checkpoint-mode routing: answers the account owner,
+     * the foreign model details above, create-model, and start. */
+    function routingClient() {
+      const calls: { path: string; method: string; body: unknown }[] = [];
       const impl = (async (url: string | URL, init: RequestInit = {}) => {
-        let body: unknown;
-        if (typeof init.body === "string") body = JSON.parse(init.body);
         const path = new URL(String(url)).pathname;
+        calls.push({
+          path,
+          method: (init.method ?? "GET").toUpperCase(),
+          body: typeof init.body === "string" ? JSON.parse(init.body) : null,
+        });
+        if (path === ACCOUNT_PATH) {
+          return jsonResponse({ username: OWNER });
+        }
+        const foreign = FOREIGN_MODELS[path];
+        if (foreign) {
+          return jsonResponse({
+            model: {
+              id: "u".repeat(24),
+              task: foreign.task,
+              status: "completed",
+              trainResults: [{ epoch: 0 }],
+            },
+          });
+        }
+        if (path === MODEL_PATH) {
+          return jsonResponse({
+            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
+          });
+        }
         if (path === CREATE_MODEL_PATH) {
           return jsonResponse({
             id: CREATED_MODEL_ID,
@@ -1258,84 +1317,37 @@ describe("trainingStart", () => {
           });
         }
         if (path === START_PATH) {
-          expect(body).toMatchObject({
-            trainArgs: { model: "yolo26x.pt" },
-          });
           return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
         }
         return jsonResponse({}, 404);
       }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
-
-      await trainingStart(client, {
-        model: "ul://ultralytics/yolo26/yolo26x",
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        epochs: 1,
-        confirmCost: true,
-      });
-    });
-
-    test("does not treat a user-owned ul:// model as a checkpoint", async () => {
-      const calls: { path: string }[] = [];
-      const impl = (async (url: string | URL) => {
-        const path = new URL(String(url)).pathname;
-        calls.push({ path });
-        if (path === MODEL_PATH) {
-          return jsonResponse({
-            model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
-          });
-        }
-        return jsonResponse(startResponse());
-      }) as unknown as typeof fetch;
-      const client = new UltralyticsClient({
-        apiKey: KEY,
-        baseUrl: BASE,
-        fetchImpl: impl,
-      });
-
-      await trainingStart(client, {
-        model: `ul://${OWNER}/${PROJECT}/${MODEL}`,
-        project: PROJECT_REF,
-        dataset: DATASET_REF,
-        gpuType: "l4",
-        epochs: 1,
-        confirmCost: true,
-      });
-
-      expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
-    });
-
-    test.each(["yolo26n-depth.pt", "ul://ultralytics/yolo26/yolo26n-depth"])(
-      "trains %s as a YOLO26 depth checkpoint",
-      async (model) => {
-        const calls: { path: string; body: unknown }[] = [];
-        const impl = (async (url: string | URL, init: RequestInit = {}) => {
-          const path = new URL(String(url)).pathname;
-          calls.push({
-            path,
-            body: typeof init.body === "string" ? JSON.parse(init.body) : null,
-          });
-          if (path === CREATE_MODEL_PATH) {
-            return jsonResponse({
-              id: CREATED_MODEL_ID,
-              owner: OWNER,
-              project: PROJECT,
-              model: CREATED_SLUG,
-            });
-          }
-          return jsonResponse(startResponse({ modelId: CREATED_MODEL_ID }));
-        }) as unknown as typeof fetch;
-        const client = new UltralyticsClient({
+      return {
+        client: new UltralyticsClient({
           apiKey: KEY,
           baseUrl: BASE,
           fetchImpl: impl,
-        });
+        }),
+        calls,
+      };
+    }
+
+    test.each([
+      {
+        model: "ul://ultralytics/yolov5/yolov5nu",
+        path: "/api/models/ultralytics/yolov5/yolov5nu",
+        task: "detect",
+        checkpoint: "ul://ultralytics/yolov5/yolov5nu",
+      },
+      {
+        model: "bob/parts/parts-seg",
+        path: "/api/models/bob/parts/parts-seg",
+        task: "segment",
+        checkpoint: "ul://bob/parts/parts-seg",
+      },
+    ])(
+      "trains another account's model $model as a base checkpoint, never asking for confirm_history_loss",
+      async ({ model, path, task, checkpoint }) => {
+        const { client, calls } = routingClient();
 
         await trainingStart(client, {
           model,
@@ -1346,34 +1358,86 @@ describe("trainingStart", () => {
           confirmCost: true,
         });
 
-        expect(calls).toMatchObject([
-          { path: CREATE_MODEL_PATH, body: { task: "depth" } },
-          {
-            path: START_PATH,
-            body: { trainArgs: { model: "yolo26n-depth.pt" } },
-          },
+        // The task is read live from the referenced model, and its ul://
+        // URI is passed through as the checkpoint, the form the UI sends.
+        expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
+          `GET ${ACCOUNT_PATH}`,
+          `GET ${path}`,
+          `POST ${CREATE_MODEL_PATH}`,
+          `POST ${START_PATH}`,
         ]);
+        expect(calls[2]?.body).toEqual({
+          owner: OWNER,
+          project: PROJECT,
+          task,
+        });
+        expect(calls[3]?.body).toMatchObject({
+          modelId: CREATED_MODEL_ID,
+          trainArgs: { model: checkpoint },
+        });
       },
     );
 
-    test("does not treat a non-YOLO26 -depth name as a checkpoint", async () => {
-      const { client, calls } = routeClient(() => jsonResponse({}, 404));
+    test("does not treat a user-owned ul:// model as a checkpoint", async () => {
+      const { client, calls } = routingClient();
+
+      await trainingStart(client, {
+        model: `ul://${OWNER}/${PROJECT}/${MODEL}`,
+        project: PROJECT_REF,
+        dataset: DATASET_REF,
+        gpuType: "l4",
+        epochs: 1,
+        confirmCost: true,
+      });
+
+      expect(calls.map((call) => call.path)).toEqual([
+        ACCOUNT_PATH,
+        MODEL_PATH,
+        START_PATH,
+      ]);
+    });
+
+    test("resolves a name without .pt as an existing project model", async () => {
+      const { client, calls } = routingClient();
 
       await expect(
         trainingStart(client, {
-          model: "yolo11n-depth.pt",
+          model: "yolov5nu",
           project: PROJECT_REF,
           dataset: DATASET_REF,
           gpuType: "l4",
           epochs: 1,
           confirmCost: true,
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/HTTP 404/);
 
       expect(calls.map((call) => call.path)).toEqual([
-        `/api/models/${OWNER}/${PROJECT}/yolo11n-depth.pt`,
+        ACCOUNT_PATH,
+        `/api/models/${OWNER}/${PROJECT}/yolov5nu`,
       ]);
     });
+
+    test.each(["yolov5nu.pt", "yolov5n.pt", "yolo26n-depth.pt", "YOLO11N.PT"])(
+      "passes %s through verbatim as a checkpoint for the server to validate",
+      async (model) => {
+        const { client, calls } = routingClient();
+
+        await trainingStart(client, {
+          model,
+          project: PROJECT_REF,
+          dataset: DATASET_REF,
+          gpuType: "l4",
+          epochs: 1,
+          confirmCost: true,
+        });
+
+        expect(calls.map((call) => call.path)).toEqual([
+          CREATE_MODEL_PATH,
+          START_PATH,
+        ]);
+        expect(calls[1]?.body).toMatchObject({ trainArgs: { model } });
+      },
+    );
 
     test("sends the checkpoint suffix's inferred task to the create-model endpoint", async () => {
       const calls: { url: string; body: unknown }[] = [];
@@ -1537,6 +1601,9 @@ describe("trainingStart", () => {
 
     test("does not touch the error for a model resolved from an existing ref (no model was created this call)", async () => {
       const { client, calls } = routeClient((path) => {
+        if (path === ACCOUNT_PATH) {
+          return jsonResponse({ username: OWNER });
+        }
         if (path === MODEL_PATH) {
           return jsonResponse({
             model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
@@ -1558,13 +1625,20 @@ describe("trainingStart", () => {
           confirmCost: true,
         }),
       ).rejects.toThrow(/^HTTP 400.*Some other failure\.\s*\[/s);
-      expect(calls.map((call) => call.path)).toEqual([MODEL_PATH, START_PATH]);
+      expect(calls.map((call) => call.path)).toEqual([
+        ACCOUNT_PATH,
+        MODEL_PATH,
+        START_PATH,
+      ]);
     });
   });
 
   describe("history-loss consent", () => {
     test("refuses to restart training on a completed model without confirm_history_loss", async () => {
       const { client, calls } = routeClient((path) => {
+        if (path === ACCOUNT_PATH) {
+          return jsonResponse({ username: OWNER });
+        }
         if (path === MODEL_PATH) {
           return jsonResponse({
             model: {
@@ -1591,12 +1665,18 @@ describe("trainingStart", () => {
       ).rejects.toThrow(
         /already has a recorded run.*confirm_history_loss=true/s,
       );
-      expect(calls).toHaveLength(1);
+      expect(calls.map((call) => call.path)).toEqual([
+        ACCOUNT_PATH,
+        MODEL_PATH,
+      ]);
     });
 
     test("proceeds when confirm_history_loss=true is set for a completed model", async () => {
       const impl = (async (url: string | URL) => {
         const path = new URL(String(url)).pathname;
+        if (path === ACCOUNT_PATH) {
+          return jsonResponse({ username: OWNER });
+        }
         if (path === MODEL_PATH) {
           return jsonResponse({
             model: {
@@ -1636,6 +1716,9 @@ describe("trainingStart", () => {
       async (status) => {
         const impl = (async (url: string | URL) => {
           const path = new URL(String(url)).pathname;
+          if (path === ACCOUNT_PATH) {
+            return jsonResponse({ username: OWNER });
+          }
           if (path === MODEL_PATH) {
             return jsonResponse({
               model: {
@@ -1672,6 +1755,9 @@ describe("trainingStart", () => {
     test("requires no extra confirmation when status is absent and no trainResults exist", async () => {
       const impl = (async (url: string | URL) => {
         const path = new URL(String(url)).pathname;
+        if (path === ACCOUNT_PATH) {
+          return jsonResponse({ username: OWNER });
+        }
         if (path === MODEL_PATH) {
           return jsonResponse({
             model: { id: MODEL_DB_ID, trainArgs: { model: "yolo26n.pt" } },
@@ -1701,6 +1787,9 @@ describe("trainingStart", () => {
 
     test("treats a running job as having history even before completion", async () => {
       const { client, calls } = routeClient((path) => {
+        if (path === ACCOUNT_PATH) {
+          return jsonResponse({ username: OWNER });
+        }
         if (path === MODEL_PATH) {
           return jsonResponse({
             model: {
@@ -1724,7 +1813,10 @@ describe("trainingStart", () => {
           confirmCost: true,
         }),
       ).rejects.toThrow(/already has a recorded run/);
-      expect(calls).toHaveLength(1);
+      expect(calls.map((call) => call.path)).toEqual([
+        ACCOUNT_PATH,
+        MODEL_PATH,
+      ]);
     });
 
     test("checkpoint mode never requires confirm_history_loss", async () => {
