@@ -1,0 +1,32 @@
+{
+  "tool": "dataset_version_create",
+  "args": {
+    "dataset": "example-owner/example-dataset-1",
+    "description": "zz replaced note"
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/api/datasets/example-owner/example-dataset-1/export",
+      "json": {
+        "description": "zz replaced note"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "version": 1,
+          "downloadUrl": "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+          "reused": true
+        }
+      }
+    }
+  ],
+  "expected": {
+    "summary": "Dataset version 1 for dataset 'example-dataset-1' for owner 'example-owner' already existed (no changes since the previous snapshot); the description passed replaced that version's existing note. This link is time-limited and will expire.",
+    "data": {
+      "version": 1,
+      "downloadUrl": "https://storage.googleapis.com/example-bucket/exports/example-id/example-dataset-1-v1.ndjson",
+      "reused": true
+    }
+  }
+}

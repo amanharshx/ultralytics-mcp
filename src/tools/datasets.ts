@@ -1229,8 +1229,11 @@ export interface DatasetVersionCreateOptions {
  * with a signed, time-limited download URL; when the dataset is unchanged
  * since the previous snapshot it returns the existing version with
  * `reused: true` instead of creating a new one, which the summary reports
- * without claiming a new version was created. When the reuse flag is absent
- * the summary stays neutral so it never falsely claims a new version.
+ * without claiming a new version was created. On reuse a passed
+ * `description` replaces the existing version's note (observed live), so the
+ * summary says so whenever the caller passed one; omitting it leaves the note
+ * untouched. When the reuse flag is absent the summary stays neutral so it
+ * never falsely claims a new version.
  */
 export async function datasetVersionCreate(
   client: UltralyticsClient,
@@ -1255,9 +1258,13 @@ export async function datasetVersionCreate(
   const expiryNote = `This link is time-limited and will expire.`;
   let summary: string;
   if (reused === true) {
+    const noteReplaced =
+      options.description !== undefined
+        ? "; the description passed replaced that version's existing note"
+        : "";
     summary =
       `Dataset version ${String(version)} for ${datasetRef} ` +
-      `already existed (no changes since the previous snapshot). ${expiryNote}`;
+      `already existed (no changes since the previous snapshot)${noteReplaced}. ${expiryNote}`;
   } else if (reused === false) {
     summary = `Created dataset version ${String(version)} for ${datasetRef}. ${expiryNote}`;
   } else {

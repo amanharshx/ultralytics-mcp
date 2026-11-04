@@ -1250,6 +1250,31 @@ describe("datasetVersionCreate", () => {
       },
     ]);
     expect(result.data).toMatchObject({ version: 1, reused: false });
+    expect(result.summary).not.toMatch(/existing note/);
+  });
+
+  test("names the note overwrite when a description is passed on reuse", async () => {
+    const { client, calls } = clientForVersionCreate(liveReusedResponse);
+
+    const result = await datasetVersionCreate(client, {
+      dataset: "alice/cars",
+      description: "zz replaced note",
+    });
+
+    expect(calls).toEqual([
+      {
+        path: "/api/datasets/alice/cars/export",
+        method: "POST",
+        body: { description: "zz replaced note" },
+      },
+    ]);
+    expect(result.summary).toBe(
+      "Dataset version 1 for dataset 'cars' for owner 'alice' already existed " +
+        "(no changes since the previous snapshot); the description passed " +
+        "replaced that version's existing note. " +
+        "This link is time-limited and will expire.",
+    );
+    expect(result.data).toMatchObject({ version: 1, reused: true });
   });
 
   test("reports an unchanged dataset without claiming a new version", async () => {
@@ -1268,6 +1293,7 @@ describe("datasetVersionCreate", () => {
         "This link is time-limited and will expire.",
     );
     expect(result.summary).not.toMatch(/Created/);
+    expect(result.summary).not.toMatch(/existing note/);
     expect(result.data).toEqual({
       version: 1,
       downloadUrl:

@@ -189,20 +189,20 @@ export async function autoAnnotateStart(
   };
 }
 
-/** Stop or dismiss a dataset's auto-annotation run. Ships ungated — an
+/** Stop a dataset's active auto-annotation run. Ships ungated — an
  * off-switch is never gated — but reads status first and refuses to send
  * `DELETE` when no run is active.
  *
  * Resolves the dataset by pure string parsing, fills a missing owner from
  * the account summary, and reads `GET` on the same predict/batch endpoint
  * `auto_annotate_status` uses. When `activeJob` is null there is nothing to
- * stop and the tool refuses without issuing the `DELETE`: an undismissed
- * terminal run does not block the next start, so there is no deadlock to
- * break here, and dismissal moves no money. When `activeJob` is present the
- * `DELETE` is sent and the server's own `action` field
- * (`"cancelled"` or `"dismissed"`; `"none"` when nothing acted on) is
- * surfaced verbatim rather than inferred, since the verb is overloaded and
- * the response already names which branch fired.
+ * stop and the tool refuses without issuing the `DELETE`. A finished run
+ * always reads `activeJob: null`, so terminal runs are refused too: a
+ * finished run left in place does not block the next start, so there is no
+ * deadlock to break here. When
+ * `activeJob` is present the `DELETE` is sent and the server's own `action`
+ * field (`"cancelled"` for a run stopped mid-flight) is surfaced verbatim
+ * rather than inferred, since the response already names what it did.
  */
 export async function autoAnnotateStop(
   client: UltralyticsClient,
